@@ -294,10 +294,11 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     // 弹窗关闭标记：当ACTION_DOWN中关闭了弹出式配置面板后，对应的ACTION_UP不再触发EXPAND
     private boolean overlayJustClosed = false;
     // 整行长按展开配置面板：候选模块+按下时间戳，真正触发在 onDrawFrame 里按经过时长判断
-    private ModuleItem longPressCandidate = null;
-    private long longPressStartNs = 0;
-    private boolean longPressFired = false;
-    private static final long LONG_PRESS_NS = 420_000_000L; // 420ms
+    // @deprecated - replaced by inline card expand (Task 8 移除了长按触发机制)
+    private ModuleItem longPressCandidate = null; // @deprecated - replaced by inline card expand
+    private long longPressStartNs = 0; // @deprecated - replaced by inline card expand
+    private boolean longPressFired = false; // @deprecated - replaced by inline card expand
+    private static final long LONG_PRESS_NS = 420_000_000L; // @deprecated - replaced by inline card expand (420ms)
     // 模块行错落进场动画的独立计时——不能直接复用面板开合的那条指数曲线，
     // 那条曲线大概0.3秒就饱和了，几行之间的错开延迟(几十毫秒)几乎看不出来。
     // 这里单独走一个"从0开始计时"的秒表，每行按固定延迟+固定时长过一遍缓动，效果才明显。
@@ -2263,6 +2264,8 @@ private void drawFloatingBall() {
                         }
                     }
                 }
+                // 搜索文本输入：GLSurfaceView 不便接入 InputMethodManager，
+                // 暂不处理键盘输入，搜索框仅作视觉元素；searchQuery 可通过代码设置。
                 // 2) 卡片交互：点击箭头展开/收起，点击卡片切换开关，展开区内控件交互
                 for (int idx = 0; idx < moduleHitRects.size(); idx++) {
                     Object[] hit = moduleHitRects.get(idx);
@@ -2279,7 +2282,7 @@ private void drawFloatingBall() {
                     if ("CARD".equals(type)) {
                         // 检查展开面板内的控件
                         if (m.expanded && m.activeTab == 0) {
-                            float hdrH = 44f * uiScale * (panelH / panelH);
+                            // 面板在用户交互时已完全展开 (scale≈1.0)，cardH ≈ 70f * uiScale
                             float expandTop = r[1] + 70f * uiScale; // cardH
                             // 标签页点击
                             float tabY = expandTop + 8f * uiScale;
