@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.visiolab.clickgui.app-merged_res-6:/values_values.arsc.flat",
+            "map": [
+                {
+                    "source": "/data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/res/values/values.xml",
+                    "from": {
+                        "startLines": "2,3,4",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,102,183",
+                        "endColumns": "46,80,57",
+                        "endOffsets": "97,178,236"
+                    }
+                }
+            ]
+        }
+    ]
+}

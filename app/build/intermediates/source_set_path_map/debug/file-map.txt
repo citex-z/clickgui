@@ -1,0 +1,9 @@
+com.visiolab.clickgui.app-logsender-2.7.1-beta-debug-0 /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/res
+com.visiolab.clickgui.app-pngs-1 /storage/emulated/0/AndroidIDEProjects/SoarClient/app/build/generated/res/pngs/debug
+com.visiolab.clickgui.app-resValues-2 /storage/emulated/0/AndroidIDEProjects/SoarClient/app/build/generated/res/resValues/debug
+com.visiolab.clickgui.app-rs-3 /storage/emulated/0/AndroidIDEProjects/SoarClient/app/build/generated/res/rs/debug
+com.visiolab.clickgui.app-mergeDebugResources-4 /storage/emulated/0/AndroidIDEProjects/SoarClient/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+com.visiolab.clickgui.app-mergeDebugResources-5 /storage/emulated/0/AndroidIDEProjects/SoarClient/app/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+com.visiolab.clickgui.app-merged_res-6 /storage/emulated/0/AndroidIDEProjects/SoarClient/app/build/intermediates/merged_res/debug
+com.visiolab.clickgui.app-debug-7 /storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/debug/res
+com.visiolab.clickgui.app-main-8 /storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/res

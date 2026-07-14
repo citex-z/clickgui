@@ -1,0 +1,87 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.visiolab.clickgui"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="24"
+8-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml
+9        android:targetSdkVersion="33" />
+9-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml
+10
+11    <queries>
+11-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:23:5-25:15
+12        <package android:name="com.itsaky.androidide" />
+12-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:24:9-57
+12-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:24:18-54
+13    </queries>
+14
+15    <uses-permission android:name="android.permission.INTERNET" />
+15-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:27:5-67
+15-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:27:22-64
+16    <uses-permission android:name="com.itsaky.androidide.permission.BIND_LOG_SERVICE" />
+16-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:28:5-89
+16-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:28:22-86
+17    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+17-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:29:5-77
+17-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:29:22-74
+18
+19    <application
+19-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:4:5-20:19
+20        android:debuggable="true"
+21        android:extractNativeLibs="false"
+22        android:hardwareAccelerated="true"
+22-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:9:9-43
+23        android:icon="@mipmap/ic_launcher"
+23-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:6:9-43
+24        android:label="ClickGUI Demo"
+24-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:5:9-38
+25        android:roundIcon="@mipmap/ic_launcher_round"
+25-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:7:9-54
+26        android:theme="@android:style/Theme.NoTitleBar.Fullscreen" >
+26-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:8:9-67
+27        <activity
+27-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:10:9-19:20
+28            android:name="com.visiolab.clickgui.MainActivity"
+28-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:11:13-41
+29            android:configChanges="orientation|screenSize|keyboardHidden"
+29-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:12:13-74
+30            android:exported="true"
+30-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:14:13-36
+31            android:screenOrientation="landscape" >
+31-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:13:13-50
+32            <intent-filter>
+32-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:15:13-18:29
+33                <action android:name="android.intent.action.MAIN" />
+33-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:16:17-69
+33-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:16:25-66
+34
+35                <category android:name="android.intent.category.LAUNCHER" />
+35-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:17:17-77
+35-->/storage/emulated/0/AndroidIDEProjects/SoarClient/app/src/main/AndroidManifest.xml:17:27-74
+36            </intent-filter>
+37        </activity>
+38
+39        <provider
+39-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:32:9-36:40
+40            android:name="com.itsaky.androidide.logsender.utils.LogSenderInstaller"
+40-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:33:13-84
+41            android:authorities="com.visiolab.clickgui.logsender-installer"
+41-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:34:13-71
+42            android:enabled="@bool/logsender_enabled"
+42-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:35:13-54
+43            android:exported="false" />
+43-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:36:13-37
+44
+45        <service
+45-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:38:9-41:56
+46            android:name="com.itsaky.androidide.logsender.LogSenderService"
+46-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:39:13-76
+47            android:exported="false"
+47-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:40:13-37
+48            android:foregroundServiceType="dataSync" />
+48-->[com.itsaky.androidide:logsender:2.7.1-beta] /data/data/com.itsaky.androidide/files/home/.gradle/caches/transforms-3/12cd788c35ff9feb378d12fb30998565/transformed/logsender-2.7.1-beta-debug/AndroidManifest.xml:41:13-53
+49    </application>
+50
+51</manifest>

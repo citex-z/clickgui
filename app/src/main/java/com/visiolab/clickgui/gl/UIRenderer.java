@@ -423,15 +423,16 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
         // 面板尺寸按屏幕比例自适应，而不是写死像素值——
         // 之前 620x400 的固定值在高分辨率手机上占屏幕比例太小。
-        panelW = Math.min(width * 0.92f, height * 1.55f);
-        panelH = panelW * (400f / 620f);
+        // 面板尺寸按屏幕比例自适应（南方客户端 960:600 = 1.6:1 比例）
+        panelW = Math.min(width * 0.92f, height * 1.6f);
+        panelH = panelW * (600f / 960f);
         if (panelH > height * 0.9f) {
             panelH = height * 0.9f;
-            panelW = panelH * (620f / 400f);
+            panelW = panelH * (960f / 600f);
         }
-        sidebarW = panelW * (150f / 620f);
-        uiScale = panelH / 400f;
-        radius = 18f * uiScale;
+        sidebarW = panelW * (200f / 960f);
+        uiScale = panelH / 600f;
+        radius = 20f * uiScale;
         ballRadius = 22f * uiScale;
     if (ballX < 0) {
             ballX = width - ballRadius - 24f;
@@ -1388,7 +1389,7 @@ private void drawFloatingBall() {
         categoryHitRects.clear();
 
         // 分组侧栏
-        float pad = 8f * uiScale * (h / panelH);
+        float pad = 16f * uiScale * (h / panelH);
         float rowH = 36f * uiScale * (h / panelH);
         float bottomBtnH = 36f * uiScale * (h / panelH);
         float sectionLblH = 24f * uiScale * (h / panelH);
@@ -1439,8 +1440,8 @@ private void drawFloatingBall() {
 
         // 滚动范围
         Category cat = categories.get(currentCategoryIndex);
-        float cardH = 100f * uiScale * (h / panelH);
-        float cardGap = 12f * uiScale * (h / panelH);
+        float cardH = 110f * uiScale * (h / panelH);
+        float cardGap = 16f * uiScale * (h / panelH);
         int cols = 3;
         float cardW = (contentW - cardGap * (cols - 1)) / cols;
         int rows = (int) Math.ceil(cat.modules.size() / (float) cols);
@@ -1459,21 +1460,23 @@ private void drawFloatingBall() {
         quad.addRect(hdrX, y, hdrW, radius, 0f, withAlpha(HDR_BG, alpha));
 
         // 搜索框 (右侧)
-        float searchW = 180f * uiScale * (w / panelW);
+        float searchW = 160f * uiScale * (w / panelW);
         float searchH = 36f * uiScale * (h / panelH);
-        float searchX = x + w - searchW - 16f * uiScale * (w / panelW);
+        float closeSize = 36f * uiScale * (h / panelH);
+        float closeGap = 8f * uiScale * (w / panelW);
+        float rightPad = 16f * uiScale * (w / panelW);
+        float searchX = x + w - searchW - rightPad;
         float searchY = y + (hdrH - searchH) / 2f;
         quad.addRect(searchX, searchY, searchW, searchH, searchH / 2f, withAlpha(SOUTH_SEARCH_BG, alpha));
         quad.addRect(searchX, searchY, searchW, searchH, searchH / 2f, withAlpha(SOUTH_CARD_BORDER, alpha * 0.5f));
         searchBoxRect = new float[]{searchX, searchY, searchW, searchH};
 
-        // 关闭按钮区域 (× 在搜索框右侧)
-        float closeSize = 36f * uiScale * (h / panelH);
-        float closeX = searchX + searchW + 8f * uiScale * (w / panelW);
+        // 关闭按钮 (× 在搜索框左侧)
+        float closeX = searchX - closeSize - closeGap;
         float closeY = y + (hdrH - closeSize) / 2f;
-        // Only draw if there's room
-        if (closeX + closeSize < x + w - 8f * uiScale) {
+        if (closeX > hdrX + 8f * uiScale) {
             closeBtnRect = new float[]{closeX, closeY, closeSize, closeSize};
+            quad.addRect(closeX, closeY, closeSize, closeSize, closeSize / 2f, withAlpha(SOUTH_SEARCH_BG, alpha));
         } else {
             closeBtnRect = null;
         }
@@ -1521,7 +1524,7 @@ private void drawFloatingBall() {
     private void drawModuleCards(float x, float y, float w, float h, float alpha) {
         moduleHitRects.clear();
         float sbW = sidebarW * (w / panelW);
-        float pad = 8f * uiScale * (h / panelH);
+        float pad = 16f * uiScale * (h / panelH);
         float contentX = x + sbW + pad;
         float contentW = w - sbW - pad * 2;
         float hdrH = 72f * uiScale * (h / panelH);
@@ -1529,10 +1532,10 @@ private void drawFloatingBall() {
         float startY = y + hdrH + titleH - contentScroll.get();
 
         Category cat = categories.get(currentCategoryIndex);
-        float cardGap = 12f * uiScale * (h / panelH);
+        float cardGap = 16f * uiScale * (h / panelH);
         int cols = 3;
         float cardW = (contentW - cardGap * (cols - 1)) / cols;
-        float cardH = 100f * uiScale * (h / panelH);
+        float cardH = 110f * uiScale * (h / panelH);
         float toggleBarH = 32f * uiScale * (h / panelH);
         float iconAreaH = cardH - toggleBarH;
 
@@ -1563,10 +1566,9 @@ private void drawFloatingBall() {
             float rowAlpha = alpha * reveal;
             float drawY = curY + (1f - reveal) * 14f * uiScale;
 
-            // 注册热区: 整张卡片
-            moduleHitRects.add(new Object[]{new float[]{cardX, drawY, cardW, cardH}, "CARD", m});
-            // 开关栏热区 (底部)
-            moduleHitRects.add(new Object[]{new float[]{cardX, drawY + iconAreaH, cardW, toggleBarH}, "TOGGLE", m});
+            // 注册热区: 开关栏优先（底部），整张卡片其次（图标区）
+        moduleHitRects.add(new Object[]{new float[]{cardX, drawY + iconAreaH, cardW, toggleBarH}, "TOGGLE", m});
+        moduleHitRects.add(new Object[]{new float[]{cardX, drawY, cardW, iconAreaH}, "CARD", m});
 
             // 上半部分: 图标区 (圆角顶部)
             float cornerR = 12f * uiScale;
@@ -1690,7 +1692,7 @@ private void drawFloatingBall() {
         }
     }
     private void drawTextLayer(float x, float y, float w, float h, float alpha) {
-        float pad = 8f * uiScale * (h / panelH);
+        float pad = 16f * uiScale * (h / panelH);
         float sbW = sidebarW * (w / panelW);
         float hdrH = 72f * uiScale * (h / panelH);
 
@@ -1765,7 +1767,7 @@ private void drawFloatingBall() {
     /** 卡片名称/描述文字单独拆出来，方便配合 scissor 裁剪，滑动溢出时不会画到面板外 */
     private void drawModuleCardText(float x, float y, float w, float h, float alpha) {
         float sbW = sidebarW * (w / panelW);
-        float pad = 8f * uiScale * (h / panelH);
+        float pad = 16f * uiScale * (h / panelH);
         float contentX = x + sbW + pad;
         float contentW = w - sbW - pad * 2;
         float hdrH = 72f * uiScale * (h / panelH);
@@ -1773,10 +1775,10 @@ private void drawFloatingBall() {
         float startY = y + hdrH + titleH - contentScroll.get();
 
         Category cat = categories.get(currentCategoryIndex);
-        float cardGap = 12f * uiScale * (h / panelH);
+        float cardGap = 16f * uiScale * (h / panelH);
         int cols = 3;
         float cardW = (contentW - cardGap * (cols - 1)) / cols;
-        float cardH = 100f * uiScale * (h / panelH);
+        float cardH = 110f * uiScale * (h / panelH);
         float toggleBarH = 32f * uiScale * (h / panelH);
         float iconAreaH = cardH - toggleBarH;
 
@@ -2219,11 +2221,8 @@ private void drawFloatingBall() {
                         return;
                     }
                     if ("CARD".equals(type)) {
-                        // 点击图标区：仅切换开关（简化版，真实南方打开配置页）
-                        // 避免重复触发：只处理 CARD，不处理 TOGGLE（TOGGLE 在上面已处理）
-                        // 由于 CARD 和 TOGGLE 区域重叠，TOGGLE 先匹配则已 return
-                        // 这里只处理纯图标区点击
-                        // 不做任何操作（或可以打开配置页，但当前不实现）
+                        // 点击图标区：打开模块配置面板（与真实南方一致）
+                        toggleConfigPanelFor(m);
                         return;
                     }
                 }

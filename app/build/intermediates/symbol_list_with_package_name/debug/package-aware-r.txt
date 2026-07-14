@@ -1,0 +1,9 @@
+com.visiolab.clickgui
+bool logsender_enabled
+drawable ic_androidide_log
+drawable ic_launcher_background
+drawable ic_launcher_foreground
+mipmap ic_launcher
+mipmap ic_launcher_round
+string msg_bind_service_failed
+string notification_action_exit
