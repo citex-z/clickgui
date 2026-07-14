@@ -76,8 +76,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float svBoxX, svBoxY, svBoxW, svBoxH;
     private float[] addBtnRect, removeBtnRect;
     private static final float[][] presetSwatches = new float[][]{
-            {1f,0f,0f,1f}, {1f,0.5f,0f,1f}, {1f,1f,0f,1f}, {0f,1f,0f,1f},
-            {0f,0.5f,1f,1f}, {0.3f,0f,1f,1f}, {0.8f,0f,0.8f,1f}, {1f,1f,1f,1f}
+            {1f,0f,0f,1f}, {1f,0.5f,0f,1f}, {1f,1f,0f,1f}, {0.5f,1f,0f,1f},
+            {0f,1f,0f,1f}, {0f,1f,0.5f,1f}, {0f,1f,1f,1f}, {0f,0.5f,1f,1f},
+            {0f,0f,1f,1f}, {0.5f,0f,1f,1f}, {1f,0f,1f,1f}, {1f,1f,1f,1f}
     };
     private boolean draggingHue = false, draggingSV = false;
     private boolean accentThemeExpanded = false;
@@ -287,8 +288,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
     // ---- 模块展开配置弹窗：点击带滑块的模块整行时，弹出居中的独立配置面板 ----
     private ModuleItem expandedModule = null;
-    private float[] overlayRect, overlayCloseRect;
-    private float overlaySliderX, overlaySliderW;
+    private float[] overlayRect, overlayCloseRect, overlayToggleRect;
+    private float overlaySliderX, overlaySliderW, overlaySliderY, overlaySliderH;
     private boolean draggingOverlaySlider = false;
     // 弹窗内容可能比屏幕还高，需要能上下滚动才能够到所有设置项
     private float overlayScrollOffset = 0f;
@@ -996,7 +997,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             expandedModule = null;
             overlayRect = null;
             overlayCloseRect = null;
+            overlayToggleRect = null;
             overlaySliderW = 0;
+            overlaySliderH = 0;
             overlayOpenness.snapTo(0f); // 重置动画当前值，确保下次打开时从0开始
             return; // 完全收起时跳过绘制
         }
@@ -1010,18 +1013,15 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         ModuleItem m = expandedModule;
         if (m == null) return; // 安全兜底（关闭动画中expandedModule应该还在）
 
-        float ow = Math.min(panelW * 0.62f, 420f * uiScale);
-        float contentH; // 内容实际需要的完整高度（可能比屏幕还高，所以要能滚动）
-        if (m == shadowEnabledToggle) contentH = (220f + 50f * 3) * uiScale;
-        else if (m == arrayListToggle) contentH = 720f * uiScale;
-        else if (m == watermarkToggle) contentH = 460f * uiScale;
-        else if (m == notificationToggle) contentH = 320f * uiScale;
-        else contentH = 150f * uiScale;
-
-        // 关键修复：面板可视高度必须封顶（不能比屏幕还高），超出的部分靠滚动去看，
-        // 而不是让整个面板直接撑爆屏幕——之前就是这样，导致上下两头的控件位置跑到屏幕外面，
-        // 又没有任何滚动机制，那些设置项就永远够不着了。
-        float oh = Math.min(contentH, screenH * 0.72f);
+        // 南方风格全内容页：占屏幕 75% 宽度、70% 高度（比旧版小弹窗大很多）
+        float ow = screenW * 0.75f;
+        float headerH = 56f * uiScale;
+        float rowGap = 12f * uiScale;
+        // 内容实际高度：头部 + Enabled 行 + (滑块行) + 描述行 + 底部留白
+        float contentH = headerH + rowGap + 48f * uiScale + rowGap;
+        if (m.hasSlider) contentH += 56f * uiScale + rowGap;
+        contentH += 60f * uiScale + 16f * uiScale;
+        float oh = Math.min(contentH, screenH * 0.70f);
         overlayMaxScroll = Math.max(0f, contentH - oh);
         overlayScrollOffset = Math.max(0f, Math.min(overlayScrollOffset, overlayMaxScroll));
 
@@ -1041,297 +1041,95 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         quad.addRect(0, 0, screenW, screenH, 0, new float[]{0f, 0f, 0f, 0.35f * overlayAlpha * alpha});
         quad.flush(screenW, screenH);
 
-        float[] tint = {CARD_BG[0], CARD_BG[1], CARD_BG[2], 0.9f * overlayAlpha * alpha};
+        // 面板背景：南方色 SOUTH_PANEL_BG (#151617)
+        float[] tint = {SOUTH_PANEL_BG[0], SOUTH_PANEL_BG[1], SOUTH_PANEL_BG[2], 0.96f * overlayAlpha * alpha};
         blur.drawGlassPanel(ox, oy, drawOW, drawOH, 16f * uiScale, tint, overlayAlpha * alpha, screenW, screenH);
 
         float pad = 16f * uiScale;
         float closeD = 24f * uiScale;
-        overlayCloseRect = new float[]{ox + drawOW - pad - closeD, oy + pad - 4f * uiScale, closeD, closeD};
-        quad.addRect(overlayCloseRect[0], overlayCloseRect[1], closeD, closeD, 10f * uiScale, withAlpha(TRACK_OFF, overlayAlpha * alpha));
+        // 关闭按钮（右上角，× 图标，24x24 圆角背景）
+        overlayCloseRect = new float[]{ox + drawOW - pad - closeD, oy + pad, closeD, closeD};
+        quad.addRect(overlayCloseRect[0], overlayCloseRect[1], closeD, closeD, 8f * uiScale, withAlpha(SOUTH_MODULE_BG, overlayAlpha * alpha));
 
-        // 内容区域整体往上滚 overlayScrollOffset 这么多像素——标题和关闭按钮不受影响，永远固定在顶部；
+        // 内容区域整体往上滚 overlayScrollOffset 这么多像素——标题和关闭按钮固定在头部，不受滚动影响；
         // 下面所有配置控件的Y坐标基准都换成 contentOy，超出面板边界的部分靠 scissor 裁掉，不会画出面板外。
         float contentOy = oy - overlayScrollOffset;
-        int scissorTop = (int) (oy + 50f * uiScale);
-        int scissorH = Math.max(0, (int) (drawOH - 50f * uiScale));
+        int scissorTop = (int) (oy + headerH);
+        int scissorH = Math.max(0, (int) (drawOH - headerH));
         GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
         GLES20.glScissor((int) ox, (int) (screenH - (scissorTop + scissorH)), (int) drawOW, scissorH);
 
-        // 配置区域：有滑块的模块显示滑块，纯开关模块显示开关切换控件
-        float trackY = contentOy + 92f * uiScale;
+        // === 内容区域：通用的 Enabled 开关 + 滑块 + 描述（南方风格全内容页） ===
         float trackX = ox + pad;
         float trackW = drawOW - pad * 2;
+        float enabledRowH = 48f * uiScale;
+        float sliderRowH = 56f * uiScale;
+        float descRowH = 60f * uiScale;
+        float curRowY = contentOy + headerH + rowGap;
 
-        if (m == shadowEnabledToggle && shadowSyncToggle != null) {
-            // === 阴影参数配置面板 ===
-            // 1) 阴影跟随主题 开关
-            float syncToggleW = 44f * uiScale, syncToggleH = 22f * uiScale;
-            shadowSyncToggleRectX = ox + drawOW / 2f - syncToggleW / 2f;
-            shadowSyncToggleRectY = trackY - 12f * uiScale;
-            shadowSyncToggleW = syncToggleW; shadowSyncToggleH = syncToggleH;
-            float st = shadowSyncToggle.toggleAnim.get();
-            shadowSyncToggle.toggleAnim.setTarget(shadowSyncToggle.enabled ? 1f : 0f);
-            shadowSyncToggle.toggleAnim.update(0.016f);
-            float[] sc = mixColor(TRACK_OFF, ACCENT_1, st);
-            quad.addRect(shadowSyncToggleRectX, shadowSyncToggleRectY, syncToggleW, syncToggleH, syncToggleH / 2f, withAlpha(sc, overlayAlpha * alpha));
-            float sknobD = syncToggleH - 6f * uiScale;
-            float sknobX = shadowSyncToggleRectX + 3f * uiScale + (syncToggleW - sknobD - 6f * uiScale) * st;
-            quad.addRect(sknobX, shadowSyncToggleRectY + 3f * uiScale, sknobD, sknobD, sknobD / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
+        // --- "Enabled" 开关行：左侧标签，右侧 toggle switch ---
+        quad.addRect(trackX, curRowY, trackW, enabledRowH, 10f * uiScale, withAlpha(SOUTH_MODULE_BG, overlayAlpha * alpha));
+        float toggleW = 44f * uiScale, toggleH = 22f * uiScale;
+        float toggleX = ox + drawOW - pad - toggleW;
+        float toggleY = curRowY + enabledRowH / 2f - toggleH / 2f;
+        overlayToggleRect = new float[]{toggleX, toggleY, toggleW, toggleH};
+        m.toggleAnim.setTarget(m.enabled ? 1f : 0f);
+        m.toggleAnim.update(0.016f);
+        float tst = m.toggleAnim.get();
+        float[] tc = mixColor(SOUTH_TOGGLE_OFF, SOUTH_TOGGLE_ON, tst);
+        quad.addRect(toggleX, toggleY, toggleW, toggleH, toggleH / 2f, withAlpha(tc, overlayAlpha * alpha));
+        float tknobD = toggleH - 6f * uiScale;
+        float tknobX = toggleX + 3f * uiScale + (toggleW - tknobD - 6f * uiScale) * tst;
+        quad.addRect(tknobX, toggleY + 3f * uiScale, tknobD, tknobD, tknobD / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
+        float enabledRowY = curRowY;
+        curRowY += enabledRowH + rowGap;
 
-            // 滑块参数：色相、大小、透明度
-            ModuleItem[] sliders = {shadowHueSlider, shadowSizeSlider, shadowOpacitySlider};
-            float[] sliderXs = new float[3];
-            float[] sliderWs = new float[3];
-            String[] labels = {"色相", "大小", "透明度"};
-            float sliderY = trackY + 40f * uiScale;
-            float sliderH = 14f * uiScale;
-            for (int si = 0; si < 3; si++) {
-                ModuleItem sm = sliders[si];
-                float sy = sliderY + si * 50f * uiScale;
-                sm.toggleAnim.setTarget(sm.enabled ? 1f : 0f); // 滑块不需要toggleAnim，但保持无副作用
-                quad.addRect(trackX, sy, trackW, sliderH, sliderH / 2f, withAlpha(TRACK_OFF, overlayAlpha * alpha));
-                float fw = trackW * sm.sliderValue;
-                quad.addRectGradient(trackX, sy, Math.max(sliderH, fw), sliderH, sliderH / 2f,
-                        diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[0], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[1], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[2], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[3]);
-                float kd = sliderH + 8f * uiScale;
-                float kx = trackX + fw - kd / 2f;
-                quad.addRect(kx, sy + sliderH / 2f - kd / 2f, kd, kd, kd / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
-                sliderXs[si] = trackX; sliderWs[si] = trackW;
-                text.draw(labels[si], trackX, sy - 18f * uiScale, 12f * uiScale, withAlpha(TEXT_DIM, overlayAlpha * alpha), screenW, screenH);
-                String vs = String.format("%.0f%s", sm.getRealValue(), sm.sliderUnit);
-                text.draw(vs, trackX + trackW - 30f * uiScale, sy - 18f * uiScale, 12f * uiScale, withAlpha(TEXT_DIM, overlayAlpha * alpha), screenW, screenH);
-            }
-            shadowHueSliderX = sliderXs[0]; shadowHueSliderW = sliderWs[0];
-            shadowSizeSliderX = sliderXs[1]; shadowSizeSliderW = sliderWs[1];
-            shadowOpacitySliderX = sliderXs[2]; shadowOpacitySliderW = sliderWs[2];
-            overlaySliderX = 0; overlaySliderW = 0;
-        } else if (m == arrayListToggle && arrayListSyncToggle != null) {
-            // === ArrayList 完整配置面板：预设风格 + 开关（竖排标注）+ 统一风格的滑块组 ===
-
-            // ---- 顶部：知名客户端风格预设，一排可切换的按钮（不是开关，点哪个选哪个）----
-            arrayListPresetRects.clear();
-            float presetY = trackY - 30f * uiScale;
-            float presetH = 26f * uiScale;
-            float presetGap = 6f * uiScale;
-            float presetX = ox + pad;
-            float presetTotalW = drawOW - pad * 2;
-            float presetEachW = (presetTotalW - presetGap * (ARRAYLIST_PRESET_NAMES.length - 1)) / ARRAYLIST_PRESET_NAMES.length;
-            // 第一遍：只画背景形状（批量绘制，攒着不立刻上屏）
-            for (int pi = 0; pi < ARRAYLIST_PRESET_NAMES.length; pi++) {
-                float px = presetX + pi * (presetEachW + presetGap);
-                boolean sel = pi == selectedArrayListPreset;
-                float[] bg = sel ? mixColor(ACCENT_1, ACCENT_2, 0.5f) : TRACK_OFF;
-                quad.addRect(px, presetY, presetEachW, presetH, 6f * uiScale, withAlpha(bg, overlayAlpha * alpha));
-                arrayListPresetRects.add(new float[]{px, presetY, presetEachW, presetH});
-            }
-            // 关键修复：必须在这里把背景形状真正画到屏幕上，再画文字标签叠在上面——
-            // 之前是形状(addRect，批量攒着)和文字(text.draw，立即上屏)交替调用，
-            // 但形状真正上屏是等到函数最后统一 flush 的时候，比文字晚，结果背景反而把文字盖住了。
-            quad.flush(screenW, screenH);
-            // 第二遍：文字标签画在已经上屏的背景之上
-            for (int pi = 0; pi < ARRAYLIST_PRESET_NAMES.length; pi++) {
-                float px = presetX + pi * (presetEachW + presetGap);
-                boolean sel = pi == selectedArrayListPreset;
-                float tw2 = text.measure(ARRAYLIST_PRESET_NAMES[pi], 10f * uiScale);
-                text.draw(ARRAYLIST_PRESET_NAMES[pi], px + presetEachW / 2f - tw2 / 2f, presetY + presetH / 2f - 6f * uiScale,
-                        10f * uiScale, withAlpha(sel ? KNOB_COLOR : TEXT_DIM, overlayAlpha * alpha), screenW, screenH);
-            }
-
-            // ---- 三个开关：竖向排列，每行左边是标注文字，右边是开关，一眼看出对应什么 ----
-            float toggleRowH = 34f * uiScale;
-            float toggleStartY = presetY + presetH + 22f * uiScale;
-            float toggleW3 = 40f * uiScale, toggleH3 = 20f * uiScale;
-            ModuleItem[] toggles = {arrayListSyncToggle, arrayListGlassToggle, arrayListSortToggle, arrayListLineToggle};
-            String[] toggleLabels = {"彩色渐变（跟随主题强调色流动，关闭则为单色）", "玻璃镂空（条形内部露出真实背景，关闭为传统半透明条）", "宽度排序（按文字宽度从长到短，关闭为固定顺序）", "右侧竖线连接（画一条渐变竖线连接所有开启的模块）"};
-            float[][] toggleRectsOut = new float[4][4];
-            for (int ti = 0; ti < 4; ti++) {
-                ModuleItem tm = toggles[ti];
-                float rowY2 = toggleStartY + ti * toggleRowH;
-                float txPos = ox + drawOW - pad - toggleW3;
-                float tst = tm.toggleAnim.get();
-                tm.toggleAnim.setTarget(tm.enabled ? 1f : 0f);
-                tm.toggleAnim.update(0.016f);
-                float[] tc = mixColor(TRACK_OFF, ACCENT_1, tst);
-                quad.addRect(txPos, rowY2, toggleW3, toggleH3, toggleH3 / 2f, withAlpha(tc, overlayAlpha * alpha));
-                float tknobD = toggleH3 - 6f * uiScale;
-                float tknobX = txPos + 3f * uiScale + (toggleW3 - tknobD - 6f * uiScale) * tst;
-                quad.addRect(tknobX, rowY2 + 3f * uiScale, tknobD, tknobD, tknobD / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
-                toggleRectsOut[ti] = new float[]{txPos, rowY2, toggleW3, toggleH3};
-            }
-            quad.flush(screenW, screenH); // 先把开关形状全部画完，标签文字再叠上去
-            for (int ti = 0; ti < 4; ti++) {
-                float rowY2 = toggleStartY + ti * toggleRowH;
-                text.draw(toggleLabels[ti], ox + pad, rowY2 + toggleH3 / 2f - 5f * uiScale, 9.5f * uiScale,
-                        withAlpha(TEXT_DIM, overlayAlpha * alpha), screenW, screenH);
-            }
-            arrayListSyncToggleRectX = toggleRectsOut[0][0]; arrayListSyncToggleRectY = toggleRectsOut[0][1];
-            arrayListSyncToggleW = toggleRectsOut[0][2]; arrayListSyncToggleH = toggleRectsOut[0][3];
-            arrayListGlassToggleRectX = toggleRectsOut[1][0]; arrayListGlassToggleRectY = toggleRectsOut[1][1];
-            arrayListGlassToggleW = toggleRectsOut[1][2]; arrayListGlassToggleH = toggleRectsOut[1][3];
-            arrayListSortToggleRectX = toggleRectsOut[2][0]; arrayListSortToggleRectY = toggleRectsOut[2][1];
-            arrayListSortToggleW = toggleRectsOut[2][2]; arrayListSortToggleH = toggleRectsOut[2][3];
-            arrayListLineToggleRectX = toggleRectsOut[3][0]; arrayListLineToggleRectY = toggleRectsOut[3][1];
-            arrayListLineToggleW = toggleRectsOut[3][2]; arrayListLineToggleH = toggleRectsOut[3][3];
-
-            // ---- 七个滑块：顶部亮度/底部亮度/字号/背景不透明度/阴影扩散范围/阴影X偏移/阴影Y偏移 ----
-            // 统一用强调色渐变填充，风格跟其它地方的滑块保持一致，不再单独整一套灰度预览色
-            ModuleItem[] sliders = {arrayListColor1Slider, arrayListColor2Slider, arrayListFontSizeSlider,
-                    arrayListBgOpacitySlider, arrayListShadowSizeSlider, arrayListShadowXSlider, arrayListShadowYSlider, arrayListFlowSpeedSlider};
-            String[] labels2 = {"顶部亮度", "底部亮度", "字号", "背景不透明度", "阴影扩散范围", "阴影X偏移", "阴影Y偏移", "渐变流动速度"};
-            float[] sliderXs2 = new float[sliders.length];
-            float[] sliderWs2 = new float[sliders.length];
-            float sliderY = toggleStartY + 4 * toggleRowH + 14f * uiScale;
-            float sliderH = 13f * uiScale;
-            float sliderGap = 38f * uiScale;
-            for (int si = 0; si < sliders.length; si++) {
-                ModuleItem sm = sliders[si];
-                float sy = sliderY + si * sliderGap;
-                quad.addRect(trackX, sy, trackW, sliderH, sliderH / 2f, withAlpha(TRACK_OFF, overlayAlpha * alpha));
-                float fw = trackW * sm.sliderValue;
-                quad.addRectGradient(trackX, sy, Math.max(sliderH, fw), sliderH, sliderH / 2f,
-                        diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[0], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[1], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[2], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[3]);
-                float kd = sliderH + 8f * uiScale;
-                float kx = trackX + fw - kd / 2f;
-                quad.addRect(kx, sy + sliderH / 2f - kd / 2f, kd, kd, kd / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
-                sliderXs2[si] = trackX; sliderWs2[si] = trackW;
-                text.draw(labels2[si], trackX, sy - 16f * uiScale, 11f * uiScale, withAlpha(TEXT_DIM, overlayAlpha * alpha), screenW, screenH);
-            }
-            arrayListColor1SliderX = sliderXs2[0]; arrayListColor1SliderW = sliderWs2[0];
-            arrayListColor2SliderX = sliderXs2[1]; arrayListColor2SliderW = sliderWs2[1];
-            arrayListFontSizeSliderX = sliderXs2[2]; arrayListFontSizeSliderW = sliderWs2[2];
-            arrayListBgOpacitySliderX = sliderXs2[3]; arrayListBgOpacitySliderW = sliderWs2[3];
-            arrayListShadowSizeSliderX = sliderXs2[4]; arrayListShadowSizeSliderW = sliderWs2[4];
-            arrayListShadowXSliderX = sliderXs2[5]; arrayListShadowXSliderW = sliderWs2[5];
-            arrayListShadowYSliderX = sliderXs2[6]; arrayListShadowYSliderW = sliderWs2[6];
-            arrayListFlowSpeedSliderX = sliderXs2[7]; arrayListFlowSpeedSliderW = sliderWs2[7];
-            overlaySliderX = 0; overlaySliderW = 0;
-        } else if (m == watermarkToggle && watermarkSyncToggle != null) {
-            // === 水印自定义面板：颜色模式/下划线 两个开关（竖排标注）+ 字号/位置/色相 四个滑块 ===
-            float toggleRowH = 34f * uiScale;
-            float toggleStartY = trackY - 12f * uiScale;
-            float toggleW3 = 40f * uiScale, toggleH3 = 20f * uiScale;
-            ModuleItem[] wToggles = {watermarkSyncToggle, watermarkUnderlineToggle, watermarkShadowToggle};
-            String[] wToggleLabels = {"跟随主题渐变（关闭则用下面的自定义色相）", "显示下划线（文字下方的强调色细线）", "周围发散阴影（文字周围轻微发散的柔光）"};
-            float[][] wToggleRectsOut = new float[3][4];
-            for (int ti = 0; ti < 3; ti++) {
-                ModuleItem tm = wToggles[ti];
-                float rowY2 = toggleStartY + ti * toggleRowH;
-                float txPos = ox + drawOW - pad - toggleW3;
-                float tst = tm.toggleAnim.get();
-                tm.toggleAnim.setTarget(tm.enabled ? 1f : 0f);
-                tm.toggleAnim.update(0.016f);
-                float[] tc = mixColor(TRACK_OFF, ACCENT_1, tst);
-                quad.addRect(txPos, rowY2, toggleW3, toggleH3, toggleH3 / 2f, withAlpha(tc, overlayAlpha * alpha));
-                float tknobD = toggleH3 - 6f * uiScale;
-                float tknobX = txPos + 3f * uiScale + (toggleW3 - tknobD - 6f * uiScale) * tst;
-                quad.addRect(tknobX, rowY2 + 3f * uiScale, tknobD, tknobD, tknobD / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
-                wToggleRectsOut[ti] = new float[]{txPos, rowY2, toggleW3, toggleH3};
-            }
-            quad.flush(screenW, screenH); // 先把开关形状画完，标签文字才不会被盖住
-            for (int ti = 0; ti < 3; ti++) {
-                float rowY2 = toggleStartY + ti * toggleRowH;
-                text.draw(wToggleLabels[ti], ox + pad, rowY2 + toggleH3 / 2f - 5f * uiScale, 9.5f * uiScale,
-                        withAlpha(TEXT_DIM, overlayAlpha * alpha), screenW, screenH);
-            }
-            watermarkSyncToggleRectX = wToggleRectsOut[0][0]; watermarkSyncToggleRectY = wToggleRectsOut[0][1];
-            watermarkSyncToggleW = wToggleRectsOut[0][2]; watermarkSyncToggleH = wToggleRectsOut[0][3];
-            watermarkUnderlineToggleRectX = wToggleRectsOut[1][0]; watermarkUnderlineToggleRectY = wToggleRectsOut[1][1];
-            watermarkUnderlineToggleW = wToggleRectsOut[1][2]; watermarkUnderlineToggleH = wToggleRectsOut[1][3];
-            watermarkShadowToggleRectX = wToggleRectsOut[2][0]; watermarkShadowToggleRectY = wToggleRectsOut[2][1];
-            watermarkShadowToggleW = wToggleRectsOut[2][2]; watermarkShadowToggleH = wToggleRectsOut[2][3];
-
-            ModuleItem[] wSliders = {watermarkFontSizeSlider, watermarkXSlider, watermarkYSlider, watermarkHueSlider};
-            String[] wLabels = {"字号", "X 位置", "Y 位置", "自定义色相"};
-            float[] wSliderXs = new float[4];
-            float[] wSliderWs = new float[4];
-            float wSliderY = toggleStartY + 3 * toggleRowH + 14f * uiScale;
-            float wSliderH = 13f * uiScale;
-            float wSliderGap = 38f * uiScale;
-            for (int si = 0; si < 4; si++) {
-                ModuleItem sm = wSliders[si];
-                float sy = wSliderY + si * wSliderGap;
-                quad.addRect(trackX, sy, trackW, wSliderH, wSliderH / 2f, withAlpha(TRACK_OFF, overlayAlpha * alpha));
-                float fw = trackW * sm.sliderValue;
-                quad.addRectGradient(trackX, sy, Math.max(wSliderH, fw), wSliderH, wSliderH / 2f,
-                        diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[0], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[1], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[2], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[3]);
-                float kd = wSliderH + 8f * uiScale;
-                float kx = trackX + fw - kd / 2f;
-                quad.addRect(kx, sy + wSliderH / 2f - kd / 2f, kd, kd, kd / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
-                wSliderXs[si] = trackX; wSliderWs[si] = trackW;
-            }
-            quad.flush(screenW, screenH); // 同样先把滑块形状画完，标签再叠上去
-            for (int si = 0; si < 4; si++) {
-                float sy = wSliderY + si * wSliderGap;
-                text.draw(wLabels[si], trackX, sy - 16f * uiScale, 11f * uiScale, withAlpha(TEXT_DIM, overlayAlpha * alpha), screenW, screenH);
-            }
-            watermarkFontSizeSliderX = wSliderXs[0]; watermarkFontSizeSliderW = wSliderWs[0];
-            watermarkXSliderX = wSliderXs[1]; watermarkXSliderW = wSliderWs[1];
-            watermarkYSliderX = wSliderXs[2]; watermarkYSliderW = wSliderWs[2];
-            watermarkHueSliderX = wSliderXs[3]; watermarkHueSliderW = wSliderWs[3];
-            overlaySliderX = 0; overlaySliderW = 0;
-        } else if (m == notificationToggle && notificationSizeSlider != null) {
-            // === 开关提示自定义面板：大小/字号/间距/停留时间 ===
-            ModuleItem[] nSliders = {notificationSizeSlider, notificationFontSizeSlider, notificationSpacingSlider, notificationDurationSlider};
-            String[] nLabels = {"大小", "字号", "间距", "停留时间"};
-            float[] nSliderXs = new float[4];
-            float[] nSliderWs = new float[4];
-            float nSliderY = trackY - 12f * uiScale;
-            float nSliderH = 13f * uiScale;
-            float nSliderGap = 42f * uiScale;
-            for (int si = 0; si < 4; si++) {
-                ModuleItem sm = nSliders[si];
-                float sy = nSliderY + si * nSliderGap;
-                quad.addRect(trackX, sy, trackW, nSliderH, nSliderH / 2f, withAlpha(TRACK_OFF, overlayAlpha * alpha));
-                float fw = trackW * sm.sliderValue;
-                float[][] diag = diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha);
-                quad.addRectGradient(trackX, sy, Math.max(nSliderH, fw), nSliderH, nSliderH / 2f, diag[0], diag[1], diag[2], diag[3]);
-                float kd = nSliderH + 8f * uiScale;
-                float kx = trackX + fw - kd / 2f;
-                quad.addRect(kx, sy + nSliderH / 2f - kd / 2f, kd, kd, kd / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
-                nSliderXs[si] = trackX; nSliderWs[si] = trackW;
-            }
-            quad.flush(screenW, screenH);
-            for (int si = 0; si < 4; si++) {
-                float sy = nSliderY + si * nSliderGap;
-                text.draw(nLabels[si], trackX, sy - 16f * uiScale, 11f * uiScale, withAlpha(TEXT_DIM, overlayAlpha * alpha), screenW, screenH);
-            }
-            notificationSizeSliderX = nSliderXs[0]; notificationSizeSliderW = nSliderWs[0];
-            notificationFontSizeSliderX = nSliderXs[1]; notificationFontSizeSliderW = nSliderWs[1];
-            notificationSpacingSliderX = nSliderXs[2]; notificationSpacingSliderW = nSliderWs[2];
-            notificationDurationSliderX = nSliderXs[3]; notificationDurationSliderW = nSliderWs[3];
-            overlaySliderX = 0; overlaySliderW = 0;
-        } else if (m.hasSlider) {
-            float trackH = 16f * uiScale;
-            quad.addRect(trackX, trackY, trackW, trackH, trackH / 2f, withAlpha(TRACK_OFF, overlayAlpha * alpha));
-            float fillW = trackW * m.sliderValue;
-            quad.addRectGradient(trackX, trackY, Math.max(trackH, fillW), trackH, trackH / 2f,
-                    diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[0], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[1], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[2], diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha)[3]);
-            float knobD = trackH + 10f * uiScale;
-            float knobX = trackX + fillW - knobD / 2f;
-            quad.addRect(knobX, trackY + trackH / 2f - knobD / 2f, knobD, knobD, knobD / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
-            overlaySliderX = trackX; overlaySliderW = trackW;
-        }
-        quad.flush(screenW, screenH);
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-
-        // 标题/说明/关闭按钮固定在头部，永远不受滚动影响，所以要在关掉 scissor 之后画
-        text.draw(m.name, ox + pad, oy + pad, 17f * uiScale, withAlpha(TEXT_MAIN, overlayAlpha * alpha), screenW, screenH);
-        text.draw(m.description, ox + pad, oy + pad + 26f * uiScale, 12f * uiScale, withAlpha(TEXT_DIM, overlayAlpha * alpha), screenW, screenH);
-        text.draw("\u00D7", overlayCloseRect[0] + 6f * uiScale, overlayCloseRect[1] + 2f * uiScale, 15f * uiScale, withAlpha(TEXT_MAIN, overlayAlpha * alpha), screenW, screenH);
-
-        // 数值/状态这类文字属于可滚动内容的一部分（位置跟着 trackY 走），继续用 scissor 裁剪
-        GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glScissor((int) ox, (int) (screenH - (scissorTop + scissorH)), (int) drawOW, scissorH);
-        if (m == shadowEnabledToggle || m == arrayListToggle || m == watermarkToggle || m == notificationToggle) {
-            // 阴影/ArrayList/水印/开关提示面板 - 值已在内联绘制中显示
-        } else if (m.hasSlider) {
-            String valStr = String.format("%.0f%s", m.getRealValue(), m.sliderUnit);
-            text.draw(valStr, trackX, trackY - 22f * uiScale, 13f * uiScale, withAlpha(TEXT_DIM, overlayAlpha * alpha), screenW, screenH);
+        // --- 滑块行（仅有滑块的模块才显示）：标签 + 滑块 + 数值 ---
+        float sliderRowY = curRowY;
+        if (m.hasSlider) {
+            quad.addRect(trackX, sliderRowY, trackW, sliderRowH, 10f * uiScale, withAlpha(SOUTH_MODULE_BG, overlayAlpha * alpha));
+            float sTrackH = 14f * uiScale;
+            float sTrackX = trackX + 14f * uiScale;
+            float sTrackW = trackW - 28f * uiScale;
+            float sTrackY = sliderRowY + sliderRowH / 2f - sTrackH / 2f + 6f * uiScale;
+            quad.addRect(sTrackX, sTrackY, sTrackW, sTrackH, sTrackH / 2f, withAlpha(SOUTH_SLIDER_TRACK, overlayAlpha * alpha));
+            float fillW = sTrackW * m.sliderValue;
+            float[][] diag = diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha);
+            quad.addRectGradient(sTrackX, sTrackY, Math.max(sTrackH, fillW), sTrackH, sTrackH / 2f, diag[0], diag[1], diag[2], diag[3]);
+            float knobD = sTrackH + 10f * uiScale;
+            float knobX = sTrackX + fillW - knobD / 2f;
+            quad.addRect(knobX, sTrackY + sTrackH / 2f - knobD / 2f, knobD, knobD, knobD / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
+            overlaySliderX = sTrackX; overlaySliderW = sTrackW;
+            overlaySliderY = sTrackY; overlaySliderH = sTrackH;
+            curRowY += sliderRowH + rowGap;
         } else {
-            String stateStr = m.enabled ? "开启" : "关闭";
-            text.draw(stateStr, trackX, trackY - 22f * uiScale, 13f * uiScale, withAlpha(TEXT_DIM, overlayAlpha * alpha), screenW, screenH);
+            overlaySliderX = 0; overlaySliderW = 0;
+            overlaySliderY = 0; overlaySliderH = 0;
         }
+
+        // --- 描述区 ---
+        float descRowY = curRowY;
+        quad.addRect(trackX, descRowY, trackW, descRowH, 10f * uiScale, withAlpha(SOUTH_MODULE_BG, overlayAlpha * alpha));
+
+        // 形状全部攒完，一次 flush 上屏，再画文字叠在上面（否则批量形状会盖住先画的文字）
+        quad.flush(screenW, screenH);
+
+        // 文字层（可滚动内容）
+        text.draw("Enabled", trackX + 14f * uiScale, enabledRowY + enabledRowH / 2f - 7f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, overlayAlpha * alpha), screenW, screenH);
+        if (m.hasSlider) {
+            text.draw("Value", trackX + 14f * uiScale, sliderRowY + 12f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, overlayAlpha * alpha), screenW, screenH);
+            String valStr = String.format("%.0f%s", m.getRealValue(), m.sliderUnit);
+            float valW = text.measure(valStr, 13f * uiScale);
+            text.draw(valStr, trackX + trackW - 14f * uiScale - valW, sliderRowY + 12f * uiScale, 13f * uiScale, withAlpha(SOUTH_TEXT_DIM2, overlayAlpha * alpha), screenW, screenH);
+        }
+        text.draw("Description", trackX + 14f * uiScale, descRowY + 12f * uiScale, 12f * uiScale, withAlpha(SOUTH_TEXT_DIM2, overlayAlpha * alpha), screenW, screenH);
+        text.draw(m.description, trackX + 14f * uiScale, descRowY + 30f * uiScale, 12f * uiScale, withAlpha(SOUTH_TEXT_WHITE, overlayAlpha * alpha), screenW, screenH);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+
+        // 头部固定区域文字（不受滚动影响）：模块名(大字 18px) + 描述(小字 12px) + 关闭按钮 ×
+        text.draw(m.name, ox + pad, oy + pad, 18f * uiScale, withAlpha(SOUTH_TEXT_WHITE, overlayAlpha * alpha), screenW, screenH);
+        text.draw(m.description, ox + pad, oy + pad + 28f * uiScale, 12f * uiScale, withAlpha(SOUTH_TEXT_DIM2, overlayAlpha * alpha), screenW, screenH);
+        text.draw("\u00D7", overlayCloseRect[0] + closeD / 2f - 5f * uiScale, overlayCloseRect[1] + closeD / 2f - 7f * uiScale, 15f * uiScale, withAlpha(SOUTH_TEXT_WHITE, overlayAlpha * alpha), screenW, screenH);
     }
 
     /** 悬浮球：拖拽移动位置，单击（未拖动）时开关整个 ClickGUI 面板 */
@@ -1495,25 +1293,17 @@ private void drawFloatingBall() {
     }
     private AccentLayout accentLayout(float contentW) {
         AccentLayout l = new AccentLayout();
-        l.labelY = 34f * uiScale;
-        l.btnH = 28f * uiScale;
-        l.btnGap = 8f * uiScale;
-        int n = THEME_NAMES.length;
-        l.btnStartY = l.labelY + 8f * uiScale;
-        // 取色器区域：SV方块 + 色相条 + 预设色块
-        l.pickerTop = l.labelY + 8f * uiScale;
-        l.svSize = 80f * uiScale;
-        l.hueH = 14f * uiScale;
-        float swatchesPerRow = 4f;
-        float swatchTotalW = contentW - 32f * uiScale;
-        l.swatchSize = (swatchTotalW - (swatchesPerRow - 1) * 6f * uiScale) / swatchesPerRow;
-        l.swatchY = l.pickerTop + l.svSize + 8f * uiScale + l.hueH + 8f * uiScale;
-        int swatchRows = (int) Math.ceil(presetSwatches.length / swatchesPerRow);
-        float pickerBottom = l.swatchY + swatchRows * (l.swatchSize + 6f * uiScale);
-        // 主题色标签（点击展开/收起）
-        float themeLabelY = pickerBottom + 12f * uiScale;
-        float themeBtnArea = accentThemeExpanded ? n * (28f * uiScale + 8f * uiScale) : 0f;
-        l.totalH = themeLabelY + 30f * uiScale + themeBtnArea + 12f * uiScale;
+        // 新版调色板布局：HSB 选色框 + 垂直色相条 + 当前色预览 + 预设色块(2行x6列)
+        l.pickerTop = 8f * uiScale;
+        l.svSize = 120f * uiScale;
+        l.hueH = l.svSize; // 垂直色相条高度与选色框等高
+        l.swatchSize = 24f * uiScale;
+        int swatchCols = 6;
+        float swatchGap = 6f * uiScale;
+        int swatchRows = (int) Math.ceil(presetSwatches.length / (float) swatchCols);
+        l.swatchY = l.pickerTop + l.svSize + 12f * uiScale;
+        float pickerBottom = l.swatchY + swatchRows * (l.swatchSize + swatchGap);
+        l.totalH = pickerBottom + 8f * uiScale;
         l.pickerH = pickerBottom - l.pickerTop;
         return l;
     }
@@ -1566,24 +1356,21 @@ private void drawFloatingBall() {
             float rowAlpha = alpha * reveal;
             float drawY = curY + (1f - reveal) * 14f * uiScale;
 
-            // 注册热区: 开关栏优先（底部），整张卡片其次（图标区）
-        moduleHitRects.add(new Object[]{new float[]{cardX, drawY + iconAreaH, cardW, toggleBarH}, "TOGGLE", m});
-        moduleHitRects.add(new Object[]{new float[]{cardX, drawY, cardW, iconAreaH}, "CARD", m});
+            // 注册热区: 上方区域=切换开关，下方区域=展开配置面板
+            moduleHitRects.add(new Object[]{new float[]{cardX, drawY, cardW, iconAreaH}, "TOGGLE", m});
+            moduleHitRects.add(new Object[]{new float[]{cardX, drawY + iconAreaH, cardW, toggleBarH}, "CARD", m});
 
-            // 上半部分: 图标区 (圆角顶部)
             float cornerR = 12f * uiScale;
-            quad.addRect(cardX, drawY, cardW, iconAreaH, cornerR, withAlpha(SOUTH_MODULE_BG, rowAlpha));
-            // 补底部直角
-            quad.addRect(cardX, drawY + iconAreaH - cornerR, cardW, cornerR, 0f, withAlpha(SOUTH_MODULE_BG, rowAlpha));
-
-            // 模块首字母作为图标 (居中)
-            // 在文字层绘制
-
-            // 下半部分: 开关栏 (圆角底部)
+            // 上半部分: 开关区 (圆角顶部) — 颜色随开关状态变化
             float[] toggleCol = m.enabled ? withAlpha(SOUTH_TOGGLE_ON, rowAlpha) : withAlpha(SOUTH_TOGGLE_OFF, rowAlpha);
-            quad.addRect(cardX, drawY + iconAreaH, cardW, toggleBarH, cornerR, toggleCol);
+            quad.addRect(cardX, drawY, cardW, iconAreaH, cornerR, toggleCol);
+            // 补底部直角
+            quad.addRect(cardX, drawY + iconAreaH - cornerR, cardW, cornerR, 0f, toggleCol);
+
+            // 下半部分: 配置栏 (圆角底部) — 深色背景
+            quad.addRect(cardX, drawY + iconAreaH, cardW, toggleBarH, cornerR, withAlpha(SOUTH_MODULE_BG, rowAlpha));
             // 补顶部直角
-            quad.addRect(cardX, drawY + iconAreaH, cardW, cornerR, 0f, toggleCol);
+            quad.addRect(cardX, drawY + iconAreaH, cardW, cornerR, 0f, withAlpha(SOUTH_MODULE_BG, rowAlpha));
 
             // 分隔线
             quad.addRect(cardX, drawY + iconAreaH, cardW, 2f * uiScale, 0f, withAlpha(SOUTH_TAB_OFF, rowAlpha * 0.5f));
@@ -1597,21 +1384,23 @@ private void drawFloatingBall() {
             float accH = accentCardH(h);
             if (cy + accH >= clipY && cy <= clipY + clipH) {
                 quad.addRect(contentX, cy, contentW, accH, 12f * uiScale, withAlpha(SOUTH_MODULE_BG, alpha));
-                drawSettingAccentPicker(contentX, cy, contentW, alpha, h);
+                drawColorPicker(contentX, cy, contentW, alpha, h);
             }
         }
     }
     private void drawExpandedCardContent(float x, float y, float w, float h, float alpha, ModuleItem m, float panelHeight) {
         // 南方客户端卡片不内联展开，点击卡片打开独立配置页
     }
-    private void drawSettingAccentPicker(float contentX, float cy, float contentW, float alpha, float h) {
+    private void drawColorPicker(float contentX, float cy, float contentW, float alpha, float h) {
         float innerX = contentX + 16f * uiScale;
         float innerW = contentW - 32f * uiScale;
 
-        float svSize = 80f * uiScale;
+        // HSB 选色框（正方形，横向=饱和度，纵向=亮度）
+        float svSize = 120f * uiScale;
         float svX = innerX;
         float svY = cy + 8f * uiScale;
         svBoxX = svX; svBoxY = svY; svBoxW = svSize; svBoxH = svSize;
+        // 底色：左上白、右下当前色相纯色（横向饱和度），再叠加纵向黑色（上亮下暗=亮度）
         float[] hsv = hsv2rgb(customHue, 1f, 1f);
         float[][] svGrad = diagGradient(new float[]{1f,1f,1f,1f}, hsv, alpha);
         quad.addRectGradient(svX, svY, svSize, svSize, 6f * uiScale,
@@ -1621,37 +1410,52 @@ private void drawFloatingBall() {
                 withAlpha(new float[]{0f,0f,0f,1f}, 0f * alpha),
                 withAlpha(new float[]{0f,0f,0f,1f}, 1f * alpha),
                 withAlpha(new float[]{0f,0f,0f,1f}, 1f * alpha));
+        // 选色圆点
         float dotX = svX + customSat * svSize;
         float dotY = svY + (1f - customVal) * svSize;
         quad.addRect(dotX - 4f, dotY - 4f, 8f, 8f, 4f, withAlpha(KNOB_COLOR, alpha));
 
-        float hueX = svX + svSize + 8f * uiScale;
-        float hueW = innerW - svSize - 8f * uiScale;
+        // 色相滑块（垂直，在 HSB 框右侧，约 14px 宽，与选色框等高）
+        float hueGap = 8f * uiScale;
+        float hueW = 14f * uiScale;
+        float hueX = svX + svSize + hueGap;
         float hueY = svY;
-        float hueH = 14f * uiScale;
+        float hueH = svSize;
         hueBarX = hueX; hueBarW = hueW; hueBarY = hueY; hueBarH = hueH;
         for (int hi = 0; hi < 6; hi++) {
             float t0 = hi / 6f, t1 = (hi + 1) / 6f;
-            float padSeg = 2f * uiScale;
-            float segX = hueX + hi * (hueW - padSeg) / 6f;
-            float segW = (hueW - padSeg) / 6f;
-            float[] colL = hsv2rgb(t0, 1f, 1f);
-            float[] colR = hsv2rgb(t1, 1f, 1f);
-            quad.addRectGradient(segX, hueY, segW, hueH, 3f * uiScale,
-                    withAlpha(colL, alpha), withAlpha(colR, alpha),
-                    withAlpha(colL, alpha), withAlpha(colR, alpha));
+            float segY = hueY + hi * hueH / 6f;
+            float segH = hueH / 6f;
+            float[] colTop = hsv2rgb(t0, 1f, 1f);
+            float[] colBot = hsv2rgb(t1, 1f, 1f);
+            quad.addRectGradient(hueX, segY, hueW, segH, 3f * uiScale,
+                    withAlpha(colTop, alpha), withAlpha(colTop, alpha),
+                    withAlpha(colBot, alpha), withAlpha(colBot, alpha));
         }
-        float hueKnobX = hueX + customHue * hueW - 4f;
-        quad.addRect(hueKnobX, hueY - 2f, 8f, hueH + 4f, 3f, withAlpha(KNOB_COLOR, alpha));
+        float hueKnobH = 8f;
+        float hueKnobY = hueY + customHue * hueH - hueKnobH / 2f;
+        quad.addRect(hueX - 2f, hueKnobY, hueW + 4f, hueKnobH, 3f, withAlpha(KNOB_COLOR, alpha));
 
-        float swatchSize = (innerW - 3f * 6f * uiScale) / 4f;
-        float swatchY = svY + svSize + 8f * uiScale + hueH + 8f * uiScale;
+        // 当前色预览（小方块，显示当前选中色）
+        float previewGap = 8f * uiScale;
+        float previewSize = 28f * uiScale;
+        float previewX = hueX + hueW + previewGap;
+        float previewY = svY;
+        float[] curColor = hsv2rgb(customHue, customSat, customVal);
+        quad.addRect(previewX, previewY, previewSize, previewSize, 4f * uiScale, withAlpha(curColor, alpha));
+        quad.addRect(previewX - 1f, previewY - 1f, previewSize + 2f, previewSize + 2f, 5f * uiScale, withAlpha(SOUTH_CARD_BORDER, alpha * 0.5f));
+
+        // 预设色块（2行 x 6列 = 12个，点击直接应用）
+        float swatchSize = 24f * uiScale;
+        float swatchGap = 6f * uiScale;
+        int swatchCols = 6;
+        float swatchY = svY + svSize + 12f * uiScale;
         paletteHitRects.clear();
         for (int pi = 0; pi < presetSwatches.length; pi++) {
-            int col = pi % 4;
-            int row = pi / 4;
-            float sx = innerX + col * (swatchSize + 6f * uiScale);
-            float sy = swatchY + row * (swatchSize + 6f * uiScale);
+            int col = pi % swatchCols;
+            int row = pi / swatchCols;
+            float sx = innerX + col * (swatchSize + swatchGap);
+            float sy = swatchY + row * (swatchSize + swatchGap);
             boolean sel = pi == selectedSwatchIndex;
             quad.addRect(sx, sy, swatchSize, swatchSize, 4f * uiScale, withAlpha(presetSwatches[pi], alpha));
             if (sel) {
@@ -1659,36 +1463,6 @@ private void drawFloatingBall() {
                 quad.addRect(sx, sy, swatchSize, swatchSize, 4f * uiScale, withAlpha(presetSwatches[pi], alpha));
             }
             paletteHitRects.add(new float[]{sx, sy, swatchSize, swatchSize});
-        }
-
-        float pickerBottom = swatchY + ((presetSwatches.length + 3) / 4) * (swatchSize + 6f * uiScale);
-        float themeLabelY = cy + 8f * uiScale + pickerBottom - svY + 12f * uiScale;
-        accentLabelY = themeLabelY;
-
-        if (accentThemeExpanded) {
-            float btnW = (contentW - 32f * uiScale) * 0.5f - 4f * uiScale;
-            float bx = innerX;
-            float by = themeLabelY + 30f * uiScale;
-            themeThemeRects = new float[THEME_NAMES.length * 4];
-            for (int ti = 0; ti < THEME_NAMES.length; ti++) {
-                float[][] nodes = THEME_COLORS[ti];
-                float[] col0 = nodes[0];
-                float[] col1 = nodes.length > 1 ? nodes[1] : nodes[0];
-                boolean selected = ti == selectedThemeIndex;
-                float rowX = bx + (ti % 2) * (btnW + 8f * uiScale);
-                float rowY = by + (ti / 2) * (28f * uiScale + 8f * uiScale);
-                quad.addRectGradient(rowX, rowY, btnW, 28f * uiScale, 6f * uiScale,
-                        withAlpha(col0, alpha), withAlpha(col1, alpha),
-                        withAlpha(col0, alpha), withAlpha(col1, alpha));
-                if (selected) {
-                    quad.addRect(rowX - 2, rowY - 2, btnW + 4, 28f * uiScale + 4, 8f * uiScale, withAlpha(KNOB_COLOR, alpha * 0.9f));
-                }
-                int base = ti * 4;
-                themeThemeRects[base] = rowX;
-                themeThemeRects[base+1] = rowY;
-                themeThemeRects[base+2] = btnW;
-                themeThemeRects[base+3] = 28f * uiScale;
-            }
         }
     }
     private void drawTextLayer(float x, float y, float w, float h, float alpha) {
@@ -1808,16 +1582,18 @@ private void drawFloatingBall() {
             float rowAlpha = alpha * reveal;
             float drawY = curY + (1f - reveal) * 14f * uiScale;
 
-            // 图标区: 模块首字母居中
-            String iconText = m.name.substring(0, 1).toUpperCase();
-            float iconSize = 28f * uiScale;
-            text.draw(iconText, cardX + cardW / 2f - iconSize * 0.3f, drawY + iconAreaH / 2f - iconSize * 0.5f,
-                    iconSize, withAlpha(SOUTH_TEXT_DIM2, rowAlpha), screenW, screenH);
-
-            // 开关栏: 模块名
-            float nameSize = 13f * uiScale;
-            text.draw(m.name, cardX + 10f * uiScale, drawY + iconAreaH + toggleBarH / 2f - nameSize * 0.4f,
+            // 上方开关区: 模块名居中
+            float nameSize = 16f * uiScale;
+            float nameW = text.measure(m.name, nameSize);
+            text.draw(m.name, cardX + cardW / 2f - nameW / 2f, drawY + iconAreaH / 2f - nameSize * 0.4f,
                     nameSize, withAlpha(SOUTH_TEXT_WHITE, rowAlpha), screenW, screenH);
+
+            // 下方配置栏: "Configure" 文字
+            float cfgSize = 11f * uiScale;
+            String cfgText = m.hasSlider ? "\u2699 Configure" : "\u2699 Configure";
+            float cfgW = text.measure(cfgText, cfgSize);
+            text.draw(cfgText, cardX + cardW / 2f - cfgW / 2f, drawY + iconAreaH + toggleBarH / 2f - cfgSize * 0.4f,
+                    cfgSize, withAlpha(SOUTH_TEXT_DIM2, rowAlpha), screenW, screenH);
 
             if ((i + 1) % cols == 0) curY += cardH + cardGap;
         }
@@ -1881,172 +1657,35 @@ private void drawFloatingBall() {
         float ot = Math.max(0f, Math.min(1f, overlayOpenness.get()));
         if (expandedModule != null && ot > 0.95f) {
             if (action == MotionEvent.ACTION_DOWN) {
+                // 关闭按钮（右上角 ×）
                 if (overlayCloseRect != null && inside(ex, ey, overlayCloseRect)) {
-                    overlayOpenness.setTarget(0f); // 启动关闭动画
-                    overlayJustClosed = true; // 标记关闭弹窗，UP不再触发EXPAND
+                    overlayOpenness.setTarget(0f);
+                    overlayJustClosed = true;
                     return;
                 }
-                // 阴影配置面板中的控件交互
-                if (expandedModule == shadowEnabledToggle && overlayRect != null && inside(ex, ey, overlayRect)) {
-                    // 1) 阴影跟随主题 开关
-                    if (shadowSyncToggleW > 0 && inside(ex, ey, new float[]{shadowSyncToggleRectX, shadowSyncToggleRectY, shadowSyncToggleW, shadowSyncToggleH})) {
-                        shadowSyncToggle.enabled = !shadowSyncToggle.enabled;
-                        return;
-                    }
-                    // 2) 三个滑块：色相/大小/透明度
-                    float sliderY = (overlayRect[1] - overlayScrollOffset) + 132f * uiScale;
-                    float sliderH = 14f * uiScale;
-                    for (int si = 0; si < 3; si++) {
-                        float sy = sliderY + si * 50f * uiScale;
-                        if (ey >= sy - 8f * uiScale && ey <= sy + sliderH + 8f * uiScale) {
-                            if (si == 0) { draggingShadowHue = true; }
-                            else if (si == 1) { draggingShadowSize = true; }
-                            else { draggingShadowOpacity = true; }
-                            // 立即更新滑块值
-                            float v = Math.max(0f, Math.min(1f, (ex - overlayRect[0] - 16f * uiScale) / (overlayRect[2] - 32f * uiScale)));
-                            if (si == 0) shadowHueSlider.sliderValue = v;
-                            else if (si == 1) shadowSizeSlider.sliderValue = v;
-                            else shadowOpacitySlider.sliderValue = v;
-                            return;
-                        }
-                    }
-                    // 点在阴影面板空白处：开始拖动滚动（如果内容比可视区域高的话）
-                    draggingOverlayScroll = true;
-                    overlayScrollDownY = ey;
-                    overlayScrollStartOffset = overlayScrollOffset;
+                // 通用 Enabled 开关点击
+                if (overlayToggleRect != null && inside(ex, ey, overlayToggleRect)) {
+                    expandedModule.enabled = !expandedModule.enabled;
                     return;
                 }
-                // ArrayList 完整配置面板中的控件交互
-                if (expandedModule == arrayListToggle && overlayRect != null && inside(ex, ey, overlayRect)) {
-                    // 预设风格按钮：直接复用渲染时算好的命中区域列表，不用再重新推一遍公式
-                    for (int pi = 0; pi < arrayListPresetRects.size(); pi++) {
-                        if (inside(ex, ey, arrayListPresetRects.get(pi))) {
-                            applyArrayListPreset(pi);
-                            return;
-                        }
-                    }
-                    if (arrayListSyncToggleW > 0 && inside(ex, ey, new float[]{arrayListSyncToggleRectX, arrayListSyncToggleRectY, arrayListSyncToggleW, arrayListSyncToggleH})) {
-                        arrayListSyncToggle.enabled = !arrayListSyncToggle.enabled;
-                        return;
-                    }
-                    if (arrayListGlassToggleW > 0 && inside(ex, ey, new float[]{arrayListGlassToggleRectX, arrayListGlassToggleRectY, arrayListGlassToggleW, arrayListGlassToggleH})) {
-                        arrayListGlassToggle.enabled = !arrayListGlassToggle.enabled;
-                        return;
-                    }
-                    if (arrayListSortToggleW > 0 && inside(ex, ey, new float[]{arrayListSortToggleRectX, arrayListSortToggleRectY, arrayListSortToggleW, arrayListSortToggleH})) {
-                        arrayListSortToggle.enabled = !arrayListSortToggle.enabled;
-                        return;
-                    }
-                    if (arrayListLineToggleW > 0 && inside(ex, ey, new float[]{arrayListLineToggleRectX, arrayListLineToggleRectY, arrayListLineToggleW, arrayListLineToggleH})) {
-                        arrayListLineToggle.enabled = !arrayListLineToggle.enabled;
-                        return;
-                    }
-                    // 七个滑块的Y坐标要跟绘制那边用同一套公式：
-                    // trackY = overlayRect[1]+92；toggleStartY = trackY+18；sliderY = toggleStartY + 4*34 + 14
-                    // 关键修复：渲染那边用的基准是 contentOy = oy - overlayScrollOffset，
-                    // 这里必须用同一个基准，否则只要滚动过一次，触摸判定的坐标就跟视觉位置对不上，
-                    // 摸起来完全不是画面上看到的那个控件。
-                    float sliderY2 = (overlayRect[1] - overlayScrollOffset) + 92f * uiScale + 18f * uiScale + 4f * 34f * uiScale + 14f * uiScale;
-                    float sliderH2 = 13f * uiScale;
-                    float sliderGap2 = 38f * uiScale;
-                    for (int si = 0; si < 8; si++) {
-                        float sy = sliderY2 + si * sliderGap2;
-                        if (ey >= sy - 10f * uiScale && ey <= sy + sliderH2 + 10f * uiScale) {
-                            switch (si) {
-                                case 0: draggingArrayListColor1 = true; break;
-                                case 1: draggingArrayListColor2 = true; break;
-                                case 2: draggingArrayListFontSize = true; break;
-                                case 3: draggingArrayListBgOpacity = true; break;
-                                case 4: draggingArrayListShadowSize = true; break;
-                                case 5: draggingArrayListShadowX = true; break;
-                                case 6: draggingArrayListShadowY = true; break;
-                                default: draggingArrayListFlowSpeed = true; break;
-                            }
-                            updateArrayListSliderFromX(si, ex);
-                            return;
-                        }
-                    }
-                    // 点在ArrayList面板空白处：开始拖动滚动
-                    draggingOverlayScroll = true;
-                    overlayScrollDownY = ey;
-                    overlayScrollStartOffset = overlayScrollOffset;
-                    return;
-                }
-                // 水印自定义面板中的控件交互
-                if (expandedModule == watermarkToggle && overlayRect != null && inside(ex, ey, overlayRect)) {
-                    if (watermarkSyncToggleW > 0 && inside(ex, ey, new float[]{watermarkSyncToggleRectX, watermarkSyncToggleRectY, watermarkSyncToggleW, watermarkSyncToggleH})) {
-                        watermarkSyncToggle.enabled = !watermarkSyncToggle.enabled;
-                        return;
-                    }
-                    if (watermarkUnderlineToggleW > 0 && inside(ex, ey, new float[]{watermarkUnderlineToggleRectX, watermarkUnderlineToggleRectY, watermarkUnderlineToggleW, watermarkUnderlineToggleH})) {
-                        watermarkUnderlineToggle.enabled = !watermarkUnderlineToggle.enabled;
-                        return;
-                    }
-                    if (watermarkShadowToggleW > 0 && inside(ex, ey, new float[]{watermarkShadowToggleRectX, watermarkShadowToggleRectY, watermarkShadowToggleW, watermarkShadowToggleH})) {
-                        watermarkShadowToggle.enabled = !watermarkShadowToggle.enabled;
-                        return;
-                    }
-                    // 四个滑块的Y坐标要跟绘制那边用同一套公式：
-                    // trackY = (oy-scrollOffset)+92；toggleStartY = trackY-12；sliderY = toggleStartY + 3*34 + 14
-                    float wSliderY2 = (overlayRect[1] - overlayScrollOffset) + 92f * uiScale - 12f * uiScale + 3f * 34f * uiScale + 14f * uiScale;
-                    float wSliderH2 = 13f * uiScale;
-                    float wSliderGap2 = 38f * uiScale;
-                    for (int si = 0; si < 4; si++) {
-                        float sy = wSliderY2 + si * wSliderGap2;
-                        if (ey >= sy - 10f * uiScale && ey <= sy + wSliderH2 + 10f * uiScale) {
-                            switch (si) {
-                                case 0: draggingWatermarkFontSize = true; break;
-                                case 1: draggingWatermarkX = true; break;
-                                case 2: draggingWatermarkY = true; break;
-                                default: draggingWatermarkHue = true; break;
-                            }
-                            updateWatermarkSliderFromX(si, ex);
-                            return;
-                        }
-                    }
-                    draggingOverlayScroll = true;
-                    overlayScrollDownY = ey;
-                    overlayScrollStartOffset = overlayScrollOffset;
-                    return;
-                }
-                // 开关提示自定义面板中的控件交互
-                if (expandedModule == notificationToggle && overlayRect != null && inside(ex, ey, overlayRect)) {
-                    float nSliderY2 = (overlayRect[1] - overlayScrollOffset) + 92f * uiScale - 12f * uiScale;
-                    float nSliderH2 = 13f * uiScale;
-                    float nSliderGap2 = 42f * uiScale;
-                    for (int si = 0; si < 4; si++) {
-                        float sy = nSliderY2 + si * nSliderGap2;
-                        if (ey >= sy - 10f * uiScale && ey <= sy + nSliderH2 + 10f * uiScale) {
-                            switch (si) {
-                                case 0: draggingNotifSize = true; break;
-                                case 1: draggingNotifFontSize = true; break;
-                                case 2: draggingNotifSpacing = true; break;
-                                default: draggingNotifDuration = true; break;
-                            }
-                            updateNotificationSliderFromX(si, ex);
-                            return;
-                        }
-                    }
-                    draggingOverlayScroll = true;
-                    overlayScrollDownY = ey;
-                    overlayScrollStartOffset = overlayScrollOffset;
-                    return;
-                }
-                if (overlaySliderW > 0 && overlayRect != null
-                        && ey >= (overlayRect[1] - overlayScrollOffset) + 70f * uiScale && ey <= (overlayRect[1] - overlayScrollOffset) + 116f * uiScale) {
+                // 通用滑块拖拽（仅带滑块的模块）
+                if (overlaySliderW > 0 && overlaySliderH > 0
+                        && ex >= overlaySliderX - 6f && ex <= overlaySliderX + overlaySliderW + 6f
+                        && ey >= overlaySliderY - 8f && ey <= overlaySliderY + overlaySliderH + 8f) {
                     draggingOverlaySlider = true;
                     updateOverlaySliderFromX(ex);
                     return;
                 }
+                // 面板内空白：开始拖动滚动（内容比可视区域高时）
                 if (overlayRect != null && inside(ex, ey, overlayRect)) {
-                    // 点击弹窗内容区但不是任何具体控件：当成滚动手势的起点
                     draggingOverlayScroll = true;
                     overlayScrollDownY = ey;
                     overlayScrollStartOffset = overlayScrollOffset;
                     return;
                 }
-                overlayOpenness.setTarget(0f); // 点在弹窗外的遮罩上：启动关闭动画
-                overlayJustClosed = true; // 标记本次DOWN-UP周期中已经关闭了弹窗，UP时不再触发EXPAND
+                // 点在弹窗外的遮罩上：关闭
+                overlayOpenness.setTarget(0f);
+                overlayJustClosed = true;
                 return;
             } else if (action == MotionEvent.ACTION_MOVE) {
                 if (draggingOverlayScroll) {
@@ -2055,69 +1694,10 @@ private void drawFloatingBall() {
                     return;
                 }
                 if (draggingOverlaySlider) updateOverlaySliderFromX(ex);
-                // 阴影面板滑块拖拽
-                if (draggingShadowHue) {
-                    updateShadowSliderFromX(0, ex);
-                } else if (draggingShadowSize) {
-                    updateShadowSliderFromX(1, ex);
-                } else if (draggingShadowOpacity) {
-                    updateShadowSliderFromX(2, ex);
-                } else if (draggingArrayListColor1) {
-                    updateArrayListSliderFromX(0, ex);
-                } else if (draggingArrayListColor2) {
-                    updateArrayListSliderFromX(1, ex);
-                } else if (draggingArrayListFontSize) {
-                    updateArrayListSliderFromX(2, ex);
-                } else if (draggingArrayListBgOpacity) {
-                    updateArrayListSliderFromX(3, ex);
-                } else if (draggingArrayListShadowSize) {
-                    updateArrayListSliderFromX(4, ex);
-                } else if (draggingArrayListShadowX) {
-                    updateArrayListSliderFromX(5, ex);
-                } else if (draggingArrayListShadowY) {
-                    updateArrayListSliderFromX(6, ex);
-                } else if (draggingArrayListFlowSpeed) {
-                    updateArrayListSliderFromX(7, ex);
-                } else if (draggingWatermarkFontSize) {
-                    updateWatermarkSliderFromX(0, ex);
-                } else if (draggingWatermarkX) {
-                    updateWatermarkSliderFromX(1, ex);
-                } else if (draggingWatermarkY) {
-                    updateWatermarkSliderFromX(2, ex);
-                } else if (draggingWatermarkHue) {
-                    updateWatermarkSliderFromX(3, ex);
-                } else if (draggingNotifSize) {
-                    updateNotificationSliderFromX(0, ex);
-                } else if (draggingNotifFontSize) {
-                    updateNotificationSliderFromX(1, ex);
-                } else if (draggingNotifSpacing) {
-                    updateNotificationSliderFromX(2, ex);
-                } else if (draggingNotifDuration) {
-                    updateNotificationSliderFromX(3, ex);
-                }
                 return;
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                 draggingOverlaySlider = false;
                 draggingOverlayScroll = false;
-                draggingShadowHue = false;
-                draggingShadowSize = false;
-                draggingShadowOpacity = false;
-                draggingArrayListColor1 = false;
-                draggingArrayListColor2 = false;
-                draggingArrayListFontSize = false;
-                draggingArrayListBgOpacity = false;
-                draggingArrayListShadowSize = false;
-                draggingArrayListShadowX = false;
-                draggingArrayListShadowY = false;
-                draggingArrayListFlowSpeed = false;
-                draggingWatermarkFontSize = false;
-                draggingWatermarkX = false;
-                draggingWatermarkY = false;
-                draggingWatermarkHue = false;
-                draggingNotifSize = false;
-                draggingNotifFontSize = false;
-                draggingNotifSpacing = false;
-                draggingNotifDuration = false;
                 return;
             }
             return;
@@ -2160,14 +1740,14 @@ private void drawFloatingBall() {
                     spawnToast("HUD Editor coming soon");
                     return;
                 }
-                // 1) 取色器交互：色相条拖拽
-                if (hueBarW > 0 && ex >= hueBarX && ex <= hueBarX + hueBarW
-                        && ey >= hueBarY - 6 && ey <= hueBarY + hueBarH + 6) {
+                // 1) 取色器交互：色相滑块拖拽（垂直）
+                if (hueBarW > 0 && ex >= hueBarX - 6 && ex <= hueBarX + hueBarW + 6
+                        && ey >= hueBarY && ey <= hueBarY + hueBarH) {
                     draggingHue = true;
-                    updateHueFromX(ex);
+                    updateHueFromY(ey);
                     return;
                 }
-                // SV方块拖拽
+                // HSB 选色框拖拽
                 if (svBoxW > 0 && ex >= svBoxX && ex <= svBoxX + svBoxW
                         && ey >= svBoxY && ey <= svBoxY + svBoxH) {
                     draggingSV = true;
@@ -2180,27 +1760,6 @@ private void drawFloatingBall() {
                         selectedSwatchIndex = pi;
                         applyCurrentColor();
                         return;
-                    }
-                }
-                // 主题色展开/收起切换（点击标签区域）
-                if (accentCardH(100) > 0 && ey >= accentLabelY && ey <= accentLabelY + 30f * uiScale) {
-                    // 还在拖拽中不允许切换（touchMoved防止滚动中误触）
-                    accentThemeExpanded = !accentThemeExpanded;
-                    return;
-                }
-                // 0) 主题预设按钮点击（仅展开时）
-                if (accentThemeExpanded && themeThemeRects != null) {
-                    for (int ti = 0; ti < THEME_NAMES.length; ti++) {
-                        int base = ti * 4;
-                        float rx = themeThemeRects[base];
-                        float ry = themeThemeRects[base + 1];
-                        float rw = themeThemeRects[base + 2];
-                        float rh = themeThemeRects[base + 3];
-                        if (inside(ex, ey, new float[]{rx, ry, rw, rh})) {
-                            selectedThemeIndex = ti;
-                            applyThemeColors();
-                            return;
-                        }
                     }
                 }
                 // 搜索文本输入：GLSurfaceView 不便接入 InputMethodManager，
@@ -2246,9 +1805,15 @@ private void drawFloatingBall() {
                 //     sliderDragModule.sliderValue = Math.max(0f, Math.min(1f, v));
                 //     return;
                 // }
-                if (false) {
-                    // draggingSV/Hue removed
-                } else if (dragStartY >= 0) {
+                if (draggingHue) {
+                    updateHueFromY(ey);
+                    return;
+                }
+                if (draggingSV) {
+                    updateSVFromXY(ex, ey);
+                    return;
+                }
+                if (dragStartY >= 0) {
                     float dy = dragStartY - ey;
                     // 垂直移动超过12px标记为滑动，同时取消长按候选（正在滑动就不该触发长按）
                     // 之前阈值只有12px，现代手机分辨率下这点距离基本等于"手指刚碰到屏幕就算滑动"，
@@ -2273,8 +1838,6 @@ private void drawFloatingBall() {
                 // 防止开关点击穿透到EXPAND之后的ACTION_UP残留
                 draggingHue = false;
                 draggingSV = false;
-                draggingHue = false;
-                draggingSV = false;
                 dragStartY = -1;
                 touchMoved = false;
                 longPressCandidate = null;
@@ -2284,8 +1847,6 @@ private void drawFloatingBall() {
                 cardSliderRect = null;
                 break;
             case MotionEvent.ACTION_CANCEL:
-                draggingHue = false;
-                draggingSV = false;
                 draggingHue = false;
                 draggingSV = false;
                 dragStartY = -1;
@@ -2302,9 +1863,9 @@ private void drawFloatingBall() {
 
 
 
-    private void updateHueFromX(float ex) {
-        if (hueBarW <= 0) return;
-        customHue = Math.max(0f, Math.min(1f, (ex - hueBarX) / hueBarW));
+    private void updateHueFromY(float ey) {
+        if (hueBarH <= 0) return;
+        customHue = Math.max(0f, Math.min(1f, (ey - hueBarY) / hueBarH));
         selectedSwatchIndex = -1;
         applyCurrentColor();
     }
@@ -2332,12 +1893,11 @@ private void drawFloatingBall() {
         }
     }
 
-    /** 根据当前选中的色块/SV值更新 ACCENT_1/ACCENT_2 */
-       /** 切换主题时调用：更新 ACCENT_1/ACCENT_2 */
-private void applyThemeColors() {
-    ACCENT_1 = themeAccent1();
-    ACCENT_2 = themeAccent2();
-}
+    /** 切换主题时调用：更新 ACCENT_1/ACCENT_2 */
+    private void applyThemeColors() {
+        ACCENT_1 = themeAccent1();
+        ACCENT_2 = themeAccent2();
+    }
 
     private float[] rgb2hsv(float r, float g, float b) {
         float max = Math.max(r, Math.max(g, b));
