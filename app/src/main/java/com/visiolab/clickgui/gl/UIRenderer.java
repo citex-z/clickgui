@@ -322,6 +322,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private boolean searchActive = false;
     private float[] searchBoxRect = null;
     private float[] closeBtnRect = null;
+    private float[] editHudRect = null;
+    private float[] closeSideRect = null;
     private float[] footerKeybindRect = null;
     private float[] footerCloseRect = null;
     // ---- 卡片网格触摸状态 ----
@@ -1366,109 +1368,121 @@ private void drawFloatingBall() {
 
     private void drawSidebarAndHeader(float x, float y, float w, float h, float alpha) {
         float sbW = sidebarW * (w / panelW);
-        float[] sbg = withAlpha(SOUTH_SIDEBAR_BG, alpha);
-        quad.addRect(x, y, sbW, h, radius, sbg);
-        quad.addRect(x + sbW - radius, y, radius, h, 0f, sbg);
+        float hdrH = 72f * uiScale * (h / panelH);
+
+        // 侧栏背景
+        quad.addRect(x, y, sbW, h, radius, withAlpha(SOUTH_SIDEBAR_BG, alpha));
+        quad.addRect(x + sbW - radius, y, radius, h, 0f, withAlpha(SOUTH_SIDEBAR_BG, alpha));
+
+        // 内容区背景
+        float contentBgX = x + sbW;
+        float contentBgW = w - sbW;
+        quad.addRect(contentBgX, y, contentBgW, h, radius, withAlpha(SOUTH_PANEL_BG, alpha));
+        quad.addRect(contentBgX, y + h - radius, contentBgW, radius, 0f, withAlpha(SOUTH_PANEL_BG, alpha));
+
+        // 分隔线
+        quad.addRect(x + sbW, y, 1f * uiScale, h, 0f, withAlpha(SOUTH_CARD_BORDER, alpha));
+        // 顶部分隔线
+        quad.addRect(contentBgX, y + hdrH, contentBgW, 1f * uiScale, 0f, withAlpha(SOUTH_CARD_BORDER, alpha));
 
         categoryHitRects.clear();
 
-        // ---- 分组侧栏：MAIN / FEATURES / SYSTEM ----
+        // 分组侧栏
         float pad = 8f * uiScale * (h / panelH);
-        float rowH = 28f * uiScale * (h / panelH);
-        float sectionGap = 16f * uiScale * (h / panelH);
-        float curY = y + pad + 6f * uiScale * (h / panelH);
+        float rowH = 36f * uiScale * (h / panelH);
+        float bottomBtnH = 36f * uiScale * (h / panelH);
+        float sectionLblH = 24f * uiScale * (h / panelH);
+        float sectionGap = 12f * uiScale * (h / panelH);
 
+        float curY = y + pad + 8f * uiScale * (h / panelH);
         String prevSection = null;
+
         for (int i = 0; i < categories.size(); i++) {
             Category c = categories.get(i);
             if (prevSection == null || !c.section.equals(prevSection)) {
-                curY += (prevSection != null ? sectionGap : 0f) + 18f * uiScale * (h / panelH);
+                curY += (prevSection != null ? sectionGap : 0f) + sectionLblH;
                 prevSection = c.section;
             }
             float ry = curY;
-            categoryHitRects.add(new float[]{x, ry, sbW, rowH});
+            float btnX = x + 8f * uiScale * (w / panelW);
+            float btnW = sbW - 16f * uiScale * (w / panelW);
+            categoryHitRects.add(new float[]{btnX, ry, btnW, rowH});
             if (i == currentCategoryIndex) {
                 highlightY.setTarget(ry - y);
             }
             curY += rowH + 4f * uiScale * (h / panelH);
         }
 
-        // 流动高亮条：蓝色半透明背景 + 左侧蓝色竖条
-        float[] hlBg = withAlpha(ACCENT_1, alpha * 0.15f);
-        quad.addRect(x, y + highlightY.get(), sbW, rowH, 0f, hlBg);
-        quad.addRect(x, y + highlightY.get(), 3f * uiScale, rowH, 0f, withAlpha(ACCENT_1, alpha));
+        // 高亮条
+        float hlRowH = rowH;
+        float[] hlBg = withAlpha(SOUTH_CARD_BORDER_SEL, alpha * 0.15f);
+        float hlX = x + 8f * uiScale * (w / panelW);
+        float hlW = sbW - 16f * uiScale * (w / panelW);
+        quad.addRect(hlX, y + highlightY.get(), hlW, hlRowH, 12f * uiScale, hlBg);
 
-        // ---- 内容区裁剪区域 ----
+        // 底部按钮：Edit HUD + Close
+        float bottomY = y + h - pad - bottomBtnH * 2 - 8f * uiScale * (h / panelH);
+        editHudRect = new float[]{x + 8f * uiScale * (w / panelW), bottomY, sbW - 16f * uiScale * (w / panelW), bottomBtnH};
+        closeSideRect = new float[]{x + 8f * uiScale * (w / panelW), bottomY + bottomBtnH + 4f * uiScale * (h / panelH), sbW - 16f * uiScale * (w / panelW), bottomBtnH};
+        quad.addRect(editHudRect[0], editHudRect[1], editHudRect[2], editHudRect[3], 8f * uiScale, withAlpha(SOUTH_MODULE_BG, alpha));
+        quad.addRect(closeSideRect[0], closeSideRect[1], closeSideRect[2], closeSideRect[3], 8f * uiScale, withAlpha(SOUTH_MODULE_BG, alpha));
+
+        // 裁剪区域
         float contentX = x + sbW + pad;
         float contentW = w - sbW - pad * 2;
-        float titleH = 34f * uiScale * (h / panelH);
-        float headerH = 44f * uiScale * (h / panelH);
+        float titleH = 30f * uiScale * (h / panelH);
 
         clipX = contentX - 2f;
-        clipY = y + headerH + titleH;
+        clipY = y + hdrH + titleH;
         clipW = contentW + 4f;
-        float footerH = 36f * uiScale * (h / panelH);
-        clipH = (y + h - pad - footerH) - clipY;
+        clipH = (y + h - pad) - clipY;
 
         // 滚动范围
         Category cat = categories.get(currentCategoryIndex);
-        float cardH = 70f * uiScale * (h / panelH);
+        float cardH = 100f * uiScale * (h / panelH);
         float cardGap = 12f * uiScale * (h / panelH);
-        float cols = 2f;
-        int rows = (int) Math.ceil(cat.modules.size() / cols);
+        int cols = 3;
+        float cardW = (contentW - cardGap * (cols - 1)) / cols;
+        int rows = (int) Math.ceil(cat.modules.size() / (float) cols);
         float totalContentH = rows * (cardH + cardGap) - cardGap;
-        float settingExtraH = cat.name.equals("Setting") ? accentCardH(h) + cardGap : 0f;
-        maxScroll = Math.max(0f, totalContentH + settingExtraH + pad + titleH - h + headerH + footerH);
+        maxScroll = Math.max(0f, totalContentH + pad + titleH - h + hdrH);
     }
 
     private void drawHeaderBar(float x, float y, float w, float h, float alpha) {
         float sbW = sidebarW * (w / panelW);
-        float hdrH = 44f * uiScale * (h / panelH);
+        float hdrH = 72f * uiScale * (h / panelH);
         float hdrX = x + sbW;
         float hdrW = w - sbW;
 
+        // 标题栏背景
         quad.addRect(hdrX, y, hdrW, hdrH, 0f, withAlpha(HDR_BG, alpha));
         quad.addRect(hdrX, y, hdrW, radius, 0f, withAlpha(HDR_BG, alpha));
 
-        float searchW = 120f * uiScale * (w / panelW);
-        float searchH = 24f * uiScale * (h / panelH);
-        float searchX = x + w - searchW - 36f * uiScale * (w / panelW);
+        // 搜索框 (右侧)
+        float searchW = 180f * uiScale * (w / panelW);
+        float searchH = 36f * uiScale * (h / panelH);
+        float searchX = x + w - searchW - 16f * uiScale * (w / panelW);
         float searchY = y + (hdrH - searchH) / 2f;
         quad.addRect(searchX, searchY, searchW, searchH, searchH / 2f, withAlpha(SOUTH_SEARCH_BG, alpha));
         quad.addRect(searchX, searchY, searchW, searchH, searchH / 2f, withAlpha(SOUTH_CARD_BORDER, alpha * 0.5f));
         searchBoxRect = new float[]{searchX, searchY, searchW, searchH};
 
-        float closeSize = 20f * uiScale * (h / panelH);
-        float closeX = x + w - closeSize - 12f * uiScale * (w / panelW);
+        // 关闭按钮区域 (× 在搜索框右侧)
+        float closeSize = 36f * uiScale * (h / panelH);
+        float closeX = searchX + searchW + 8f * uiScale * (w / panelW);
         float closeY = y + (hdrH - closeSize) / 2f;
-        closeBtnRect = new float[]{closeX, closeY, closeSize, closeSize};
+        // Only draw if there's room
+        if (closeX + closeSize < x + w - 8f * uiScale) {
+            closeBtnRect = new float[]{closeX, closeY, closeSize, closeSize};
+        } else {
+            closeBtnRect = null;
+        }
     }
 
     private void drawFooterBar(float x, float y, float w, float h, float alpha) {
-        float sbW = sidebarW * (w / panelW);
-        float footerH = 36f * uiScale * (h / panelH);
-        float footerY = y + h - footerH;
-        float footerW = w - sbW;
-
-        quad.addRect(x + sbW, footerY, footerW, footerH, 0f, withAlpha(HDR_BG, alpha));
-        quad.addRect(x + sbW, footerY + footerH - radius, footerW, radius, 0f, withAlpha(HDR_BG, alpha));
-
-        // Close 按钮（蓝色填充）
-        float btnW = 60f * uiScale * (w / panelW);
-        float btnH = 28f * uiScale * (h / panelH);
-        float btnX = x + w - btnW - 12f * uiScale * (w / panelW);
-        float btnY = footerY + (footerH - btnH) / 2f;
-        quad.addRect(btnX, btnY, btnW, btnH, 6f * uiScale, withAlpha(ACCENT_1, alpha));
-        footerCloseRect = new float[]{btnX, btnY, btnW, btnH};
-
-        // KeyBind 占位区域
-        float kbW = 160f * uiScale * (w / panelW);
-        float kbH = 28f * uiScale * (h / panelH);
-        float kbX = x + sbW + 12f * uiScale * (w / panelW);
-        float kbY = footerY + (footerH - kbH) / 2f;
-        quad.addRect(kbX, kbY, kbW, kbH, 6f * uiScale, withAlpha(CARD_BG, alpha));
-        quad.addRect(kbX, kbY, kbW, kbH, 6f * uiScale, withAlpha(SOUTH_CARD_BORDER, alpha * 0.5f));
-        footerKeybindRect = new float[]{kbX, kbY, kbW, kbH};
+        // 南方客户端无底栏 — Close 在侧栏底部
+        footerKeybindRect = null;
+        footerCloseRect = null;
     }
     /** 主题色预设选择器的布局计算，绘制/触摸共用 */
     private static class AccentLayout {
@@ -1510,17 +1524,17 @@ private void drawFloatingBall() {
         float pad = 8f * uiScale * (h / panelH);
         float contentX = x + sbW + pad;
         float contentW = w - sbW - pad * 2;
-        float hdrH = 44f * uiScale * (h / panelH);
-        float titleH = 34f * uiScale * (h / panelH);
+        float hdrH = 72f * uiScale * (h / panelH);
+        float titleH = 30f * uiScale * (h / panelH);
         float startY = y + hdrH + titleH - contentScroll.get();
 
         Category cat = categories.get(currentCategoryIndex);
-
         float cardGap = 12f * uiScale * (h / panelH);
-        int cols = 2;
+        int cols = 3;
         float cardW = (contentW - cardGap * (cols - 1)) / cols;
-        float cardH = 70f * uiScale * (h / panelH);
-        float expandH = 120f * uiScale * (h / panelH);
+        float cardH = 100f * uiScale * (h / panelH);
+        float toggleBarH = 32f * uiScale * (h / panelH);
+        float iconAreaH = cardH - toggleBarH;
 
         java.util.List<ModuleItem> visibleModules = new java.util.ArrayList<>();
         for (ModuleItem m : cat.modules) {
@@ -1536,128 +1550,57 @@ private void drawFloatingBall() {
             int col = i % cols;
             float cardX = contentX + col * (cardW + cardGap);
 
-            m.expandAnim.setTarget(m.expanded ? 1f : 0f);
-            m.expandAnim.update(0.016f);
-            float expandT = m.expandAnim.get();
-            float actualExpandH = expandT * expandH;
-            float actualCardH = cardH + actualExpandH;
-
-            if (curY + actualCardH < clipY || curY > clipY + clipH) {
-                curY += cardH + cardGap;
-                if (m.expanded) curY += expandH;
+            if (curY + cardH < clipY - 20f || curY > clipY + clipH + 20f) {
+                if ((i + 1) % cols == 0) curY += cardH + cardGap;
                 continue;
             }
 
             float reveal = rowRevealEase(alpha, i);
             if (reveal <= 0.003f) {
-                curY += cardH + cardGap;
-                if (m.expanded) curY += expandH;
+                if ((i + 1) % cols == 0) curY += cardH + cardGap;
                 continue;
             }
             float rowAlpha = alpha * reveal;
             float drawY = curY + (1f - reveal) * 14f * uiScale;
 
-            moduleHitRects.add(new Object[]{new float[]{cardX, drawY, cardW, actualCardH}, "CARD", m});
-            float arrowSize = 28f * uiScale * (h / panelH);
-            moduleHitRects.add(new Object[]{
-                new float[]{cardX + cardW - arrowSize, drawY + cardH - arrowSize, arrowSize, arrowSize},
-                "ARROW", m});
+            // 注册热区: 整张卡片
+            moduleHitRects.add(new Object[]{new float[]{cardX, drawY, cardW, cardH}, "CARD", m});
+            // 开关栏热区 (底部)
+            moduleHitRects.add(new Object[]{new float[]{cardX, drawY + iconAreaH, cardW, toggleBarH}, "TOGGLE", m});
 
-            float[] borderColor = m.expanded ? SOUTH_CARD_BORDER_SEL : SOUTH_CARD_BORDER;
-            quad.addRect(cardX, drawY, cardW, actualCardH, 8f * uiScale, withAlpha(CARD_BG, rowAlpha));
-            // 卡片边框
-            quad.addRect(cardX, drawY, cardW, 1f * uiScale, 0f, withAlpha(borderColor, rowAlpha));
-            quad.addRect(cardX, drawY + actualCardH - 1f * uiScale, cardW, 1f * uiScale, 0f, withAlpha(borderColor, rowAlpha));
-            quad.addRect(cardX, drawY, 1f * uiScale, actualCardH, 0f, withAlpha(borderColor, rowAlpha));
-            quad.addRect(cardX + cardW - 1f * uiScale, drawY, 1f * uiScale, actualCardH, 0f, withAlpha(borderColor, rowAlpha));
+            // 上半部分: 图标区 (圆角顶部)
+            float cornerR = 12f * uiScale;
+            quad.addRect(cardX, drawY, cardW, iconAreaH, cornerR, withAlpha(SOUTH_MODULE_BG, rowAlpha));
+            // 补底部直角
+            quad.addRect(cardX, drawY + iconAreaH - cornerR, cardW, cornerR, 0f, withAlpha(SOUTH_MODULE_BG, rowAlpha));
 
-            if (m.enabled) {
-                quad.addRect(cardX, drawY + cardH - 3f * uiScale, cardW, 3f * uiScale, 0f,
-                        withAlpha(ACCENT_1, rowAlpha));
-            }
+            // 模块首字母作为图标 (居中)
+            // 在文字层绘制
 
-            if (expandT > 0.01f) {
-                drawExpandedCardContent(cardX, drawY + cardH, cardW, actualExpandH, rowAlpha * expandT, m, h);
-            }
+            // 下半部分: 开关栏 (圆角底部)
+            float[] toggleCol = m.enabled ? withAlpha(SOUTH_TOGGLE_ON, rowAlpha) : withAlpha(SOUTH_TOGGLE_OFF, rowAlpha);
+            quad.addRect(cardX, drawY + iconAreaH, cardW, toggleBarH, cornerR, toggleCol);
+            // 补顶部直角
+            quad.addRect(cardX, drawY + iconAreaH, cardW, cornerR, 0f, toggleCol);
 
-            curY += cardH + cardGap;
-            if (m.expanded) curY += expandH;
+            // 分隔线
+            quad.addRect(cardX, drawY + iconAreaH, cardW, 2f * uiScale, 0f, withAlpha(SOUTH_TAB_OFF, rowAlpha * 0.5f));
+
+            if ((i + 1) % cols == 0) curY += cardH + cardGap;
         }
 
-        if (cat.name.equals("Setting")) {
-            float cy = curY;
+        // Preferences 分类的取色器
+        if (cat.name.equals("Preferences")) {
+            float cy = curY + cardGap;
             float accH = accentCardH(h);
             if (cy + accH >= clipY && cy <= clipY + clipH) {
-                quad.addRect(contentX, cy, contentW, accH, 12f * uiScale, withAlpha(CARD_BG, alpha));
+                quad.addRect(contentX, cy, contentW, accH, 12f * uiScale, withAlpha(SOUTH_MODULE_BG, alpha));
                 drawSettingAccentPicker(contentX, cy, contentW, alpha, h);
             }
         }
     }
     private void drawExpandedCardContent(float x, float y, float w, float h, float alpha, ModuleItem m, float panelHeight) {
-        float pad = 12f * uiScale;
-        float innerX = x + pad;
-        float innerW = w - pad * 2;
-
-        // 分隔线
-        quad.addRect(innerX, y, innerW, 1f * uiScale, 0f, withAlpha(SOUTH_CARD_BORDER, alpha));
-
-        // ---- 标签页栏 ----
-        float tabH = 20f * uiScale;
-        float tabY = y + 8f * uiScale;
-        float tabGap = 4f * uiScale;
-        float tabW = 56f * uiScale;
-        String[] tabs = {"General", "Behavior"};
-        for (int ti = 0; ti < tabs.length; ti++) {
-            float tabX = innerX + ti * (tabW + tabGap);
-            if (ti == m.activeTab) {
-                quad.addRect(tabX, tabY, tabW, tabH, tabH / 2f, withAlpha(ACCENT_1, alpha));
-            }
-        }
-
-        // ---- 设置项（仅 General 标签页） ----
-        if (m.activeTab == 0) {
-            float setY = tabY + tabH + 12f * uiScale;
-
-            // 滑块（如果模块有滑块）
-            if (m.hasSlider) {
-                float sliderTrackW = 100f * uiScale;
-                float sliderTrackH = 3f * uiScale;
-                float sliderX = innerX + innerW - sliderTrackW - 30f * uiScale;
-                float sliderY = setY + 2f * uiScale;
-                // 轨道
-                quad.addRect(sliderX, sliderY, sliderTrackW, sliderTrackH, sliderTrackH / 2f,
-                        withAlpha(SOUTH_SLIDER_TRACK, alpha));
-                // 填充
-                quad.addRect(sliderX, sliderY, sliderTrackW * m.sliderValue, sliderTrackH,
-                        sliderTrackH / 2f, withAlpha(ACCENT_1, alpha));
-                // 拖钮
-                float knobR = 4f * uiScale;
-                float knobX = sliderX + sliderTrackW * m.sliderValue - knobR;
-                quad.addRect(knobX, sliderY - knobR + sliderTrackH / 2f, knobR * 2, knobR * 2,
-                        knobR, withAlpha(KNOB_COLOR, alpha));
-                setY += 24f * uiScale;
-            }
-
-            // 胶囊开关（如果模块有开关）
-            if (m.showToggle) {
-                m.toggleAnim.setTarget(m.enabled ? 1f : 0f);
-                m.toggleAnim.update(0.016f);
-                float t = m.toggleAnim.get();
-
-                float tglW = 28f * uiScale;
-                float tglH = 14f * uiScale;
-                float tglX = innerX + innerW - tglW - 12f * uiScale;
-                float tglY = setY + 2f * uiScale;
-                // 轨道
-                float[] trackCol = mixColor(SOUTH_TRACK_OFF, ACCENT_1, t);
-                quad.addRect(tglX, tglY, tglW, tglH, tglH / 2f, withAlpha(trackCol, alpha));
-                // 滑钮
-                float knobD = tglH - 4f * uiScale;
-                float knobX = tglX + 2f * uiScale + (tglW - knobD - 4f * uiScale) * t;
-                quad.addRect(knobX, tglY + 2f * uiScale, knobD, knobD, knobD / 2f,
-                        withAlpha(KNOB_COLOR, alpha));
-            }
-        }
+        // 南方客户端卡片不内联展开，点击卡片打开独立配置页
     }
     private void drawSettingAccentPicker(float contentX, float cy, float contentW, float alpha, float h) {
         float innerX = contentX + 16f * uiScale;
@@ -1749,75 +1692,74 @@ private void drawFloatingBall() {
     private void drawTextLayer(float x, float y, float w, float h, float alpha) {
         float pad = 8f * uiScale * (h / panelH);
         float sbW = sidebarW * (w / panelW);
-        float hdrH = 44f * uiScale * (h / panelH);
+        float hdrH = 72f * uiScale * (h / panelH);
 
         // ---- 标题栏文字 ----
-        text.draw("SOAR b1", x + sbW + 14f * uiScale, y + hdrH / 2f - 6f * uiScale,
-                13f * uiScale, withAlpha(TEXT_MAIN, alpha), screenW, screenH);
+        text.draw("SOUTHSIDE b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 6f * uiScale,
+                13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         Category curCat = categories.get(currentCategoryIndex);
         text.draw("\u2190 \u2192 " + curCat.name, x + sbW + 80f * uiScale, y + hdrH / 2f - 5f * uiScale,
-                11f * uiScale, withAlpha(TEXT_DIM, alpha), screenW, screenH);
+                11f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         if (searchBoxRect != null) {
             String searchText = searchActive ? searchQuery : "\u2315 search...";
             text.draw(searchText, searchBoxRect[0] + 12f * uiScale,
                     searchBoxRect[1] + searchBoxRect[3] / 2f - 4f * uiScale,
-                    10f * uiScale, withAlpha(TEXT_DIM, alpha), screenW, screenH);
+                    10f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         }
         if (closeBtnRect != null) {
-            text.draw("\u00D7", closeBtnRect[0] + 4f * uiScale,
-                    closeBtnRect[1] + 2f * uiScale,
-                    14f * uiScale, withAlpha(TEXT_DIM, alpha), screenW, screenH);
+            text.draw("\u00D7", closeBtnRect[0] + closeBtnRect[2] / 2f - 5f * uiScale,
+                    closeBtnRect[1] + closeBtnRect[3] / 2f - 7f * uiScale,
+                    18f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         }
 
         // ---- 分组侧栏文字 ----
-        float rowH = 28f * uiScale * (h / panelH);
-        float sectionLblSize = 9f * uiScale;
-        float sectionGap = 16f * uiScale * (h / panelH);
-        float curY = y + pad + 6f * uiScale * (h / panelH);
+        float rowH = 36f * uiScale * (h / panelH);
+        float sectionLblSize = 11f * uiScale;
+        float sectionLblH = 24f * uiScale * (h / panelH);
+        float sectionGap = 12f * uiScale * (h / panelH);
+        float btnPadX = 8f * uiScale * (w / panelW);
+        float curY = y + pad + 8f * uiScale * (h / panelH);
         String prevSection = null;
         for (int i = 0; i < categories.size(); i++) {
             Category c = categories.get(i);
             if (prevSection == null || !c.section.equals(prevSection)) {
-                curY += (prevSection != null ? sectionGap : 0f) + 18f * uiScale * (h / panelH);
-                text.draw(c.section, x + 14f * uiScale, curY - 8f * uiScale * (h / panelH),
+                curY += (prevSection != null ? sectionGap : 0f) + sectionLblH;
+                text.draw(c.section.toUpperCase(), x + btnPadX + 8f * uiScale,
+                        curY - sectionLblH + 8f * uiScale * (h / panelH),
                         sectionLblSize, withAlpha(SOUTH_SECTION_LBL, alpha), screenW, screenH);
                 prevSection = c.section;
             }
             float ry = curY;
             boolean sel = i == currentCategoryIndex;
-            float[] col = withAlpha(sel ? KNOB_COLOR : TEXT_DIM, alpha);
-            text.draw(c.icon, x + 14f * uiScale, ry + rowH / 2f - 6f * uiScale, 12f * uiScale, col, screenW, screenH);
-            text.draw(c.name, x + 32f * uiScale, ry + rowH / 2f - 5f * uiScale, 12f * uiScale, col, screenW, screenH);
+            float[] col = withAlpha(sel ? SOUTH_TEXT_WHITE : SOUTH_TEXT_DIM2, alpha);
+            text.draw(c.icon, x + btnPadX + 8f * uiScale, ry + rowH / 2f - 7f * uiScale, 13f * uiScale, col, screenW, screenH);
+            text.draw(c.name, x + btnPadX + 30f * uiScale, ry + rowH / 2f - 6f * uiScale, 13f * uiScale, col, screenW, screenH);
             curY += rowH + 4f * uiScale * (h / panelH);
+        }
+
+        // 侧栏底部按钮文字
+        if (editHudRect != null) {
+            text.draw("Edit HUD", editHudRect[0] + 12f * uiScale,
+                    editHudRect[1] + editHudRect[3] / 2f - 5f * uiScale,
+                    12f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+        }
+        if (closeSideRect != null) {
+            text.draw("Close", closeSideRect[0] + 12f * uiScale,
+                    closeSideRect[1] + closeSideRect[3] / 2f - 5f * uiScale,
+                    12f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         }
 
         // 内容区标题
         Category cat = categories.get(currentCategoryIndex);
         float contentX = x + sbW + pad;
-        float titleH = 34f * uiScale * (h / panelH);
+        float titleH = 30f * uiScale * (h / panelH);
         text.draw(cat.name + " Modules", contentX, y + hdrH + 10f * uiScale * (h / panelH),
-                14f * uiScale, withAlpha(TEXT_MAIN, alpha), screenW, screenH);
+                14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         int enabledCount = 0;
         for (ModuleItem mod : cat.modules) if (mod.enabled) enabledCount++;
         text.draw(cat.modules.size() + " modules \u00B7 " + enabledCount + " enabled",
                 contentX, y + hdrH + 28f * uiScale * (h / panelH),
-                11f * uiScale, withAlpha(TEXT_DIM, alpha), screenW, screenH);
-
-        // ---- 底栏文字 ----
-        float footerH = 36f * uiScale * (h / panelH);
-        if (footerKeybindRect != null) {
-            text.draw("Click GUI KeyBind", footerKeybindRect[0] + 10f * uiScale,
-                    footerKeybindRect[1] + 10f * uiScale, 11f * uiScale,
-                    withAlpha(TEXT_DIM, alpha), screenW, screenH);
-            text.draw("RSHIFT", footerKeybindRect[0] + footerKeybindRect[2] - 50f * uiScale,
-                    footerKeybindRect[1] + 10f * uiScale, 11f * uiScale,
-                    withAlpha(TEXT_MAIN, alpha), screenW, screenH);
-        }
-        if (footerCloseRect != null) {
-            text.draw("Close", footerCloseRect[0] + 18f * uiScale,
-                    footerCloseRect[1] + 10f * uiScale, 11f * uiScale,
-                    withAlpha(KNOB_COLOR, alpha), screenW, screenH);
-        }
+                11f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
     }
 
     /** 卡片名称/描述文字单独拆出来，方便配合 scissor 裁剪，滑动溢出时不会画到面板外 */
@@ -1826,16 +1768,17 @@ private void drawFloatingBall() {
         float pad = 8f * uiScale * (h / panelH);
         float contentX = x + sbW + pad;
         float contentW = w - sbW - pad * 2;
-        float hdrH = 44f * uiScale * (h / panelH);
-        float titleH = 34f * uiScale * (h / panelH);
+        float hdrH = 72f * uiScale * (h / panelH);
+        float titleH = 30f * uiScale * (h / panelH);
         float startY = y + hdrH + titleH - contentScroll.get();
 
         Category cat = categories.get(currentCategoryIndex);
         float cardGap = 12f * uiScale * (h / panelH);
-        int cols = 2;
+        int cols = 3;
         float cardW = (contentW - cardGap * (cols - 1)) / cols;
-        float cardH = 70f * uiScale * (h / panelH);
-        float expandH = 120f * uiScale * (h / panelH);
+        float cardH = 100f * uiScale * (h / panelH);
+        float toggleBarH = 32f * uiScale * (h / panelH);
+        float iconAreaH = cardH - toggleBarH;
 
         java.util.List<ModuleItem> visibleModules = new java.util.ArrayList<>();
         for (ModuleItem m : cat.modules) {
@@ -1851,66 +1794,37 @@ private void drawFloatingBall() {
             int col = i % cols;
             float cardX = contentX + col * (cardW + cardGap);
 
-            if (curY + cardH < clipY || curY > clipY + clipH) {
-                curY += cardH + cardGap;
-                if (m.expanded) curY += expandH;
+            if (curY + cardH < clipY - 20f || curY > clipY + clipH + 20f) {
+                if ((i + 1) % cols == 0) curY += cardH + cardGap;
                 continue;
             }
             float reveal = rowRevealEase(alpha, i);
             if (reveal <= 0.003f) {
-                curY += cardH + cardGap;
-                if (m.expanded) curY += expandH;
+                if ((i + 1) % cols == 0) curY += cardH + cardGap;
                 continue;
             }
             float rowAlpha = alpha * reveal;
             float drawY = curY + (1f - reveal) * 14f * uiScale;
 
-            text.draw(m.name, cardX + 12f * uiScale, drawY + 10f * uiScale,
-                    12f * uiScale, withAlpha(TEXT_MAIN, rowAlpha), screenW, screenH);
-            text.draw(m.description, cardX + 12f * uiScale, drawY + 26f * uiScale,
-                    9f * uiScale, withAlpha(TEXT_DIM, rowAlpha), screenW, screenH);
-            text.draw(m.expanded ? "\u25BE" : "\u25B8",
-                    cardX + cardW - 18f * uiScale, drawY + cardH - 16f * uiScale,
-                    10f * uiScale, withAlpha(TEXT_DIM, rowAlpha), screenW, screenH);
+            // 图标区: 模块首字母居中
+            String iconText = m.name.substring(0, 1).toUpperCase();
+            float iconSize = 28f * uiScale;
+            text.draw(iconText, cardX + cardW / 2f - iconSize * 0.3f, drawY + iconAreaH / 2f - iconSize * 0.5f,
+                    iconSize, withAlpha(SOUTH_TEXT_DIM2, rowAlpha), screenW, screenH);
 
-            float expandT = m.expandAnim.get();
-            if (expandT > 0.01f) {
-                float expandAlpha = rowAlpha * expandT;
-                float tabY = drawY + cardH + 8f * uiScale;
-                String[] tabs = {"General", "Behavior"};
-                float tabX = cardX + 12f * uiScale;
-                for (int ti = 0; ti < tabs.length; ti++) {
-                    float[] tCol = ti == m.activeTab ? withAlpha(KNOB_COLOR, expandAlpha) : withAlpha(SOUTH_TAB_OFF, expandAlpha);
-                    text.draw(tabs[ti], tabX, tabY, 11f * uiScale, tCol, screenW, screenH);
-                    tabX += 70f * uiScale;
-                }
+            // 开关栏: 模块名
+            float nameSize = 13f * uiScale;
+            text.draw(m.name, cardX + 10f * uiScale, drawY + iconAreaH + toggleBarH / 2f - nameSize * 0.4f,
+                    nameSize, withAlpha(SOUTH_TEXT_WHITE, rowAlpha), screenW, screenH);
 
-                if (m.activeTab == 0) {
-                    float setY = tabY + 24f * uiScale;
-                    if (m.hasSlider) {
-                        text.draw("Value", cardX + 12f * uiScale, setY, 11f * uiScale,
-                                withAlpha(TEXT_DIM, expandAlpha), screenW, screenH);
-                        String valStr = String.format("%.1f", m.getRealValue()) + (m.sliderUnit.isEmpty() ? "" : " " + m.sliderUnit);
-                        text.draw(valStr, cardX + cardW - 50f * uiScale, setY, 11f * uiScale,
-                                withAlpha(TEXT_DIM, expandAlpha), screenW, screenH);
-                        setY += 24f * uiScale;
-                    }
-                    if (m.showToggle) {
-                        text.draw("Enabled", cardX + 12f * uiScale, setY, 11f * uiScale,
-                                withAlpha(TEXT_DIM, expandAlpha), screenW, screenH);
-                    }
-                }
-            }
-
-            curY += cardH + cardGap;
-            if (m.expanded) curY += expandH;
+            if ((i + 1) % cols == 0) curY += cardH + cardGap;
         }
 
-        if (cat.name.equals("Setting")) {
-            float cy = curY;
+        if (cat.name.equals("Preferences")) {
+            float cy = curY + cardGap;
             if (cy + accentCardH(h) >= clipY && cy <= clipY + clipH) {
                 text.draw("\u4e3b\u9898\u8272", contentX + 16f * uiScale, cy + 12f * uiScale,
-                        15f * uiScale, withAlpha(TEXT_MAIN, alpha), screenW, screenH);
+                        15f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
             }
         }
     }
