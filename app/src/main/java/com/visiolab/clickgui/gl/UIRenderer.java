@@ -2146,6 +2146,18 @@ private void drawFloatingBall() {
                     openness.setTarget(0f);
                     return;
                 }
+                // 侧栏底部按钮
+                if (closeSideRect != null && inside(ex, ey, closeSideRect)) {
+                    guiOpen = false;
+                    overlayOpenness.setTarget(0f);
+                    openness.setTarget(0f);
+                    return;
+                }
+                if (editHudRect != null && inside(ex, ey, editHudRect)) {
+                    // Edit HUD: TODO — 暂时只切换某个状态或忽略
+                    spawnToast("HUD Editor coming soon");
+                    return;
+                }
                 // 1) 取色器交互：色相条拖拽
                 if (hueBarW > 0 && ex >= hueBarX && ex <= hueBarX + hueBarW
                         && ey >= hueBarY - 6 && ey <= hueBarY + hueBarH + 6) {
@@ -2191,7 +2203,7 @@ private void drawFloatingBall() {
                 }
                 // 搜索文本输入：GLSurfaceView 不便接入 InputMethodManager，
                 // 暂不处理键盘输入，搜索框仅作视觉元素；searchQuery 可通过代码设置。
-                // 2) 卡片交互：点击箭头展开/收起，点击卡片切换开关，展开区内控件交互
+                // 2) 卡片交互：点击开关栏切换模块，点击卡片其他区域暂不处理
                 for (int idx = 0; idx < moduleHitRects.size(); idx++) {
                     Object[] hit = moduleHitRects.get(idx);
                     float[] r = (float[]) hit[0];
@@ -2200,62 +2212,18 @@ private void drawFloatingBall() {
 
                     if (!inside(ex, ey, r)) continue;
 
-                    if ("ARROW".equals(type)) {
-                        m.expanded = !m.expanded;
+                    if ("TOGGLE".equals(type)) {
+                        // 点击开关栏：切换模块开关
+                        m.enabled = !m.enabled;
+                        spawnToast(m.name + (m.enabled ? " ON" : " OFF"));
                         return;
                     }
                     if ("CARD".equals(type)) {
-                        // 检查展开面板内的控件
-                        if (m.expanded && m.activeTab == 0) {
-                            // 面板在用户交互时已完全展开 (scale≈1.0)，cardH ≈ 70f * uiScale
-                            float expandTop = r[1] + 70f * uiScale; // cardH
-                            // 标签页点击
-                            float tabY = expandTop + 8f * uiScale;
-                            float tabW = 56f * uiScale;
-                            float tabGap = 4f * uiScale;
-                            for (int ti = 0; ti < 2; ti++) {
-                                float tabX = r[0] + 12f * uiScale + ti * (tabW + tabGap);
-                                if (ex >= tabX && ex <= tabX + tabW && ey >= tabY && ey <= tabY + 20f * uiScale) {
-                                    m.activeTab = ti;
-                                    return;
-                                }
-                            }
-                            // 滑块拖拽
-                            if (m.hasSlider) {
-                                float sliderTrackW = 100f * uiScale;
-                                float sliderX = r[0] + r[2] - 12f * uiScale - sliderTrackW - 30f * uiScale;
-                                float sliderY = tabY + 20f * uiScale + 12f * uiScale + 2f * uiScale;
-                                if (ex >= sliderX - 8f && ex <= sliderX + sliderTrackW + 8f
-                                        && ey >= sliderY - 8f && ey <= sliderY + 8f) {
-                                    draggingCardSlider = true;
-                                    sliderDragModule = m;
-                                    cardSliderRect = new float[]{sliderX, sliderY, sliderTrackW, 3f * uiScale};
-                                    float v = (ex - sliderX) / sliderTrackW;
-                                    m.sliderValue = Math.max(0f, Math.min(1f, v));
-                                    return;
-                                }
-                            }
-                            // 开关点击
-                            if (m.showToggle) {
-                                float tglW = 28f * uiScale;
-                                float tglH = 14f * uiScale;
-                                float tglX = r[0] + r[2] - 12f * uiScale - tglW;
-                                float setY = tabY + 20f * uiScale + 12f * uiScale + (m.hasSlider ? 24f * uiScale : 0f);
-                                float tglY = setY + 2f * uiScale;
-                                if (ex >= tglX && ex <= tglX + tglW && ey >= tglY && ey <= tglY + tglH) {
-                                    m.enabled = !m.enabled;
-                                    spawnToast(m.name + (m.enabled ? " ON" : " OFF"));
-                                    return;
-                                }
-                            }
-                        }
-                        // 点击卡片主体：切换开关
-                        if (m.showToggle) {
-                            m.enabled = !m.enabled;
-                            spawnToast(m.name + (m.enabled ? " ON" : " OFF"));
-                        } else if (m.hasSlider) {
-                            m.expanded = !m.expanded;
-                        }
+                        // 点击图标区：仅切换开关（简化版，真实南方打开配置页）
+                        // 避免重复触发：只处理 CARD，不处理 TOGGLE（TOGGLE 在上面已处理）
+                        // 由于 CARD 和 TOGGLE 区域重叠，TOGGLE 先匹配则已 return
+                        // 这里只处理纯图标区点击
+                        // 不做任何操作（或可以打开配置页，但当前不实现）
                         return;
                     }
                 }
@@ -2273,11 +2241,12 @@ private void drawFloatingBall() {
                 break;
 
             case MotionEvent.ACTION_MOVE:
-                if (draggingCardSlider && sliderDragModule != null && cardSliderRect != null) {
-                    float v = (ex - cardSliderRect[0]) / cardSliderRect[2];
-                    sliderDragModule.sliderValue = Math.max(0f, Math.min(1f, v));
-                    return;
-                }
+                // 卡片内联滑块已移除（双区卡片设计）
+                // if (draggingCardSlider && sliderDragModule != null && cardSliderRect != null) {
+                //     float v = (ex - cardSliderRect[0]) / cardSliderRect[2];
+                //     sliderDragModule.sliderValue = Math.max(0f, Math.min(1f, v));
+                //     return;
+                // }
                 if (false) {
                     // draggingSV/Hue removed
                 } else if (dragStartY >= 0) {
