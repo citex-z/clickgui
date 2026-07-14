@@ -44,25 +44,33 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float[] TRACK_OFF = DARK_TRACK_OFF;
     private static final float[] WORLD_BG = {0.04f, 0.05f, 0.06f, 1f};
     private static final float[] KNOB_COLOR = {1f, 1f, 1f, 1f}; // 拖钮/滑块圆点固定用白色，不跟随主题切换（否则浅色主题下会变黑看不清）
-    // ---- 南方客户端风格的额外颜色常量 ----
-    private static final float[] HDR_BG = {0.118f, 0.118f, 0.157f, 0.95f};     // #1E1E28 标题栏/底栏
-    private static final float[] SOUTH_SIDEBAR_BG = {0.086f, 0.086f, 0.118f, 0.95f}; // #16161E 侧栏
-    private static final float[] SOUTH_CARD_BORDER = {0.165f, 0.165f, 0.220f, 1f}; // #2A2A38 卡片边框
-    private static final float[] SOUTH_CARD_BORDER_SEL = {0.231f, 0.510f, 0.965f, 1f}; // #3B82F6 选中边框
-    private static final float[] SOUTH_SEARCH_BG = {0.137f, 0.137f, 0.188f, 1f}; // #232330 搜索框
-    private static final float[] SOUTH_TRACK_OFF = {0.200f, 0.200f, 0.250f, 1f}; // #333340 关闭轨道
-    private static final float[] SOUTH_TAB_OFF = {0.533f, 0.533f, 0.627f, 1f};  // #8888A0 未选标签
-    private static final float[] SOUTH_SECTION_LBL = {0.333f, 0.333f, 0.376f, 1f}; // #555560 分组标题
-    private static final float[] SOUTH_SLIDER_TRACK = {0.165f, 0.165f, 0.220f, 1f}; // #2A2A38 滑块轨道
+    // ---- 南方客户端真实颜色 (from source: Colors.java + SouthsideDarkStyle.java) ----
+    private static final float[] HDR_BG = {0.094f, 0.086f, 0.090f, 1f};           // #181818 标题栏 (SouthsideDarkStyle topBar)
+    private static final float[] SOUTH_SIDEBAR_BG = {0.082f, 0.082f, 0.090f, 0.945f}; // #151617 95% (Colors.GRAY_800_95)
+    private static final float[] SOUTH_PANEL_BG = {0.082f, 0.082f, 0.090f, 1f};    // #151617 (Colors.GRAY_800)
+    private static final float[] SOUTH_CARD_BORDER = {0.133f, 0.137f, 0.145f, 1f}; // #222326 (Colors.GRAY_700)
+    private static final float[] SOUTH_CARD_BORDER_SEL = {0.078f, 0.322f, 0.800f, 1f}; // #1452CC (Colors.PRIMARY_600)
+    private static final float[] SOUTH_SEARCH_BG = {0.133f, 0.137f, 0.145f, 1f};   // #222326 search bg
+    private static final float[] SOUTH_TRACK_OFF = {0.180f, 0.180f, 0.180f, 1f};  // #2E2E2E (SouthsideDarkStyle hover)
+    private static final float[] SOUTH_TAB_OFF = {0.286f, 0.310f, 0.361f, 1f};     // #494F5C (Colors.GRAY_300)
+    private static final float[] SOUTH_SECTION_LBL = {0.286f, 0.310f, 0.361f, 1f}; // #494F5C (Colors.GRAY_300)
+    private static final float[] SOUTH_SLIDER_TRACK = {0.133f, 0.137f, 0.145f, 1f}; // #222326
+    private static final float[] SOUTH_MODULE_BG = {0.141f, 0.141f, 0.141f, 1f};  // #242424 (SouthsideDarkStyle moduleBg)
+    private static final float[] SOUTH_CARD_BG = {0.094f, 0.094f, 0.094f, 1f};     // #181818 card bg
+    private static final float[] SOUTH_TOGGLE_ON = {0.078f, 0.322f, 0.800f, 1f};  // #1452CC (PRIMARY_600)
+    private static final float[] SOUTH_TOGGLE_OFF = {0.180f, 0.180f, 0.180f, 1f};  // #2E2E2E
+    private static final float[] SOUTH_TEXT_WHITE = {1f, 1f, 1f, 0.8f};             // WHITE_80
+    private static final float[] SOUTH_TEXT_DIM2 = {1f, 1f, 1f, 0.6f};             // WHITE_60
+    private static final float[] SOUTH_TEXT_DIM3 = {1f, 1f, 1f, 0.5f};             // WHITE_50
     private ModuleItem darkThemeToggle; // 指向 Setting 分类里的 "Dark Theme" 开关，驱动主题切换
 
     // ---- 主题色预设（多节点流动渐变）----
-    // 默认强调色：南方客户端风格蓝色 #3B82F6
-    private float[] ACCENT_1 = {0.231f, 0.510f, 0.965f, 1f}; // #3B82F6
-    private float[] ACCENT_2 = {0.231f, 0.510f, 0.965f, 1f}; // 同色，主题切换时由 applyThemeColors 更新
+    // 真实南方客户端强调色: #1452CC (Colors.PRIMARY_600)
+    private float[] ACCENT_1 = {0.078f, 0.322f, 0.800f, 1f}; // #1452CC
+    private float[] ACCENT_2 = {0.078f, 0.322f, 0.800f, 1f}; // 同色
     private int selectedThemeIndex = 0;          // 当前选中的主题索引
     private float[] themeThemeRects;              // 运行时主题按钮命中区域
-    private float customHue = 0.6f, customSat = 0.85f, customVal = 0.96f; // 默认蓝色 #3B82F6
+    private float customHue = 0.61f, customSat = 0.82f, customVal = 0.80f; // #1452CC
     private int selectedSwatchIndex = -1;
     private float hueBarX, hueBarW, hueBarY, hueBarH;
     private float svBoxX, svBoxY, svBoxW, svBoxH;
@@ -80,10 +88,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         "Blue", "Spaced", "Trans", "Rainbow", "Watermelon", "Sunset", "Poison", "Custom"
     };
     private static final float[][][] THEME_COLORS = {
-        // 0: Blue (南方客户端默认蓝色系)
+        // 0: Blue (真实南方客户端 #1452CC)
         new float[][]{
-            hexToColor("#3B82F6"), hexToColor("#4B6CFA"), hexToColor("#5A7DFF"), hexToColor("#6B8EFF"),
-            hexToColor("#3B82F6"), hexToColor("#2B72E6"), hexToColor("#1B62D6"), hexToColor("#0B52C6")
+            hexToColor("#1452CC"), hexToColor("#1A5FE0"), hexToColor("#2A6FEA"), hexToColor("#3A7FF4"),
+            hexToColor("#1452CC"), hexToColor("#1042B8"), hexToColor("#0C38A0"), hexToColor("#082E88")
         },
         // 1: Spaced（青蓝系渐变）
         new float[][]{
@@ -257,8 +265,11 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private final Anim contentScroll = new Anim(0f, 16f); // 模块列表滚动
 
     // 布局参数
-    private float panelX, panelY, panelW = 620, panelH = 400, sidebarW = 150;
-    private float radius = 18f;
+    private float panelX, panelY;
+    private float panelW = 960f;  // 面板基准宽度 (真实南方: 1280, 我们缩小适配移动端)
+    private float panelH = 600f;  // 面板基准高度 (真实南方: 800, 我们缩小适配移动端)
+    private float sidebarW = 200f; // 侧栏宽度 (真实南方: 244px, 适配移动端)
+    private float radius = 20f; // 面板圆角 (真实南方: 20px)
     private float uiScale = 1f; // 整体控件/字号缩放系数，基准是原始 620x400 设计尺寸
 
     // 内容列表的裁剪区域（屏幕坐标，每帧在 drawSidebarAndHeader 里重新计算）
