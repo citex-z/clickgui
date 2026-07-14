@@ -310,6 +310,12 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private boolean searchActive = false;
     private float[] searchBoxRect = null;
     private float[] closeBtnRect = null;
+    private float[] footerKeybindRect = null;
+    private float[] footerCloseRect = null;
+    // ---- 卡片网格触摸状态 ----
+    private boolean draggingCardSlider = false;
+    private ModuleItem sliderDragModule = null;
+    private float[] cardSliderRect = null;
     private final Context context;
     public UIRenderer(Context ctx) {
         this.context = ctx;
@@ -895,12 +901,12 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         updateToasts(dt);
         drawToasts();
 
-        // 1.3) 整行长按计时：站在原地不松手也能触发，不依赖新的触摸事件
-        if (longPressCandidate != null && !longPressFired
-                && (System.nanoTime() - longPressStartNs) > LONG_PRESS_NS) {
-            toggleConfigPanelFor(longPressCandidate);
-            longPressFired = true;
-        }
+        // 长按展开已由卡片箭头点击替代，不再需要
+        // if (longPressCandidate != null && !longPressFired
+        //         && (System.nanoTime() - longPressStartNs) > LONG_PRESS_NS) {
+        //     toggleConfigPanelFor(longPressCandidate);
+        //     longPressFired = true;
+        // }
 
         if (panelAlpha > 0.003f) {
             // 1.5) 面板外边缘阴影：真正做高斯模糊出来的柔光，而不是分层矩形硬边；带总开关
@@ -935,6 +941,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             drawSidebarAndHeader(drawX, drawY, drawW, drawH, panelAlpha);
             quad.flush(screenW, screenH);
             drawHeaderBar(drawX, drawY, drawW, drawH, panelAlpha);
+            quad.flush(screenW, screenH);
+            drawFooterBar(drawX, drawY, drawW, drawH, panelAlpha);
             quad.flush(screenW, screenH);
 
             // 5) 模块卡片列表：开启 scissor 裁剪，滑动时超出面板范围的部分不会再画出来
@@ -1423,6 +1431,33 @@ private void drawFloatingBall() {
         float closeY = y + (hdrH - closeSize) / 2f;
         closeBtnRect = new float[]{closeX, closeY, closeSize, closeSize};
     }
+
+    private void drawFooterBar(float x, float y, float w, float h, float alpha) {
+        float sbW = sidebarW * (w / panelW);
+        float footerH = 36f * uiScale * (h / panelH);
+        float footerY = y + h - footerH;
+        float footerW = w - sbW;
+
+        quad.addRect(x + sbW, footerY, footerW, footerH, 0f, withAlpha(HDR_BG, alpha));
+        quad.addRect(x + sbW, footerY + footerH - radius, footerW, radius, 0f, withAlpha(HDR_BG, alpha));
+
+        // Close 按钮（蓝色填充）
+        float btnW = 60f * uiScale * (w / panelW);
+        float btnH = 28f * uiScale * (h / panelH);
+        float btnX = x + w - btnW - 12f * uiScale * (w / panelW);
+        float btnY = footerY + (footerH - btnH) / 2f;
+        quad.addRect(btnX, btnY, btnW, btnH, 6f * uiScale, withAlpha(ACCENT_1, alpha));
+        footerCloseRect = new float[]{btnX, btnY, btnW, btnH};
+
+        // KeyBind 占位区域
+        float kbW = 160f * uiScale * (w / panelW);
+        float kbH = 28f * uiScale * (h / panelH);
+        float kbX = x + sbW + 12f * uiScale * (w / panelW);
+        float kbY = footerY + (footerH - kbH) / 2f;
+        quad.addRect(kbX, kbY, kbW, kbH, 6f * uiScale, withAlpha(CARD_BG, alpha));
+        quad.addRect(kbX, kbY, kbW, kbH, 6f * uiScale, withAlpha(SOUTH_CARD_BORDER, alpha * 0.5f));
+        footerKeybindRect = new float[]{kbX, kbY, kbW, kbH};
+    }
     /** 主题色预设选择器的布局计算，绘制/触摸共用 */
     private static class AccentLayout {
         float labelY, btnStartY, btnH, btnGap, totalH;
@@ -1755,6 +1790,22 @@ private void drawFloatingBall() {
         text.draw(cat.modules.size() + " modules \u00B7 " + enabledCount + " enabled",
                 contentX, y + hdrH + 28f * uiScale * (h / panelH),
                 11f * uiScale, withAlpha(TEXT_DIM, alpha), screenW, screenH);
+
+        // ---- 底栏文字 ----
+        float footerH = 36f * uiScale * (h / panelH);
+        if (footerKeybindRect != null) {
+            text.draw("Click GUI KeyBind", footerKeybindRect[0] + 10f * uiScale,
+                    footerKeybindRect[1] + 10f * uiScale, 11f * uiScale,
+                    withAlpha(TEXT_DIM, alpha), screenW, screenH);
+            text.draw("RSHIFT", footerKeybindRect[0] + footerKeybindRect[2] - 50f * uiScale,
+                    footerKeybindRect[1] + 10f * uiScale, 11f * uiScale,
+                    withAlpha(TEXT_MAIN, alpha), screenW, screenH);
+        }
+        if (footerCloseRect != null) {
+            text.draw("Close", footerCloseRect[0] + 18f * uiScale,
+                    footerCloseRect[1] + 10f * uiScale, 11f * uiScale,
+                    withAlpha(KNOB_COLOR, alpha), screenW, screenH);
+        }
     }
 
     /** 卡片名称/描述文字单独拆出来，方便配合 scissor 裁剪，滑动溢出时不会画到面板外 */
@@ -2148,6 +2199,27 @@ private void drawFloatingBall() {
             case MotionEvent.ACTION_DOWN:
                 // 记录按下坐标用于UP时判断点击vs滑动
                 touchDownX = ex; touchDownY = ey; touchMoved = false;
+                // 0) 标题栏：搜索框 + 关闭按钮
+                if (searchBoxRect != null && inside(ex, ey, searchBoxRect)) {
+                    searchActive = true;
+                    return;
+                }
+                if (closeBtnRect != null && inside(ex, ey, closeBtnRect)) {
+                    guiOpen = false;
+                    overlayOpenness.setTarget(0f);
+                    openness.setTarget(0f);
+                    return;
+                }
+                if (searchActive && (searchBoxRect == null || !inside(ex, ey, searchBoxRect))) {
+                    searchActive = false;
+                }
+                // 底栏 Close 按钮
+                if (footerCloseRect != null && inside(ex, ey, footerCloseRect)) {
+                    guiOpen = false;
+                    overlayOpenness.setTarget(0f);
+                    openness.setTarget(0f);
+                    return;
+                }
                 // 1) 取色器交互：色相条拖拽
                 if (hueBarW > 0 && ex >= hueBarX && ex <= hueBarX + hueBarW
                         && ey >= hueBarY - 6 && ey <= hueBarY + hueBarH + 6) {
@@ -2191,27 +2263,72 @@ private void drawFloatingBall() {
                         }
                     }
                 }
-                // 2) 开关点击（ACTION_DOWN中点击切换，用索引遍历避免与渲染线程的ConcurrentModificationException）
-                for (int idx6 = 0; idx6 < moduleHitRects.size(); idx6++) {
-                    Object[] hit = moduleHitRects.get(idx6);
+                // 2) 卡片交互：点击箭头展开/收起，点击卡片切换开关，展开区内控件交互
+                for (int idx = 0; idx < moduleHitRects.size(); idx++) {
+                    Object[] hit = moduleHitRects.get(idx);
                     float[] r = (float[]) hit[0];
-                    if (inside(ex, ey, r) && "TOGGLE".equals(hit[1])) {
-                        ModuleItem m = (ModuleItem) hit[2];
-                        m.enabled = !m.enabled;
-                        spawnToast(m.name + (m.enabled ? " ON" : " OFF"));
+                    String type = (String) hit[1];
+                    ModuleItem m = (ModuleItem) hit[2];
+
+                    if (!inside(ex, ey, r)) continue;
+
+                    if ("ARROW".equals(type)) {
+                        m.expanded = !m.expanded;
                         return;
                     }
-                }
-                // 3) 整行长按：记录候选模块和按下时间，真正的触发在 onDrawFrame 里按经过时长判断
-                // （长按不需要等待新的触摸事件，站在原地不动也能计时触发）
-                for (int idxRow = 0; idxRow < moduleHitRects.size(); idxRow++) {
-                    Object[] hit = moduleHitRects.get(idxRow);
-                    float[] r = (float[]) hit[0];
-                    if (inside(ex, ey, r) && "ROW".equals(hit[1])) {
-                        longPressCandidate = (ModuleItem) hit[2];
-                        longPressStartNs = System.nanoTime();
-                        longPressFired = false;
-                        break;
+                    if ("CARD".equals(type)) {
+                        // 检查展开面板内的控件
+                        if (m.expanded && m.activeTab == 0) {
+                            float hdrH = 44f * uiScale * (panelH / panelH);
+                            float expandTop = r[1] + 70f * uiScale; // cardH
+                            // 标签页点击
+                            float tabY = expandTop + 8f * uiScale;
+                            float tabW = 56f * uiScale;
+                            float tabGap = 4f * uiScale;
+                            for (int ti = 0; ti < 2; ti++) {
+                                float tabX = r[0] + 12f * uiScale + ti * (tabW + tabGap);
+                                if (ex >= tabX && ex <= tabX + tabW && ey >= tabY && ey <= tabY + 20f * uiScale) {
+                                    m.activeTab = ti;
+                                    return;
+                                }
+                            }
+                            // 滑块拖拽
+                            if (m.hasSlider) {
+                                float sliderTrackW = 100f * uiScale;
+                                float sliderX = r[0] + r[2] - 12f * uiScale - sliderTrackW - 30f * uiScale;
+                                float sliderY = tabY + 20f * uiScale + 12f * uiScale + 2f * uiScale;
+                                if (ex >= sliderX - 8f && ex <= sliderX + sliderTrackW + 8f
+                                        && ey >= sliderY - 8f && ey <= sliderY + 8f) {
+                                    draggingCardSlider = true;
+                                    sliderDragModule = m;
+                                    cardSliderRect = new float[]{sliderX, sliderY, sliderTrackW, 3f * uiScale};
+                                    float v = (ex - sliderX) / sliderTrackW;
+                                    m.sliderValue = Math.max(0f, Math.min(1f, v));
+                                    return;
+                                }
+                            }
+                            // 开关点击
+                            if (m.showToggle) {
+                                float tglW = 28f * uiScale;
+                                float tglH = 14f * uiScale;
+                                float tglX = r[0] + r[2] - 12f * uiScale - tglW;
+                                float setY = tabY + 20f * uiScale + 12f * uiScale + (m.hasSlider ? 24f * uiScale : 0f);
+                                float tglY = setY + 2f * uiScale;
+                                if (ex >= tglX && ex <= tglX + tglW && ey >= tglY && ey <= tglY + tglH) {
+                                    m.enabled = !m.enabled;
+                                    spawnToast(m.name + (m.enabled ? " ON" : " OFF"));
+                                    return;
+                                }
+                            }
+                        }
+                        // 点击卡片主体：切换开关
+                        if (m.showToggle) {
+                            m.enabled = !m.enabled;
+                            spawnToast(m.name + (m.enabled ? " ON" : " OFF"));
+                        } else if (m.hasSlider) {
+                            m.expanded = !m.expanded;
+                        }
+                        return;
                     }
                 }
                 // 4) 分类点击
@@ -2228,6 +2345,11 @@ private void drawFloatingBall() {
                 break;
 
             case MotionEvent.ACTION_MOVE:
+                if (draggingCardSlider && sliderDragModule != null && cardSliderRect != null) {
+                    float v = (ex - cardSliderRect[0]) / cardSliderRect[2];
+                    sliderDragModule.sliderValue = Math.max(0f, Math.min(1f, v));
+                    return;
+                }
                 if (false) {
                     // draggingSV/Hue removed
                 } else if (dragStartY >= 0) {
@@ -2261,6 +2383,9 @@ private void drawFloatingBall() {
                 touchMoved = false;
                 longPressCandidate = null;
                 longPressFired = false;
+                draggingCardSlider = false;
+                sliderDragModule = null;
+                cardSliderRect = null;
                 break;
             case MotionEvent.ACTION_CANCEL:
                 draggingHue = false;
@@ -2272,6 +2397,9 @@ private void drawFloatingBall() {
                 overlayJustClosed = false;
                 longPressCandidate = null;
                 longPressFired = false;
+                draggingCardSlider = false;
+                sliderDragModule = null;
+                cardSliderRect = null;
                 break;
         }
     }
