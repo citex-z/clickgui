@@ -1547,8 +1547,70 @@ private void drawFloatingBall() {
         }
     }
     private void drawExpandedCardContent(float x, float y, float w, float h, float alpha, ModuleItem m, float panelHeight) {
-        quad.addRect(x + 12f * uiScale, y, w - 24f * uiScale, 1f * uiScale, 0f,
-                withAlpha(SOUTH_CARD_BORDER, alpha));
+        float pad = 12f * uiScale;
+        float innerX = x + pad;
+        float innerW = w - pad * 2;
+
+        // 分隔线
+        quad.addRect(innerX, y, innerW, 1f * uiScale, 0f, withAlpha(SOUTH_CARD_BORDER, alpha));
+
+        // ---- 标签页栏 ----
+        float tabH = 20f * uiScale;
+        float tabY = y + 8f * uiScale;
+        float tabGap = 4f * uiScale;
+        float tabW = 56f * uiScale;
+        String[] tabs = {"General", "Behavior"};
+        for (int ti = 0; ti < tabs.length; ti++) {
+            float tabX = innerX + ti * (tabW + tabGap);
+            if (ti == m.activeTab) {
+                quad.addRect(tabX, tabY, tabW, tabH, tabH / 2f, withAlpha(ACCENT_1, alpha));
+            }
+        }
+
+        // ---- 设置项（仅 General 标签页） ----
+        if (m.activeTab == 0) {
+            float setY = tabY + tabH + 12f * uiScale;
+
+            // 滑块（如果模块有滑块）
+            if (m.hasSlider) {
+                float sliderTrackW = 100f * uiScale;
+                float sliderTrackH = 3f * uiScale;
+                float sliderX = innerX + innerW - sliderTrackW - 30f * uiScale;
+                float sliderY = setY + 2f * uiScale;
+                // 轨道
+                quad.addRect(sliderX, sliderY, sliderTrackW, sliderTrackH, sliderTrackH / 2f,
+                        withAlpha(SOUTH_SLIDER_TRACK, alpha));
+                // 填充
+                quad.addRect(sliderX, sliderY, sliderTrackW * m.sliderValue, sliderTrackH,
+                        sliderTrackH / 2f, withAlpha(ACCENT_1, alpha));
+                // 拖钮
+                float knobR = 4f * uiScale;
+                float knobX = sliderX + sliderTrackW * m.sliderValue - knobR;
+                quad.addRect(knobX, sliderY - knobR + sliderTrackH / 2f, knobR * 2, knobR * 2,
+                        knobR, withAlpha(KNOB_COLOR, alpha));
+                setY += 24f * uiScale;
+            }
+
+            // 胶囊开关（如果模块有开关）
+            if (m.showToggle) {
+                m.toggleAnim.setTarget(m.enabled ? 1f : 0f);
+                m.toggleAnim.update(0.016f);
+                float t = m.toggleAnim.get();
+
+                float tglW = 28f * uiScale;
+                float tglH = 14f * uiScale;
+                float tglX = innerX + innerW - tglW - 12f * uiScale;
+                float tglY = setY + 2f * uiScale;
+                // 轨道
+                float[] trackCol = mixColor(SOUTH_TRACK_OFF, ACCENT_1, t);
+                quad.addRect(tglX, tglY, tglW, tglH, tglH / 2f, withAlpha(trackCol, alpha));
+                // 滑钮
+                float knobD = tglH - 4f * uiScale;
+                float knobX = tglX + 2f * uiScale + (tglW - knobD - 4f * uiScale) * t;
+                quad.addRect(knobX, tglY + 2f * uiScale, knobD, knobD, knobD / 2f,
+                        withAlpha(KNOB_COLOR, alpha));
+            }
+        }
     }
     private void drawSettingAccentPicker(float contentX, float cy, float contentW, float alpha, float h) {
         float innerX = contentX + 16f * uiScale;
