@@ -308,6 +308,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     // ---- 搜索框状态 ----
     private String searchQuery = "";
     private boolean searchActive = false;
+    private float[] searchBoxRect = null;
+    private float[] closeBtnRect = null;
     private final Context context;
     public UIRenderer(Context ctx) {
         this.context = ctx;
@@ -932,6 +934,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             // 4) 侧栏/分类/调色板等不裁剪的前景元素
             drawSidebarAndHeader(drawX, drawY, drawW, drawH, panelAlpha);
             quad.flush(screenW, screenH);
+            drawHeaderBar(drawX, drawY, drawW, drawH, panelAlpha);
+            quad.flush(screenW, screenH);
 
             // 5) 模块卡片列表：开启 scissor 裁剪，滑动时超出面板范围的部分不会再画出来
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
@@ -1342,47 +1346,82 @@ private void drawFloatingBall() {
 
     private void drawSidebarAndHeader(float x, float y, float w, float h, float alpha) {
         float sbW = sidebarW * (w / panelW);
-        float[] sbg = withAlpha(SIDEBAR_BG, alpha);
+        float[] sbg = withAlpha(SOUTH_SIDEBAR_BG, alpha);
         quad.addRect(x, y, sbW, h, radius, sbg);
-        // 盖住侧栏右侧圆角，让它和主面板拼接自然（简单遮罩：再画一个直角矩形补右边）
         quad.addRect(x + sbW - radius, y, radius, h, 0f, sbg);
 
         categoryHitRects.clear();
 
-        // ---- 侧栏分类 ----
-        float rowH = 46f * uiScale * (h / panelH);
-        float pad = 10f * uiScale * (h / panelH);
-        float catY = y + pad;
+        // ---- 分组侧栏：MAIN / FEATURES / SYSTEM ----
+        float pad = 8f * uiScale * (h / panelH);
+        float rowH = 28f * uiScale * (h / panelH);
+        float sectionGap = 16f * uiScale * (h / panelH);
+        float curY = y + pad + 6f * uiScale * (h / panelH);
+
+        String prevSection = null;
         for (int i = 0; i < categories.size(); i++) {
-            float ry = catY + i * rowH;
+            Category c = categories.get(i);
+            if (prevSection == null || !c.section.equals(prevSection)) {
+                curY += (prevSection != null ? sectionGap : 0f) + 18f * uiScale * (h / panelH);
+                prevSection = c.section;
+            }
+            float ry = curY;
             categoryHitRects.add(new float[]{x, ry, sbW, rowH});
             if (i == currentCategoryIndex) {
                 highlightY.setTarget(ry - y);
             }
+            curY += rowH + 4f * uiScale * (h / panelH);
         }
 
-        // 流动的高亮条（跟随 currentCategoryIndex 平滑滑动），渐变方向改成左上到右下
-        float[][] hlDiag = diagGradient(ACCENT_1, ACCENT_2, alpha);
-        quad.addRectGradient(x + 6, y + highlightY.get(), sbW - 12, rowH - 6, 12,
-                hlDiag[0], hlDiag[1], hlDiag[2], hlDiag[3]);
+        // 流动高亮条：蓝色半透明背景 + 左侧蓝色竖条
+        float[] hlBg = withAlpha(ACCENT_1, alpha * 0.15f);
+        quad.addRect(x, y + highlightY.get(), sbW, rowH, 0f, hlBg);
+        quad.addRect(x, y + highlightY.get(), 3f * uiScale, rowH, 0f, withAlpha(ACCENT_1, alpha));
 
-        // ---- 内容区标题，以及计算列表裁剪区域 ----
+        // ---- 内容区裁剪区域 ----
         float contentX = x + sbW + pad;
         float contentW = w - sbW - pad * 2;
         float titleH = 34f * uiScale * (h / panelH);
+        float headerH = 44f * uiScale * (h / panelH);
 
-        // 列表裁剪区域：标题行下方 到 面板底部内边距上方
         clipX = contentX - 2f;
-        clipY = y + pad + titleH;
+        clipY = y + headerH + titleH;
         clipW = contentW + 4f;
-        clipH = (y + h - pad) - clipY;
+        float footerH = 36f * uiScale * (h / panelH);
+        clipH = (y + h - pad - footerH) - clipY;
 
-        // 滚动范围钳制，避免无限滑出（配合 scissor 双保险）
+        // 滚动范围
         Category cat = categories.get(currentCategoryIndex);
-        float cardH = 54f * uiScale * (h / panelH);
-        float cardGap = 10f * uiScale * (h / panelH);
-        float totalContentH = cat.modules.size() * (cardH + cardGap) - cardGap;
+        float cardH = 70f * uiScale * (h / panelH);
+        float cardGap = 12f * uiScale * (h / panelH);
+        float cols = 2f;
+        int rows = (int) Math.ceil(cat.modules.size() / cols);
+        float totalContentH = rows * (cardH + cardGap) - cardGap;
+        float settingExtraH = cat.name.equals("Setting") ? accentCardH(h) + cardGap : 0f;
+        maxScroll = Math.max(0f, totalContentH + settingExtraH + pad + titleH - h + headerH + footerH);
+    }
 
+    private void drawHeaderBar(float x, float y, float w, float h, float alpha) {
+        float sbW = sidebarW * (w / panelW);
+        float hdrH = 44f * uiScale * (h / panelH);
+        float hdrX = x + sbW;
+        float hdrW = w - sbW;
+
+        quad.addRect(hdrX, y, hdrW, hdrH, 0f, withAlpha(HDR_BG, alpha));
+        quad.addRect(hdrX, y, hdrW, radius, 0f, withAlpha(HDR_BG, alpha));
+
+        float searchW = 120f * uiScale * (w / panelW);
+        float searchH = 24f * uiScale * (h / panelH);
+        float searchX = x + w - searchW - 36f * uiScale * (w / panelW);
+        float searchY = y + (hdrH - searchH) / 2f;
+        quad.addRect(searchX, searchY, searchW, searchH, searchH / 2f, withAlpha(SOUTH_SEARCH_BG, alpha));
+        quad.addRect(searchX, searchY, searchW, searchH, searchH / 2f, withAlpha(SOUTH_CARD_BORDER, alpha * 0.5f));
+        searchBoxRect = new float[]{searchX, searchY, searchW, searchH};
+
+        float closeSize = 20f * uiScale * (h / panelH);
+        float closeX = x + w - closeSize - 12f * uiScale * (w / panelW);
+        float closeY = y + (hdrH - closeSize) / 2f;
+        closeBtnRect = new float[]{closeX, closeY, closeSize, closeSize};
     }
     /** 主题色预设选择器的布局计算，绘制/触摸共用 */
     private static class AccentLayout {
@@ -1585,25 +1624,61 @@ private void drawFloatingBall() {
         }
     }
     private void drawTextLayer(float x, float y, float w, float h, float alpha) {
-        float rowH = 46f * uiScale * (h / panelH);
-        float pad = 10f * uiScale * (h / panelH);
-        float catY = y + pad;
+        float pad = 8f * uiScale * (h / panelH);
+        float sbW = sidebarW * (w / panelW);
+        float hdrH = 44f * uiScale * (h / panelH);
 
-        for (int i = 0; i < categories.size(); i++) {
-            Category c = categories.get(i);
-            float ry = catY + i * rowH;
-            boolean sel = i == currentCategoryIndex;
-            // 选中项坐在彩色高亮条上，无论深浅主题都用白色文字/图标才有足够对比度；
-            // 之前浅色主题下用 TEXT_MAIN（深色）会导致选中项文字几乎看不清。
-            float[] col = withAlpha(sel ? KNOB_COLOR : TEXT_DIM, alpha);
-            text.draw(c.icon, x + 16f * uiScale, ry + rowH / 2f - 10f * uiScale, 20f * uiScale, col, screenW, screenH);
-            text.draw(c.name, x + 44f * uiScale, ry + rowH / 2f - 8f * uiScale, 15f * uiScale, col, screenW, screenH);
+        // ---- 标题栏文字 ----
+        text.draw("SOAR b1", x + sbW + 14f * uiScale, y + hdrH / 2f - 6f * uiScale,
+                13f * uiScale, withAlpha(TEXT_MAIN, alpha), screenW, screenH);
+        Category curCat = categories.get(currentCategoryIndex);
+        text.draw("\u2190 \u2192 " + curCat.name, x + sbW + 80f * uiScale, y + hdrH / 2f - 5f * uiScale,
+                11f * uiScale, withAlpha(TEXT_DIM, alpha), screenW, screenH);
+        if (searchBoxRect != null) {
+            String searchText = searchActive ? searchQuery : "\u2315 search...";
+            text.draw(searchText, searchBoxRect[0] + 12f * uiScale,
+                    searchBoxRect[1] + searchBoxRect[3] / 2f - 4f * uiScale,
+                    10f * uiScale, withAlpha(TEXT_DIM, alpha), screenW, screenH);
+        }
+        if (closeBtnRect != null) {
+            text.draw("\u00D7", closeBtnRect[0] + 4f * uiScale,
+                    closeBtnRect[1] + 2f * uiScale,
+                    14f * uiScale, withAlpha(TEXT_DIM, alpha), screenW, screenH);
         }
 
+        // ---- 分组侧栏文字 ----
+        float rowH = 28f * uiScale * (h / panelH);
+        float sectionLblSize = 9f * uiScale;
+        float sectionGap = 16f * uiScale * (h / panelH);
+        float curY = y + pad + 6f * uiScale * (h / panelH);
+        String prevSection = null;
+        for (int i = 0; i < categories.size(); i++) {
+            Category c = categories.get(i);
+            if (prevSection == null || !c.section.equals(prevSection)) {
+                curY += (prevSection != null ? sectionGap : 0f) + 18f * uiScale * (h / panelH);
+                text.draw(c.section, x + 14f * uiScale, curY - 8f * uiScale * (h / panelH),
+                        sectionLblSize, withAlpha(SOUTH_SECTION_LBL, alpha), screenW, screenH);
+                prevSection = c.section;
+            }
+            float ry = curY;
+            boolean sel = i == currentCategoryIndex;
+            float[] col = withAlpha(sel ? KNOB_COLOR : TEXT_DIM, alpha);
+            text.draw(c.icon, x + 14f * uiScale, ry + rowH / 2f - 6f * uiScale, 12f * uiScale, col, screenW, screenH);
+            text.draw(c.name, x + 32f * uiScale, ry + rowH / 2f - 5f * uiScale, 12f * uiScale, col, screenW, screenH);
+            curY += rowH + 4f * uiScale * (h / panelH);
+        }
+
+        // 内容区标题
         Category cat = categories.get(currentCategoryIndex);
-        float sbW = sidebarW * (w / panelW);
         float contentX = x + sbW + pad;
-        text.draw(cat.name, contentX, y + pad, 18f * uiScale, withAlpha(TEXT_MAIN, alpha), screenW, screenH);
+        float titleH = 34f * uiScale * (h / panelH);
+        text.draw(cat.name + " Modules", contentX, y + hdrH + 10f * uiScale * (h / panelH),
+                14f * uiScale, withAlpha(TEXT_MAIN, alpha), screenW, screenH);
+        int enabledCount = 0;
+        for (ModuleItem mod : cat.modules) if (mod.enabled) enabledCount++;
+        text.draw(cat.modules.size() + " modules \u00B7 " + enabledCount + " enabled",
+                contentX, y + hdrH + 28f * uiScale * (h / panelH),
+                11f * uiScale, withAlpha(TEXT_DIM, alpha), screenW, screenH);
     }
 
     /** 卡片名称/描述文字单独拆出来，方便配合 scissor 裁剪，滑动溢出时不会画到面板外 */
