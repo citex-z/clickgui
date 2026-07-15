@@ -445,14 +445,14 @@ public class DynamicIslandRenderer {
                         new float[]{1f, 1f, 1f, contentAlpha}, sw, sh);
 
                 // ---- 描述文字（原版 38, 24, regular 18）----
-                // 视频中 "Enabled" 是绿色, "Disabled" 是红色
+                // 原版用 MC 颜色代码: §2=DarkGreen(0,170,0) §4=DarkRed(170,0,0)
                 if (tc.type == ContentType.MODULE) {
-                    // 分段绘制：模块名(白色) + "has been "(白色) + Enabled/Disabled(彩色)
                     String prefix = tc.moduleName + " has been ";
                     String status = tc.enabled ? "Enabled" : "Disabled";
+                    // MC §2 = rgb(0,170,0), §4 = rgb(170,0,0)
                     float[] statusColor = tc.enabled
-                            ? new float[]{0.37f, 0.56f, 0.31f, contentAlpha}  // 绿色
-                            : new float[]{0.56f, 0.31f, 0.31f, contentAlpha};  // 红色
+                            ? new float[]{0f, 170f / 255f, 0f, contentAlpha}      // §2 Dark Green
+                            : new float[]{170f / 255f, 0f, 0f, contentAlpha};     // §4 Dark Red
                     float prefixW = text.measure(prefix, 12f * s);
                     text.draw(prefix, baseX + 38f * s, baseY + 24f * s, 12f * s,
                             new float[]{0.85f, 0.85f, 0.85f, contentAlpha}, sw, sh);
