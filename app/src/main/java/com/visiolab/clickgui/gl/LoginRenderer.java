@@ -32,10 +32,16 @@ public class LoginRenderer {
 
     // ---- 配色 ----
     private static final float[] BEIGE = hexToColor("#ECEAE4");
+    private static final float[] BEIGE_LIGHT = hexToColor("#F4F2EC"); // 面板顶部高光
+    private static final float[] BEIGE_DARK = hexToColor("#E2DFD8");  // 面板底部阴影
     private static final float[] DARK_GRAY = hexToColor("#3A3A3A");
+    private static final float[] DARK_GRAY_LIGHT = hexToColor("#4A4A4A"); // 按钮顶部高光
+    private static final float[] DARK_GRAY_DARK = hexToColor("#2C2C2C");  // 按钮底部阴影
     private static final float[] TITLE_COLOR = hexToColor("#323132");
     private static final float[] BUTTON_TEXT = hexToColor("#ECEAE4");
     private static final float[] DOT_COLOR = hexToColor("#3A3A3A");
+    private static final float[] ACCENT = hexToColor("#5A6B8C");  // 聚焦输入框强调色（柔和蓝灰）
+    private static final float[] ACCENT_GLOW = hexToColor("#5A6B8C"); // 进度条/聚焦发光
 
     // ---- 动画时间线 (秒) ----
     private static final float T_LOADING_END = 2.008f;
@@ -167,7 +173,7 @@ public class LoginRenderer {
         text.draw(sub, cx + titleW / 2f + 10f, cy - titleSize * 0.5f, subSize,
                 new float[]{TITLE_COLOR[0], TITLE_COLOR[1], TITLE_COLOR[2], 0.8f}, sw, sh);
 
-        // 4. 进度条 — 标题下方（视觉中心），加粗
+        // 4. 进度条 — 标题下方（视觉中心），加粗 + 柔光
         float barW = Math.min(sw * 0.5f, 500f);
         float barH = 8f;
         float barX = cx - barW / 2f;
@@ -179,10 +185,27 @@ public class LoginRenderer {
         float fillProgress = clamp01(t / T_LOADING_END);
         float fillW = barW * fillProgress;
         if (fillW > barH) {
-            quad.addRect(barX, barY, fillW, barH, barH / 2f,
-                    new float[]{DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2], 1f});
+            // 填充下方的柔和发光（更宽、更模糊感）
+            quad.addRect(barX - 2f, barY - 3f, fillW + 4f, barH + 6f, (barH + 6f) / 2f,
+                    new float[]{ACCENT_GLOW[0], ACCENT_GLOW[1], ACCENT_GLOW[2], 0.18f});
+            // 主填充：顶部高光 -> 底部深色渐变，更有质感
+            quad.addRectGradient(barX, barY, fillW, barH, barH / 2f,
+                    DARK_GRAY_LIGHT, DARK_GRAY_LIGHT, DARK_GRAY_DARK, DARK_GRAY_DARK);
         }
         quad.flush(sw, sh);
+
+        // 4.1 状态文字 — 进度条上方，按进度切换阶段文案（注入/加载对话的状态提示）
+        float statusSize = titleSize * 0.22f;
+        String statusText;
+        if (fillProgress < 0.35f) statusText = "Initializing core...";
+        else if (fillProgress < 0.70f) statusText = "Loading assets...";
+        else if (fillProgress < 1f) statusText = "Preparing interface...";
+        else statusText = "Ready";
+        int pct = (int) Math.floor(fillProgress * 100f);
+        statusText = statusText + "  " + pct + "%";
+        float statusW = text.measure(statusText, statusSize);
+        text.draw(statusText, cx - statusW / 2f, barY - statusSize - 6f, statusSize,
+                new float[]{TITLE_COLOR[0], TITLE_COLOR[1], TITLE_COLOR[2], 0.55f}, sw, sh);
 
         // 5. "Loading" 文字 + 三个旋转圆点 — 进度条正下方
         float loadAlpha = t > T_LOADING_FADE ? clamp01(1f - (t - T_LOADING_FADE) / (T_LOADING_END - T_LOADING_FADE)) : 1f;
@@ -305,10 +328,28 @@ public class LoginRenderer {
         float morphBarY = lerp(barStartY, btnY, morphEased);
         float morphBarW = lerp(barStartW, btnW, morphEased);
         float morphBarH = lerp(barStartH, btnH, morphEased);
-        float morphBarR = lerp(barStartRadius, 0f, morphEased);
+        // 终态保持圆角（不再归零成直角矩形），变成圆角按钮卡片
+        float morphBarR = lerp(barStartRadius, btnH * 0.28f, morphEased);
+        float pressT = loginBtnPress.get();
+        float pressOffset = pressT * 2f;
 
-        quad.addRect(morphBarX, morphBarY, morphBarW, morphBarH, morphBarR,
-                new float[]{DARK_GRAY[0], DARK_GRAY[1], DARK_GRAY[2], 1f});
+        // 按钮下方柔和投影（morph 后期才显现，给按钮"浮起"的层次感）
+        if (morphEased > 0.3f) {
+            float shadowAlpha = (morphEased - 0.3f) / 0.7f * 0.22f;
+            float shadowY = morphBarY + morphBarH + 2f + pressOffset;
+            quad.addRect(morphBarX + 2f, shadowY, morphBarW, morphBarH * 0.5f, morphBarR * 0.5f,
+                    new float[]{DARK_GRAY_DARK[0], DARK_GRAY_DARK[1], DARK_GRAY_DARK[2], shadowAlpha});
+        }
+
+        // 按钮主体：顶部高光 -> 底部深色渐变，按下时整体下沉 2px
+        quad.addRectGradient(morphBarX, morphBarY + pressOffset, morphBarW, morphBarH, morphBarR,
+                DARK_GRAY_LIGHT, DARK_GRAY_LIGHT, DARK_GRAY_DARK, DARK_GRAY_DARK);
+        // 顶部细高光条（增加按钮卡片的质感）
+        if (morphBarH > 14f) {
+            quad.addRect(morphBarX + morphBarR, morphBarY + pressOffset + 1.5f,
+                    morphBarW - morphBarR * 2f, Math.max(1f, morphBarH * 0.12f), 0f,
+                    new float[]{1f, 1f, 1f, 0.12f * morphEased});
+        }
         quad.flush(sw, sh);
 
         // "login" 文字（在按钮中央）
@@ -319,8 +360,6 @@ public class LoginRenderer {
             float loginW = text.measure(loginStr, loginSize);
             float loginX = lerp(sw / 2f, morphBarX + morphBarW / 2f, morphEased) - loginW / 2f;
             float loginY = lerp(barStartY + barStartH + 12f, morphBarY + (morphBarH - loginSize) / 2f + 1f, morphEased);
-            float pressT = loginBtnPress.get();
-            float pressOffset = pressT * 2f;
             text.draw(loginStr, loginX, loginY + pressOffset, loginSize,
                     new float[]{BUTTON_TEXT[0], BUTTON_TEXT[1], BUTTON_TEXT[2], loginAlpha}, sw, sh);
 
@@ -466,6 +505,32 @@ public class LoginRenderer {
     /** 是否有输入框处于聚焦状态 */
     public boolean hasActiveField() {
         return activeField >= 0;
+    }
+
+    /** 当前聚焦的字段索引：0=用户名, 1=密码, -1=未聚焦（供 UIRenderer 判断字段切换） */
+    public int getActiveField() {
+        return activeField;
+    }
+
+    /** 读取当前聚焦输入框的文本（供隐藏 EditText 同步显示用） */
+    public String getActiveFieldText() {
+        if (activeField == 0) return username.toString();
+        if (activeField == 1) return password.toString();
+        return "";
+    }
+
+    /** 用整段文本覆盖当前聚焦输入框（隐藏 EditText 的 TextWatcher 回写用）。
+     *  比逐字符 append/delete 更稳健，能正确处理 IME 组词、粘贴、整段删除等情况。 */
+    public void setActiveFieldText(String text) {
+        if (animTime < T_TRANSITION_END) return;
+        String s = text == null ? "" : text;
+        if (activeField == 0) {
+            username.setLength(0);
+            username.append(s);
+        } else if (activeField == 1) {
+            password.setLength(0);
+            password.append(s);
+        }
     }
 
     // ================================================================

@@ -43,7 +43,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float[] TEXT_DIM = DARK_TEXT_DIM;
     private float[] TRACK_OFF = DARK_TRACK_OFF;
     private static final float[] WORLD_BG = {0.12f, 0.12f, 0.14f, 1f};
-    private static final float[] KNOB_COLOR = {0.15f, 0.15f, 0.15f, 1f}; // 深色拖钮（白底可见）
+    private static final float[] KNOB_COLOR = {1f, 1f, 1f, 1f}; // 白色拖钮/滑块圆点
     // ---- 南方客户端真实颜色 (from source: Colors.java + SouthsideDarkStyle.java) ----
     private static final float[] HDR_BG = {0.96f, 0.96f, 0.96f, 1f};               // #F5F5F5 标题栏（舒适白）
     private static final float[] SOUTH_SIDEBAR_BG = {0.92f, 0.92f, 0.92f, 0.95f};  // #EBEBEB 侧栏
@@ -283,6 +283,13 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private final LoginRenderer loginRenderer;
     private boolean loginActive = true; // 启动时先显示登录界面
 
+    // ---- 软键盘输入：GLSurfaceView 不便直接接入 InputMethodManager，
+    // 用一个隐藏的 1x1 EditText 承载输入，TextWatcher 再把文本回写到目标 ----
+    private android.widget.EditText hiddenInput;
+    private android.view.inputmethod.InputMethodManager imm;
+    private boolean suppressWatcher = false; // 程序内 setText() 时不触发 TextWatcher 回写
+    private int keyboardTarget = 0;          // 当前键盘输入写入哪里：0=无, 1=搜索框, 2=登录输入框
+
     private int screenW, screenH;
     private long lastFrameNs = 0;
 
@@ -345,6 +352,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float[] configToggleRect = null;   // 配置页内开关热区
     private float configSliderX, configSliderW, configSliderY, configSliderH;
     private boolean draggingConfigSlider = false;
+    private float sliderTargetValue = 0f;  // 滑块阻尼目标值
+    private float optSliderTargetValue = 0f; // 额外滑块阻尼目标值
     // 配置页额外配置项（下拉框/开关/滑块）热区：每个元素为 {float[]{x,y,w,h}, optionIndex, optionType}
     private final List<Object[]> configOptionRects = new java.util.concurrent.CopyOnWriteArrayList<>();
     // 下拉框已改为循环切换（不再展开列表）；保留字段兼容：每个元素为 {float[]{x,y,w,h}, optionIndex, choiceIndex}
@@ -403,6 +412,91 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     public UIRenderer(Context ctx) {
         this.context = ctx;
         this.loginRenderer = new LoginRenderer(ctx);
+    }
+
+    // ================================================================
+    //  软键盘输入支持（隐藏 EditText 承载输入）
+    // ================================================================
+
+    /** 延迟创建隐藏的 1x1 EditText，并挂到 Activity 内容视图根（GLSurfaceView 的父容器）。
+     *  GLSurfaceView 本身不便直接接入 InputMethodManager，靠这个 EditText 承载软键盘输入，
+     *  TextWatcher 再把输入文本回写到当前目标（搜索框 / 登录输入框）。 */
+    private void ensureHiddenInput() {
+        if (hiddenInput != null) return;
+        if (!(context instanceof android.app.Activity)) return; // 非 Activity 上下文无法挂载视图
+        hiddenInput = new android.widget.EditText(context);
+        hiddenInput.setVisibility(android.view.View.VISIBLE);
+        hiddenInput.setAlpha(0f);
+        hiddenInput.setBackgroundColor(0x00000000);
+        hiddenInput.setSingleLine(false);
+        hiddenInput.setLayoutParams(new android.widget.LinearLayout.LayoutParams(1, 1));
+        hiddenInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (keyboardTarget == 1) searchQuery = v.getText().toString();
+            return true;
+        });
+        // 实时回写：用户每输入/删除一个字符就同步到当前目标
+        hiddenInput.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            public void afterTextChanged(android.text.Editable s) {
+                if (suppressWatcher) return;
+                String str = s == null ? "" : s.toString();
+                if (keyboardTarget == 1) {
+                    searchQuery = str;
+                } else if (keyboardTarget == 2) {
+                    loginRenderer.setActiveFieldText(str);
+                }
+            }
+        });
+        // 挂到 Activity 的内容视图根容器（与 GLSurfaceView 同级，不遮挡画面）
+        android.view.View root = ((android.app.Activity) context).findViewById(android.R.id.content);
+        if (root instanceof android.view.ViewGroup) {
+            ((android.view.ViewGroup) root).addView(hiddenInput);
+        }
+        imm = (android.view.inputmethod.InputMethodManager)
+                context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+    }
+
+    /** 唤出软键盘并把输入接入到 hiddenInput。target 决定输入写入哪里：1=搜索框, 2=登录输入框。
+     *  每次唤出都会把 hiddenInput 的文本同步成目标当前内容，保证切换字段/二次聚焦时光标位置正确。 */
+    private void showKeyboard(int target) {
+        ensureHiddenInput();
+        if (hiddenInput == null || imm == null) return;
+        keyboardTarget = target;
+        // 同步当前目标已有文本到 hiddenInput（suppressWatcher 防止回写造成死循环）
+        suppressWatcher = true;
+        try {
+            String cur = "";
+            if (target == 1) cur = searchQuery == null ? "" : searchQuery;
+            else if (target == 2) cur = loginRenderer.getActiveFieldText();
+            hiddenInput.setText(cur);
+            int len = cur.length();
+            hiddenInput.setSelection(Math.max(0, Math.min(len, len)));
+        } catch (Throwable ignored) {
+        } finally {
+            suppressWatcher = false;
+        }
+        hiddenInput.requestFocus();
+        imm.showSoftInput(hiddenInput, 0);
+    }
+
+    /** 收起软键盘并清空 hiddenInput（切换目标/失焦时调用） */
+    private void hideKeyboard() {
+        if (imm == null || hiddenInput == null) {
+            keyboardTarget = 0;
+            return;
+        }
+        try {
+            imm.hideSoftInputFromWindow(hiddenInput.getWindowToken(), 0);
+        } catch (Throwable ignored) {
+        }
+        keyboardTarget = 0;
+        suppressWatcher = true;
+        try {
+            hiddenInput.setText("");
+        } finally {
+            suppressWatcher = false;
+        }
     }
 
     @Override
@@ -969,6 +1063,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             GLES20.glDisable(GLES20.GL_DEPTH_TEST);
             loginRenderer.onDrawFrame(dt, screenW, screenH);
             if (loginRenderer.isFadeOutComplete()) {
+                hideKeyboard(); // 切到主界面前收起键盘
                 loginActive = false; // 淡出完成，切换到主界面
                 // 初始状态：面板关闭，悬浮球在左上角
                 guiOpen = false;
@@ -976,6 +1071,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 ballX = ballRadius + 24f;
                 ballY = ballRadius + 24f;
             } else if (loginRenderer.isLoginDone()) {
+                hideKeyboard(); // 登录已提交，立刻收起键盘
                 // loginDone 但淡出尚未完成，继续渲染登录界面（淡出中）
             }
             return; // 登录界面期间不渲染主面板
@@ -1082,7 +1178,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             float pageSlide = Anim.backEaseOut(configPageAnim.get()) * 20f * uiScale; // 配置页从右侧滑入
             float pageAlpha = configPageAnim.get();
             if (activeConfigModule != null || configPageAnim.get() > 0.01f) {
-                drawConfigPage(drawX + pageSlide, drawY, drawW, drawH, panelAlpha * pageAlpha);
+                // pageSlide 偏移导致面板右移，宽度需减去 pageSlide 防止右边界超出
+                drawConfigPage(drawX + pageSlide, drawY, drawW - pageSlide, drawH, panelAlpha * pageAlpha);
             }
             // 卡片网格：配置页打开/关闭动画期间也绘制（向左淡出/淡入），完全打开后才隐藏
             if (activeConfigModule == null || configPageAnim.get() < 0.99f) {
@@ -1100,7 +1197,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 drawModuleCardText(drawX, drawY, drawW, drawH, panelAlpha);
             }
             if (activeConfigModule != null) {
-                drawConfigPageText(drawX + pageSlide, drawY, drawW, drawH, panelAlpha);
+                drawConfigPageText(drawX + pageSlide, drawY, drawW - pageSlide, drawH, panelAlpha);
             }
             GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         }
@@ -1902,9 +1999,21 @@ private void drawFloatingBall() {
         curTouchX = ex; curTouchY = ey;
         touchActive = (action != MotionEvent.ACTION_UP && action != MotionEvent.ACTION_CANCEL);
 
-        // 登录界面期间，触摸事件全部交给 LoginRenderer
+        // 登录界面期间，触摸事件全部交给 LoginRenderer；
+        // 同时根据聚焦状态唤出/收起软键盘，让登录输入框也能打字
         if (loginActive) {
+            boolean wasActive = loginRenderer.hasActiveField();
+            int prevField = loginRenderer.getActiveField();
             loginRenderer.onTouch(event, screenW, screenH);
+            if (loginRenderer.hasActiveField()) {
+                // 输入框聚焦：首次聚焦或切换字段时唤出键盘并同步当前字段文本
+                if (!wasActive || loginRenderer.getActiveField() != prevField) {
+                    showKeyboard(2);
+                }
+            } else if (wasActive) {
+                // 点击空白处取消聚焦：收起键盘
+                hideKeyboard();
+            }
             return;
         }
 
@@ -1973,9 +2082,9 @@ private void drawFloatingBall() {
                     spawnModuleToast(activeConfigModule.name, activeConfigModule.enabled);
                     return;
                 }
-                // 检查滑块拖拽
-                if (configSliderW > 0 && ex >= configSliderX && ex <= configSliderX + configSliderW + 20f &&
-                    ey >= configSliderY - 10f && ey <= configSliderY + configSliderH + 10f) {
+                // 检查滑块拖拽（扩大触摸区域：上下各+20px，右侧+30px，便于触控）
+                if (configSliderW > 0 && ex >= configSliderX - 10f && ex <= configSliderX + configSliderW + 30f &&
+                    ey >= configSliderY - 20f && ey <= configSliderY + configSliderH + 20f) {
                     draggingConfigSlider = true;
                     float t = (ex - configSliderX) / configSliderW;
                     activeConfigModule.sliderValue = Math.max(0f, Math.min(1f, t));
@@ -2031,13 +2140,17 @@ private void drawFloatingBall() {
             }
             if (action == MotionEvent.ACTION_MOVE && draggingConfigSlider) {
                 float t = (ex - configSliderX) / configSliderW;
-                activeConfigModule.sliderValue = Math.max(0f, Math.min(1f, t));
+                sliderTargetValue = Math.max(0f, Math.min(1f, t));
+                // 阻尼：滑块值缓动到目标值，而非直接跳变
+                activeConfigModule.sliderValue += (sliderTargetValue - activeConfigModule.sliderValue) * 0.4f;
                 return;
             }
             if (action == MotionEvent.ACTION_MOVE && draggingOptionIndex >= 0) {
                 ModuleItem.ConfigOption opt = activeConfigModule.options.get(draggingOptionIndex);
                 float t = (ex - draggingOptionSliderX) / draggingOptionSliderW;
-                opt.sliderValue = Math.max(0f, Math.min(1f, t));
+                optSliderTargetValue = Math.max(0f, Math.min(1f, t));
+                // 阻尼：额外滑块值缓动到目标值
+                opt.sliderValue += (optSliderTargetValue - opt.sliderValue) * 0.4f;
                 return;
             }
             if (action == MotionEvent.ACTION_MOVE && draggingHue) {
@@ -2053,6 +2166,8 @@ private void drawFloatingBall() {
                 draggingHue = false;
                 draggingSV = false;
                 draggingOptionIndex = -1;
+                // 松手时确保滑块精确到目标值
+                if (activeConfigModule != null) activeConfigModule.sliderValue = sliderTargetValue;
                 // 滑动误触检查：移动距离超过20px视为滑动，不触发后续点击（如侧栏分类切换）
                 float dx = ex - downX, dy = ey - downY;
                 if (dx * dx + dy * dy > 400f) return;
@@ -2067,6 +2182,7 @@ private void drawFloatingBall() {
                         pageAnimDirection = (i > currentCategoryIndex) ? 1 : -1;
                         currentCategoryIndex = i;
                         activeConfigModule = null; // 切换分类时返回卡片视图
+                        configPageAnim.snapTo(0f); // 重置配置页动画，避免卡片透明
                         contentScroll.snapTo(0);
                         configScrollOffset = 0f;
                     }
@@ -2093,9 +2209,12 @@ private void drawFloatingBall() {
                 // 0) 标题栏：搜索框 + 关闭按钮
                 if (searchBoxRect != null && inside(ex, ey, searchBoxRect)) {
                     searchActive = true;
+                    // 唤出软键盘，输入实时回写到 searchQuery
+                    showKeyboard(1);
                     return;
                 }
                 if (closeBtnRect != null && inside(ex, ey, closeBtnRect)) {
+                    hideKeyboard();
                     guiOpen = false;
                     overlayOpenness.setTarget(0f);
                     openness.setTarget(0f);
@@ -2108,9 +2227,12 @@ private void drawFloatingBall() {
                 }
                 if (searchActive && (searchBoxRect == null || !inside(ex, ey, searchBoxRect))) {
                     searchActive = false;
+                    // 搜索框失去焦点，收起键盘并清空 hiddenInput
+                    hideKeyboard();
                 }
                 // 底栏 Close 按钮
                 if (footerCloseRect != null && inside(ex, ey, footerCloseRect)) {
+                    hideKeyboard();
                     guiOpen = false;
                     overlayOpenness.setTarget(0f);
                     openness.setTarget(0f);
@@ -2118,6 +2240,7 @@ private void drawFloatingBall() {
                 }
                 // 侧栏底部按钮
                 if (closeSideRect != null && inside(ex, ey, closeSideRect)) {
+                    hideKeyboard();
                     guiOpen = false;
                     overlayOpenness.setTarget(0f);
                     openness.setTarget(0f);
