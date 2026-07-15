@@ -297,6 +297,13 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float sidebarIndicatorTargetY = 0f;
     private final Anim configPageAnim = new Anim(0f, 14f); // 配置页滑入动画（0=关闭, 1=打开）
     private float cardHoverAlpha = 0f; // 卡片 hover 透明度
+    // ---- 翻页动画：分类切换时新分类从侧面滑入 ----
+    private float pageAnimProgress = 1f; // 0=开始, 1=完成
+    private int pageAnimDirection = 0;   // 1=右滑入(前进), -1=左滑入(后退)
+    // ---- 下拉框循环切换淡入淡出动画 ----
+    private float dropdownAnimProgress = 1f; // 0=刚切换, 1=完成
+    private int lastDropdownIndex = -1;      // 上次绘制时记录的选中索引（用于检测变化）
+    private int lastDropdownOi = -1;         // 上次交互的下拉框在 options 中的索引
     // 卡片悬停检测：记录当前触摸坐标（仅在手指按下期间有效），用于 drawModuleCards 判断 hover
     private float curTouchX = -1, curTouchY = -1;
     private boolean touchActive = false;
@@ -340,10 +347,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private boolean draggingConfigSlider = false;
     // 配置页额外配置项（下拉框/开关/滑块）热区：每个元素为 {float[]{x,y,w,h}, optionIndex, optionType}
     private final List<Object[]> configOptionRects = new java.util.concurrent.CopyOnWriteArrayList<>();
-    // 下拉框展开后的选项热区：每个元素为 {float[]{x,y,w,h}, optionIndex, choiceIndex}
+    // 下拉框已改为循环切换（不再展开列表）；保留字段兼容：每个元素为 {float[]{x,y,w,h}, optionIndex, choiceIndex}
     private final List<Object[]> configDropdownChoiceRects = new java.util.concurrent.CopyOnWriteArrayList<>();
-    // 当前展开的下拉框在 options 列表中的索引，-1=无展开
-    private int expandedDropdownIndex = -1;
     // 配置页额外滑块拖拽状态
     private int draggingOptionIndex = -1;
     private float draggingOptionSliderX, draggingOptionSliderW;
@@ -583,7 +588,6 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         contentScroll.snapTo(0);
         configPageAnim.snapTo(0f);
         configPageAnim.setTarget(1f);
-        expandedDropdownIndex = -1; // 进入配置页时收起所有下拉框
     }
 
     /** 返回卡片网格视图 */
@@ -591,7 +595,6 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         activeConfigModule = null;
         configScrollOffset = 0f;
         configPageAnim.setTarget(0f);
-        expandedDropdownIndex = -1; // 离开配置页时收起所有下拉框
     }
 
     /** 模块行的错落进场动画：面板刚展开时，越往下的行越晚出现，带一点回弹和轻微上浮位移。
@@ -1019,6 +1022,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         sidebarIndicatorY.setTarget(sidebarIndicatorTargetY);
         sidebarIndicatorY.update(dt);
         configPageAnim.update(dt);
+        // 分类翻页动画推进（约0.25秒完成）
+        pageAnimProgress = Math.min(1f, pageAnimProgress + dt * 4f);
         drawArrayListHud();
         drawWatermark();
         updateToasts(dt);
@@ -1079,10 +1084,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             if (activeConfigModule != null || configPageAnim.get() > 0.01f) {
                 drawConfigPage(drawX + pageSlide, drawY, drawW, drawH, panelAlpha * pageAlpha);
             }
-            if (activeConfigModule == null && configPageAnim.get() < 0.99f) {
-                // 配置页关闭动画期间，卡片网格淡入
-                drawModuleCards(drawX, drawY, drawW, drawH, panelAlpha);
-            } else if (activeConfigModule == null) {
+            // 卡片网格：配置页打开/关闭动画期间也绘制（向左淡出/淡入），完全打开后才隐藏
+            if (activeConfigModule == null || configPageAnim.get() < 0.99f) {
                 drawModuleCards(drawX, drawY, drawW, drawH, panelAlpha);
             }
             quad.flush(screenW, screenH);
@@ -1093,10 +1096,11 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             // 6) 文字层同样要在裁剪区域内画
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
             GLES20.glScissor((int) clipX, (int) (screenH - (clipY + clipH)), (int) clipW, (int) clipH);
+            if (activeConfigModule == null || configPageAnim.get() < 0.99f) {
+                drawModuleCardText(drawX, drawY, drawW, drawH, panelAlpha);
+            }
             if (activeConfigModule != null) {
                 drawConfigPageText(drawX + pageSlide, drawY, drawW, drawH, panelAlpha);
-            } else {
-                drawModuleCardText(drawX, drawY, drawW, drawH, panelAlpha);
             }
             GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         }
@@ -1140,8 +1144,22 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
         float curY = startY;
 
-        // --- "Enabled" 开关行 ---
-        quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
+        // --- 计算所有配置项总高度（Enabled + 额外配置项 + 模块滑块 + 描述），用一个大圆角矩形分组 ---
+        float descH = 80f * uiScale * (h / panelH);
+        float groupContentH = rowH + rowGap; // Enabled 行
+        for (int oi = 0; oi < m.options.size(); oi++) {
+            groupContentH += rowH + rowGap;
+        }
+        if (m.hasSlider) groupContentH += rowH + rowGap;
+        groupContentH += descH + rowGap;
+
+        // 大圆角矩形背景（包含所有配置项，参考南方客户端的分组容器）
+        quad.addRect(trackX, startY, trackW, groupContentH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
+        // 底部装饰条（进度条样式，贴在矩形底部）
+        float decorH = 3f * uiScale;
+        quad.addRect(trackX, startY + groupContentH - decorH, trackW, decorH, 0f, withAlpha(ACCENT_1, alpha * 0.3f));
+
+        // --- "Enabled" 开关行（不再单独画背景，已包含在大圆角矩形内） ---
         float toggleW = 44f * uiScale, toggleH = 22f * uiScale;
         float toggleX = trackX + trackW - pad - toggleW;
         float toggleY = curY + rowH / 2f - toggleH / 2f;
@@ -1156,40 +1174,26 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         quad.addRect(tknobX, toggleY + 3f * uiScale, tknobD, tknobD, tknobD / 2f, withAlpha(KNOB_COLOR, alpha));
         curY += rowH + rowGap;
 
-        // --- 模块额外配置项列表（下拉框 / 额外开关 / 额外滑块） ---
+        // --- 模块额外配置项列表（下拉框循环切换 / 额外开关 / 额外滑块） ---
         for (int oi = 0; oi < m.options.size(); oi++) {
             ModuleItem.ConfigOption opt = m.options.get(oi);
             if (opt.type == ModuleItem.ConfigOption.TYPE_DROPDOWN) {
-                // 下拉框行：整行背景 + 右侧下拉区域（点击整行切换展开/收起）
-                quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
+                // 下拉框：右侧区域显示当前选项，点击循环切换到下一个（不再展开列表）
                 float dropAreaW = contentW * 0.4f;
                 float dropAreaX = trackX + trackW - pad - dropAreaW;
                 float dropAreaY = curY + 8f * uiScale;
                 float dropAreaH = rowH - 16f * uiScale;
-                float[] dropBg = (oi == expandedDropdownIndex) ? withAlpha(SOUTH_TOGGLE_ON, alpha) : withAlpha(SOUTH_SEARCH_BG, alpha);
-                quad.addRect(dropAreaX, dropAreaY, dropAreaW, dropAreaH, 6f * uiScale, dropBg);
-                // 整行均可点击切换展开状态
-                configOptionRects.add(new Object[]{new float[]{trackX, curY, trackW, rowH}, oi, ModuleItem.ConfigOption.TYPE_DROPDOWN});
+                quad.addRect(dropAreaX, dropAreaY, dropAreaW, dropAreaH, 6f * uiScale, withAlpha(SOUTH_SEARCH_BG, alpha));
+                // 热区只注册下拉框右侧区域本身（不是整行），避免滑动误触
+                configOptionRects.add(new Object[]{new float[]{dropAreaX, dropAreaY, dropAreaW, dropAreaH}, oi, ModuleItem.ConfigOption.TYPE_DROPDOWN});
                 curY += rowH + rowGap;
-                // 展开时在行下方绘制选项列表（每个选项一行，高 rowH*0.7），后续选项行整体下移
-                if (oi == expandedDropdownIndex && opt.dropdownChoices != null) {
-                    float choiceH = rowH * 0.7f;
-                    for (int ci = 0; ci < opt.dropdownChoices.length; ci++) {
-                        boolean selected = (ci == opt.dropdownIndex);
-                        float[] choiceBg = selected ? withAlpha(SOUTH_TOGGLE_ON, alpha) : withAlpha(SOUTH_SEARCH_BG, alpha);
-                        quad.addRect(trackX, curY, trackW, choiceH, cornerR, choiceBg);
-                        configDropdownChoiceRects.add(new Object[]{new float[]{trackX, curY, trackW, choiceH}, oi, ci});
-                        curY += choiceH;
-                    }
-                    curY += rowGap;
-                }
             } else if (opt.type == ModuleItem.ConfigOption.TYPE_SWITCH) {
-                // 额外开关行：与 Enabled 开关行相同样式
-                quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
+                // 额外开关行：只画开关本身
                 float stToggleW = 44f * uiScale, stToggleH = 22f * uiScale;
                 float stToggleX = trackX + trackW - pad - stToggleW;
                 float stToggleY = curY + rowH / 2f - stToggleH / 2f;
-                configOptionRects.add(new Object[]{new float[]{trackX, curY, trackW, rowH}, oi, ModuleItem.ConfigOption.TYPE_SWITCH});
+                // 热区只注册开关本身位置（不是整行），避免滑动误触
+                configOptionRects.add(new Object[]{new float[]{stToggleX, stToggleY, stToggleW, stToggleH}, oi, ModuleItem.ConfigOption.TYPE_SWITCH});
                 float stT = Anim.backEaseOut(opt.boolValue ? 1f : 0f);
                 float[] stTc = mixColor(SOUTH_TOGGLE_OFF, SOUTH_TOGGLE_ON, stT);
                 quad.addRect(stToggleX, stToggleY, stToggleW, stToggleH, stToggleH / 2f, withAlpha(stTc, alpha));
@@ -1199,7 +1203,6 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 curY += rowH + rowGap;
             } else if (opt.type == ModuleItem.ConfigOption.TYPE_SLIDER) {
                 // 额外滑块行：滑块轨道只占右侧约55%宽度，左侧留标签文字
-                quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
                 float osTrackH = 5f * uiScale;
                 float osTrackW = contentW * 0.55f;
                 float osTrackX = trackX + trackW - pad - osTrackW;
@@ -1211,7 +1214,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 float osKnobD = 12f * uiScale;
                 float osKnobX = osTrackX + osFillW - osKnobD / 2f;
                 quad.addRect(osKnobX, osTrackY + osTrackH / 2f - osKnobD / 2f, osKnobD, osKnobD, osKnobD / 2f, withAlpha(KNOB_COLOR, alpha));
-                // 热区用滑块轨道区域，并记录拖拽坐标基准
+                // 热区用滑块轨道区域
                 configOptionRects.add(new Object[]{new float[]{osTrackX, osTrackY, osTrackW, osTrackH}, oi, ModuleItem.ConfigOption.TYPE_SLIDER});
                 curY += rowH + rowGap;
             }
@@ -1219,7 +1222,6 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
         // --- 滑块行（仅有滑块的模块） ---
         if (m.hasSlider) {
-            quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
             float sTrackH = 5f * uiScale;
             float sTrackW = contentW * 0.55f;
             float sTrackX = trackX + trackW - pad - sTrackW;
@@ -1236,9 +1238,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             curY += rowH + rowGap;
         }
 
-        // --- 描述区 ---
-        float descH = 80f * uiScale * (h / panelH);
-        quad.addRect(trackX, curY, trackW, descH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
+        // --- 描述区（已包含在大圆角矩形内，不再单独画背景） ---
         curY += descH + rowGap;
 
         // --- 调色板（仅 Preferences 分类下的 Theme 模块） ---
@@ -1287,29 +1287,25 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 String optLabel = Category.localizedName(opt.label, langZh);
                 text.draw(optLabel, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.5f,
                         14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
-                // 当前选中项 + 下拉箭头（展开时箭头朝上 ▲）右侧
+                // 当前选中项 + 下拉箭头（循环切换：点击切到下一项；切换时文字淡入淡出）
                 String curChoice = (opt.dropdownChoices != null && opt.dropdownIndex >= 0
                         && opt.dropdownIndex < opt.dropdownChoices.length) ? opt.dropdownChoices[opt.dropdownIndex] : "";
-                String arrow = (oi == expandedDropdownIndex) ? " \u25B2" : " \u25BC";
-                String dropText = curChoice + arrow;
+                // 检测是否刚切换：仅对上次交互的下拉框触发淡入淡出动画
+                if (oi == lastDropdownOi) {
+                    if (opt.dropdownIndex != lastDropdownIndex) {
+                        dropdownAnimProgress = 0f;
+                        lastDropdownIndex = opt.dropdownIndex;
+                    }
+                    dropdownAnimProgress = Math.min(1f, dropdownAnimProgress + 0.08f);
+                }
+                float dropAlpha = (oi == lastDropdownOi) ? dropdownAnimProgress : 1f;
+                String dropText = curChoice + " \u25BC";
                 float dropSize = 13f * uiScale;
                 float dropW = text.measure(dropText, dropSize);
                 text.draw(dropText, contentX + contentW - 14f * uiScale - dropW,
-                        curY + rowH / 2f - dropSize * 0.5f, dropSize, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
+                        curY + rowH / 2f - dropSize * 0.5f, dropSize,
+                        withAlpha(SOUTH_TEXT_DIM2, alpha * dropAlpha), screenW, screenH);
                 curY += rowH + rowGap;
-                // 展开时绘制选项文字（与图形层 curY 保持同步下移）
-                if (oi == expandedDropdownIndex && opt.dropdownChoices != null) {
-                    float choiceH = rowH * 0.7f;
-                    float choiceSize = 13f * uiScale;
-                    for (int ci = 0; ci < opt.dropdownChoices.length; ci++) {
-                        String choiceLabel = Category.localizedName(opt.dropdownChoices[ci], langZh);
-                        float[] choiceCol = (ci == opt.dropdownIndex) ? withAlpha(SOUTH_TEXT_WHITE, alpha) : withAlpha(SOUTH_TEXT_DIM2, alpha);
-                        text.draw(choiceLabel, contentX + 24f * uiScale, curY + choiceH / 2f - choiceSize * 0.5f,
-                                choiceSize, choiceCol, screenW, screenH);
-                        curY += choiceH;
-                    }
-                    curY += rowGap;
-                }
             } else if (opt.type == ModuleItem.ConfigOption.TYPE_SWITCH) {
                 // 开关：值由图形层显示，这里只画 label
                 String optLabel = Category.localizedName(opt.label, langZh);
@@ -1397,7 +1393,8 @@ private void drawFloatingBall() {
         float contentBgX = x + sbW;
         float contentBgW = w - sbW;
         quad.addRect(contentBgX, y, contentBgW, h, radius, withAlpha(SOUTH_PANEL_BG, alpha));
-        quad.addRect(contentBgX, y + h - radius, contentBgW, radius, 0f, withAlpha(SOUTH_PANEL_BG, alpha));
+        // 仅在左侧（与侧栏拼接处）补一小块直角，右侧底部保留圆角，避免底部右侧变直角
+        quad.addRect(contentBgX, y + h - radius, radius, radius, 0f, withAlpha(SOUTH_PANEL_BG, alpha));
 
         // 分隔线
         quad.addRect(x + sbW, y, 1f * uiScale, h, 0f, withAlpha(SOUTH_CARD_BORDER, alpha));
@@ -1577,6 +1574,16 @@ private void drawFloatingBall() {
         float toggleBarH = 32f * uiScale * (h / panelH);
         float iconAreaH = cardH - toggleBarH;
 
+        // 翻页动画：分类切换时新分类从侧面滑入（EaseOutExpo 缓动）
+        float pageOffset = (1f - easeOutExpo(pageAnimProgress)) * pageAnimDirection * w;
+        // 配置页打开动画：卡片网格向左淡出（仅在配置页动画期间生效）
+        float cardAlphaMul = 1f;
+        float cardShiftX = 0f;
+        if (configPageAnim.get() > 0.01f) {
+            cardAlphaMul = 1f - configPageAnim.get();
+            cardShiftX = -configPageAnim.get() * 40f * uiScale;
+        }
+
         java.util.List<ModuleItem> visibleModules = new java.util.ArrayList<>();
         for (ModuleItem m : cat.modules) {
             if (searchQuery.isEmpty() || m.name.toLowerCase().contains(searchQuery.toLowerCase())
@@ -1589,7 +1596,7 @@ private void drawFloatingBall() {
         for (int i = 0; i < visibleModules.size(); i++) {
             ModuleItem m = visibleModules.get(i);
             int col = i % cols;
-            float cardX = contentX + col * (cardW + cardGap);
+            float cardX = contentX + col * (cardW + cardGap) + pageOffset + cardShiftX;
 
             if (curY + cardH < clipY - 20f || curY > clipY + clipH + 20f) {
                 if ((i + 1) % cols == 0) curY += cardH + cardGap;
@@ -1601,7 +1608,7 @@ private void drawFloatingBall() {
                 if ((i + 1) % cols == 0) curY += cardH + cardGap;
                 continue;
             }
-            float rowAlpha = alpha * reveal;
+            float rowAlpha = alpha * reveal * cardAlphaMul;
             float baseDrawY = curY + (1f - reveal) * 14f * uiScale;
 
             // 卡片悬停动画：基于未偏移的卡片区域判断 hover，避免偏移后产生抖动
@@ -1612,9 +1619,9 @@ private void drawFloatingBall() {
             m.hoverAnim.update(0.016f);
             float drawY = baseDrawY - m.hoverAnim.get() * 2f * uiScale;
 
-            // 注册热区: 上方区域(图标区)=打开配置页，下方区域(开关栏)=切换启用/禁用
-            moduleHitRects.add(new Object[]{new float[]{cardX, drawY, cardW, iconAreaH}, "CARD", m});
-            moduleHitRects.add(new Object[]{new float[]{cardX, drawY + iconAreaH, cardW, toggleBarH}, "TOGGLE", m});
+            // 注册热区: 上方区域(图标区)=切换开关，下方区域(配置栏)=打开配置页
+            moduleHitRects.add(new Object[]{new float[]{cardX, drawY, cardW, iconAreaH}, "TOGGLE", m});
+            moduleHitRects.add(new Object[]{new float[]{cardX, drawY + iconAreaH, cardW, toggleBarH}, "CARD", m});
 
             float cornerR = 12f * uiScale;
             // 上半部分: 开关区 (圆角顶部) — 颜色随开关状态变化（带弹跳回弹动画）
@@ -1829,6 +1836,15 @@ private void drawFloatingBall() {
         float toggleBarH = 32f * uiScale * (h / panelH);
         float iconAreaH = cardH - toggleBarH;
 
+        // 与 drawModuleCards 保持同步：翻页偏移 + 配置页打开淡出
+        float pageOffset = (1f - easeOutExpo(pageAnimProgress)) * pageAnimDirection * w;
+        float cardAlphaMul = 1f;
+        float cardShiftX = 0f;
+        if (configPageAnim.get() > 0.01f) {
+            cardAlphaMul = 1f - configPageAnim.get();
+            cardShiftX = -configPageAnim.get() * 40f * uiScale;
+        }
+
         java.util.List<ModuleItem> visibleModules = new java.util.ArrayList<>();
         for (ModuleItem m : cat.modules) {
             if (searchQuery.isEmpty() || m.name.toLowerCase().contains(searchQuery.toLowerCase())
@@ -1841,7 +1857,7 @@ private void drawFloatingBall() {
         for (int i = 0; i < visibleModules.size(); i++) {
             ModuleItem m = visibleModules.get(i);
             int col = i % cols;
-            float cardX = contentX + col * (cardW + cardGap);
+            float cardX = contentX + col * (cardW + cardGap) + pageOffset + cardShiftX;
 
             if (curY + cardH < clipY - 20f || curY > clipY + clipH + 20f) {
                 if ((i + 1) % cols == 0) curY += cardH + cardGap;
@@ -1852,7 +1868,7 @@ private void drawFloatingBall() {
                 if ((i + 1) % cols == 0) curY += cardH + cardGap;
                 continue;
             }
-            float rowAlpha = alpha * reveal;
+            float rowAlpha = alpha * reveal * cardAlphaMul;
             // 与 drawModuleCards 保持同步：应用相同的悬停上浮偏移（hoverAnim 已在 drawModuleCards 中更新）
             float drawY = curY + (1f - reveal) * 14f * uiScale - m.hoverAnim.get() * 2f * uiScale;
 
@@ -1985,20 +2001,7 @@ private void drawFloatingBall() {
                         return;
                     }
                 }
-                // 检查展开的下拉框选项：点击选项设置选中并收起
-                for (int ci = 0; ci < configDropdownChoiceRects.size(); ci++) {
-                    Object[] entry = configDropdownChoiceRects.get(ci);
-                    float[] rect = (float[]) entry[0];
-                    if (inside(ex, ey, rect)) {
-                        int optIdx = (int) entry[1];
-                        int choiceIdx = (int) entry[2];
-                        ModuleItem.ConfigOption opt = activeConfigModule.options.get(optIdx);
-                        opt.dropdownIndex = choiceIdx;
-                        expandedDropdownIndex = -1; // 收起下拉框
-                        return;
-                    }
-                }
-                // 检查配置项列表（下拉框 / 额外开关 / 额外滑块）
+                // 检查配置项列表（下拉框循环切换 / 额外开关 / 额外滑块）
                 for (int oi = 0; oi < configOptionRects.size(); oi++) {
                     Object[] entry = configOptionRects.get(oi);
                     float[] rect = (float[]) entry[0];
@@ -2007,8 +2010,12 @@ private void drawFloatingBall() {
                         int optType = (int) entry[2];
                         ModuleItem.ConfigOption opt = activeConfigModule.options.get(optIdx);
                         if (optType == ModuleItem.ConfigOption.TYPE_DROPDOWN) {
-                            // 点击下拉框行：切换展开/收起
-                            expandedDropdownIndex = (expandedDropdownIndex == optIdx) ? -1 : optIdx;
+                            // 循环切换到下一个选项，并触发淡入淡出动画
+                            if (opt.dropdownChoices != null && opt.dropdownChoices.length > 0) {
+                                opt.dropdownIndex = (opt.dropdownIndex + 1) % opt.dropdownChoices.length;
+                            }
+                            lastDropdownOi = optIdx;
+                            dropdownAnimProgress = 0f;
                         } else if (optType == ModuleItem.ConfigOption.TYPE_SWITCH) {
                             opt.boolValue = !opt.boolValue;
                         } else if (optType == ModuleItem.ConfigOption.TYPE_SLIDER) {
@@ -2055,6 +2062,9 @@ private void drawFloatingBall() {
             for (int i = 0; i < categoryHitRects.size(); i++) {
                 if (inside(ex, ey, categoryHitRects.get(i))) {
                     if (currentCategoryIndex != i) {
+                        // 触发分类翻页动画：新分类从侧面滑入
+                        pageAnimProgress = 0f;
+                        pageAnimDirection = (i > currentCategoryIndex) ? 1 : -1;
                         currentCategoryIndex = i;
                         activeConfigModule = null; // 切换分类时返回卡片视图
                         contentScroll.snapTo(0);
@@ -2166,6 +2176,11 @@ private void drawFloatingBall() {
                 // 4) 分类点击
                 for (int i = 0; i < categoryHitRects.size(); i++) {
                     if (inside(ex, ey, categoryHitRects.get(i))) {
+                        if (currentCategoryIndex != i) {
+                            // 触发分类翻页动画：新分类从侧面滑入
+                            pageAnimProgress = 0f;
+                            pageAnimDirection = (i > currentCategoryIndex) ? 1 : -1;
+                        }
                         currentCategoryIndex = i;
                         contentScroll.snapTo(0);
                         return;
@@ -2300,6 +2315,13 @@ private void drawFloatingBall() {
 
     private float[] withAlpha(float[] c, float mulAlpha) {
         return new float[]{c[0], c[1], c[2], c[3] * mulAlpha};
+    }
+
+    /** EaseOutExpo 缓动：1 - 2^(-10t)，分类翻页用。Anim 类未提供，这里手动实现。 */
+    private static float easeOutExpo(float t) {
+        if (t <= 0f) return 0f;
+        if (t >= 1f) return 1f;
+        return (float) (1 - Math.pow(2, -10 * t));
     }
 
     /** 强调色两色渐变从左上到右下（对角线方向），而不是之前纯水平的左右方向。
