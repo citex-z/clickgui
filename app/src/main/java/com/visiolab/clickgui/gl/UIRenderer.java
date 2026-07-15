@@ -850,6 +850,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         // 重新计算高度：两行文字 + 内边距
         float contentH = titleSize + lineGap + msgSize;
         rectH = contentH + padY * 2;
+        final float fRectW = rectW, fRectH = rectH, fCornerR = cornerR;
 
         for (ToastNotice t : toasts) {
             float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
@@ -863,7 +864,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             // 不画背景矩形，只通过 blur 系统在外围生成阴影
             final float sDx = dx, sDy = dy, sRv = rv;
             blur.captureAndBlurTransparentTight(() -> {
-                quad.addRect(sDx, sDy, rectW, rectH, cornerR, new float[]{0f, 0f, 0f, 0.7f * sRv});
+                quad.addRect(sDx, sDy, fRectW, fRectH, fCornerR, new float[]{0f, 0f, 0f, 0.7f * sRv});
             });
             blur.drawGlow(new float[]{0f, 0f, 0f, 0.6f * rv}, screenW, screenH);
 
