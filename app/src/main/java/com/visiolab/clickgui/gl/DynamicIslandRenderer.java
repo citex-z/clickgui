@@ -104,6 +104,7 @@ public class DynamicIslandRenderer {
             if (tc.moduleName != null && tc.moduleName.equals(moduleName)) {
                 tc.time = tc.timer.getTime() + getDurationMs();
                 tc.enabled = enabled;
+                tc.exiting = false;
                 tc.animation.reset();
                 tc.animation.setDirection(AnimDir.FORWARDS);
                 return;
@@ -157,13 +158,32 @@ public class DynamicIslandRenderer {
         float s = uiScale * scale;
 
         // 处理 timedContents：将未过期的转为 contents
+        // 原版行为：内容在 time 到期后不会立即移除，而是等退场动画(Backwards)播完后才移除
         contents.clear();
         for (int i = timedContents.size() - 1; i >= 0; i--) {
             TimedContent tc = timedContents.get(i);
-            if (tc.timer.getTime() >= tc.time) {
-                timedContents.remove(i);
-                continue;
+            long elapsed = tc.timer.getTime();
+
+            // 判断是否应该开始退场
+            long remain = tc.time - elapsed;
+            if (remain < 300 && !tc.exiting) {
+                tc.exiting = true;
+                tc.animation.setDirection(AnimDir.BACKWARDS);
             }
+
+            // 退场动画播完后才移除（不是 timer 到期就移除）
+            if (tc.exiting) {
+                double out = tc.animation.getOutput(elapsed, tc.time);
+                if (out <= 0.01) {
+                    timedContents.remove(i);
+                    continue;
+                }
+            } else if (elapsed >= tc.time) {
+                // 安全兜底：timer 到期但没开始退场（理论上不会发生）
+                tc.exiting = true;
+                tc.animation.setDirection(AnimDir.BACKWARDS);
+            }
+
             // 计算内容宽度
             float titleW = text.measure(tc.title, 14f * s);
             float descW = text.measure(tc.description, 12f * s);
@@ -253,17 +273,9 @@ public class DynamicIslandRenderer {
             float contentY = islandY + 5f * s;
             for (IslandContent ic : contents) {
                 TimedContent tc = ic.timedContent;
-                // 更新动画
-                long elapsed = tc.timer.getTime();
-                long remain = tc.time - elapsed;
-                // 最后 300ms 开始退场动画
-                if (remain < 300) {
-                    tc.animation.setDirection(AnimDir.BACKWARDS);
-                } else {
-                    tc.animation.setDirection(AnimDir.FORWARDS);
-                }
-                double animProgress = tc.animation.getOutput(elapsed, tc.time);
-                float animAlpha = (float) (tc.animation.isForward() ? animProgress : animProgress);
+                // 动画方向已在上面处理，这里只取输出值
+                double animProgress = tc.animation.getOutput(tc.timer.getTime(), tc.time);
+                float animAlpha = (float) animProgress;
 
                 // 图标区域
                 float iconSize = 24f * s;
@@ -394,6 +406,7 @@ public class DynamicIslandRenderer {
         final String moduleName;
         boolean enabled;
         long time;
+        boolean exiting = false; // 是否正在退场动画中
         final EaseOutExpoAnim animation;
         final MSTimer timer;
 
@@ -406,6 +419,7 @@ public class DynamicIslandRenderer {
             this.time = timeMs;
             this.animation = new EaseOutExpoAnim(300);
             this.timer = new MSTimer();
+            this.animation.setDirection(AnimDir.FORWARDS); // 入场动画
         }
     }
 
@@ -422,28 +436,35 @@ public class DynamicIslandRenderer {
         }
     }
 
-    /** EaseOutExpo 动画实现（参考原版 EaseOutExpo + Animation） */
+    /** EaseOutExpo 动画实现（参考原版 EaseOutExpo + Animation）
+     *  关键：反向播放时，要从当前进度倒退，而不是从0开始重新播放 */
     private static class EaseOutExpoAnim {
         private final int duration;
         private AnimDir direction = AnimDir.FORWARDS;
         private long startTime;
+        // 反向时的起始进度（方向切换瞬间的进度值），用于从当前进度平滑倒退
+        private float reverseStartProgress = 1f;
+        private long reverseStartTime;
 
         EaseOutExpoAnim(int durationMs) {
             this.duration = durationMs;
             this.startTime = System.currentTimeMillis();
+            this.reverseStartTime = this.startTime;
         }
 
         void reset() {
             this.startTime = System.currentTimeMillis();
+            this.reverseStartTime = this.startTime;
+            this.reverseStartProgress = 0f;
         }
 
         void setDirection(AnimDir dir) {
             if (this.direction != dir) {
+                // 记录切换瞬间的当前进度
+                float currentProgress = (float) getOutputRaw(System.currentTimeMillis() - startTime);
+                this.reverseStartProgress = currentProgress;
+                this.reverseStartTime = System.currentTimeMillis();
                 this.direction = dir;
-                // 反向时调整起始时间
-                long elapsed = System.currentTimeMillis() - startTime;
-                long remaining = duration - Math.min(duration, elapsed);
-                this.startTime = System.currentTimeMillis() - remaining;
             }
         }
 
@@ -451,12 +472,22 @@ public class DynamicIslandRenderer {
             return direction.isForward();
         }
 
-        double getOutput(long elapsed, long totalTime) {
+        /** 原始进度（不考虑方向） */
+        private double getOutputRaw(long elapsed) {
             double t = Math.min(1.0, (double) elapsed / duration);
+            return easeOutExpo(t);
+        }
+
+        double getOutput(long elapsed, long totalTime) {
             if (direction.isForward()) {
-                return easeOutExpo(t);
+                return getOutputRaw(elapsed);
             } else {
-                return 1.0 - easeOutExpo(t);
+                // 反向：从切换瞬间的进度平滑过渡到0
+                long reverseElapsed = System.currentTimeMillis() - reverseStartTime;
+                double reverseT = Math.min(1.0, (double) reverseElapsed / duration);
+                double eased = easeOutExpo(reverseT);
+                // 从 reverseStartProgress 倒退到 0
+                return reverseStartProgress * (1.0 - eased);
             }
         }
 
