@@ -2,7 +2,6 @@ package com.visiolab.clickgui.gl;
 
 import android.opengl.GLES20;
 
-import com.visiolab.clickgui.anim.Anim;
 import com.visiolab.clickgui.model.Category;
 import com.visiolab.clickgui.model.ModuleItem;
 
@@ -13,11 +12,14 @@ import java.util.List;
  * 灵动岛渲染器——仿照 Apple Dynamic Island + Jonqwq 的 MC 版本实现。
  * MIT 协议，原作者 @Jon_awa
  *
- * 核心行为：
- * - 默认状态：屏幕顶部居中显示一个小药丸，包含客户端名称 + FPS + Ping
+ * 核心行为（1:1 还原原版）：
+ * - 默认状态：屏幕顶部居中显示一个小药丸，包含客户端名 + FPS + Ping
  * - 有内容时：平滑展开为更大的圆角矩形，显示内容
- * - 内容类型：MODULE（模块开关）、SUCCESS、WARNING、INFO
- * - 动画：EaseOutExpo 入场/退场，宽度/高度/位置平滑过渡
+ * - 内容类型：MODULE（模块开关动画）、SUCCESS、WARNING、INFO
+ * - MODULE 动画：跟随模块实际开关状态，不是入场/退场
+ * - SUCCESS/WARNING/INFO 动画：800ms EaseOutExpo，在 time-200 时开始退场
+ * - 内容移除：timer 到期即移除（不是等退场动画完成）
+ * - 平滑过渡：AnimationUtil.smooth（线性比例平滑）
  */
 public class DynamicIslandRenderer {
 
@@ -27,17 +29,15 @@ public class DynamicIslandRenderer {
 
     // 灵动岛状态
     private float renderX = 0f;
-    private float targetX = 0f;
     private float currentWidth = 0f;
-    private float targetWidth = 0f;
     private float currentHeight = 0f;
-    private float targetHeight = 0f;
 
-    // 默认状态的高度（小药丸）
-    private static final float DEFAULT_HEIGHT = 30f;
-    private static final float DEFAULT_PAD_X = 16f;
-    private static final float ISLAND_Y = 15f; // 距顶部偏移
-    private static final float CORNER_RADIUS = 15f;
+    // 原版常量
+    private static final float ISLAND_Y = 15f;       // 距顶部偏移（原版固定值）
+    private static final float CORNER_RADIUS = 10.5f; // 原版圆角
+    private static final float CONTENT_WIDTH_BASE = 50f; // 图标区基础宽度
+    private static final float CONTENT_HEIGHT = 40f;  // 单条内容高度
+    private static final float DEFAULT_TEXT_PAD = 29f; // 默认状态文字总padding
 
     // 内容列表
     private final List<IslandContent> contents = new ArrayList<>();
@@ -56,10 +56,8 @@ public class DynamicIslandRenderer {
     private long lastFpsUpdate = 0;
     private int frameCount = 0;
 
-    // 优先级
-    private static final int PRIORITY_LOW = 0;
-    private static final int PRIORITY_MEDIUM = 1;
-    private static final int PRIORITY_TOP = 2;
+    // 原版 deltaTime（毫秒），用于 AnimationUtil.smooth
+    private long animDelta = 16L;
 
     public enum ContentType {
         MODULE,
@@ -99,20 +97,17 @@ public class DynamicIslandRenderer {
 
     /** 添加模块开关内容 */
     public void addModuleToggle(String moduleName, boolean enabled) {
-        // 如果已有同模块的内容，刷新时间
+        // 原版 addContent(Module module)：如果已有同模块内容，刷新时间
         for (TimedContent tc : timedContents) {
             if (tc.moduleName != null && tc.moduleName.equals(moduleName)) {
-                tc.time = tc.timer.getTime() + getDurationMs();
+                tc.time = tc.timer.getTime() + 2000; // 原版固定 2000ms
                 tc.enabled = enabled;
-                tc.exiting = false;
-                tc.animation.reset();
-                tc.animation.setDirection(AnimDir.FORWARDS);
                 return;
             }
         }
         timedContents.add(new TimedContent(ContentType.MODULE, "Module Toggled",
                 moduleName + (enabled ? " has been Enabled" : " has been Disabled"),
-                moduleName, enabled, getDurationMs()));
+                moduleName, enabled, 2000)); // 原版固定 2000ms
     }
 
     /** 添加成功提示 */
@@ -131,7 +126,6 @@ public class DynamicIslandRenderer {
     }
 
     private long getDurationMs() {
-        // Duration slider: 2-8s, 归一化值映射到 2000-8000ms
         return durationOpt != null ? (long) (2000 + durationOpt.sliderValue * 6000) : 3000;
     }
 
@@ -143,6 +137,9 @@ public class DynamicIslandRenderer {
 
         int sw = (int) screenW;
         int sh = (int) screenH;
+
+        // 更新 deltaTime（毫秒），供 smooth 使用
+        animDelta = Math.max(1L, (long) (dt * 1000));
 
         // FPS 计数
         frameCount++;
@@ -157,82 +154,88 @@ public class DynamicIslandRenderer {
         float scale = scaleOpt != null ? (0.7f + scaleOpt.sliderValue * 0.8f) : 1f;
         float s = uiScale * scale;
 
-        // 处理 timedContents：将未过期的转为 contents
-        // 原版行为：内容在 time 到期后不会立即移除，而是等退场动画(Backwards)播完后才移除
+        // ---- 处理 timedContents（原版逻辑）----
+        // 1. 遍历，过期的直接移除，未过期的加入 contents
         contents.clear();
+        // 同时检查 timedContents 是否为空（原版用 timedContents.isEmpty() 判断默认状态）
+        boolean timedEmpty = true;
         for (int i = timedContents.size() - 1; i >= 0; i--) {
             TimedContent tc = timedContents.get(i);
-            long elapsed = tc.timer.getTime();
+            if (tc.timer.hasTimePassed(tc.time)) {
+                // 原版：timer 到期即移除
+                timedContents.remove(i);
+                continue;
+            }
+            timedEmpty = false;
 
-            // 判断是否应该开始退场
-            long remain = tc.time - elapsed;
-            if (remain < 300 && !tc.exiting) {
-                tc.exiting = true;
-                tc.animation.setDirection(AnimDir.BACKWARDS);
+            // 更新动画方向（原版逻辑）
+            switch (tc.type) {
+                case MODULE:
+                    // MODULE 动画跟随模块实际开关状态
+                    if (tc.enabled) {
+                        tc.animation.setDirection(Direction.FORWARDS);
+                    } else {
+                        tc.animation.setDirection(Direction.BACKWARDS);
+                    }
+                    break;
+                case SUCCESS:
+                case WARNING:
+                case INFO:
+                    // 在 time-200 时开始退场动画
+                    if (tc.timer.hasTimePassed(tc.time - 200)) {
+                        tc.animation.setDirection(Direction.BACKWARDS);
+                    }
+                    break;
             }
 
-            // 退场动画播完后才移除（不是 timer 到期就移除）
-            if (tc.exiting) {
-                double out = tc.animation.getOutput(elapsed, tc.time);
-                if (out <= 0.01) {
-                    timedContents.remove(i);
-                    continue;
-                }
-            } else if (elapsed >= tc.time) {
-                // 安全兜底：timer 到期但没开始退场（理论上不会发生）
-                tc.exiting = true;
-                tc.animation.setDirection(AnimDir.BACKWARDS);
-            }
-
-            // 计算内容宽度
+            // 计算内容尺寸（原版：50 + max(titleW, descW) × 1, height=40）
             float titleW = text.measure(tc.title, 14f * s);
             float descW = text.measure(tc.description, 12f * s);
-            float contentW = 50f * s + Math.max(titleW, descW);
-            float contentH = 40f * s;
-            contents.add(new IslandContent(tc, contentW, contentH, PRIORITY_LOW));
+            float contentW = (CONTENT_WIDTH_BASE + Math.max(titleW, descW)) * s;
+            float contentH = CONTENT_HEIGHT * s;
+            contents.add(new IslandContent(tc, contentW, contentH));
         }
 
-        // 计算目标尺寸
-        boolean hasContent = !contents.isEmpty();
-        if (hasContent) {
-            // 取最大宽度
+        // ---- 计算目标尺寸（原版逻辑）----
+        float targetWidth, targetHeight;
+        if (contents.isEmpty() && timedEmpty) {
+            // 默认状态
+            String nameStr = "Rlin";
+            StringBuilder defaultText = new StringBuilder();
+            if (showFpsOpt != null && showFpsOpt.boolValue) defaultText.append(" | ").append(currentFps).append("fps");
+            if (showPingOpt != null && showPingOpt.boolValue) defaultText.append(" | ").append(currentPing).append("ms");
+            float nameW = text.measure(nameStr, 14f * s);
+            float defW = defaultText.length() > 0 ? text.measure(defaultText.toString(), 12f * s) : 0f;
+            targetWidth = (nameW + defW + DEFAULT_TEXT_PAD) * s;
+            targetHeight = (12f + 8f) * s; // 原版: FontManager.axiforma20.getHeight() + 8
+        } else {
+            // 有内容：取最大宽度 + 总高度（不加额外 padding，原版直接用 getMaxWidth/getTotalHeight）
             float maxW = 0f;
             float totalH = 0f;
             for (IslandContent ic : contents) {
                 if (ic.width > maxW) maxW = ic.width;
                 totalH += ic.height;
             }
-            targetWidth = maxW + 20f * s;
-            targetHeight = totalH + 10f * s;
-        } else {
-            // 默认状态：客户端名 + FPS + Ping
-            StringBuilder defaultText = new StringBuilder();
-            if (showFpsOpt != null && showFpsOpt.boolValue) defaultText.append(" | ").append(currentFps).append("fps");
-            if (showPingOpt != null && showPingOpt.boolValue) defaultText.append(" | ").append(currentPing).append("ms");
-            String nameStr = "Rlin";
-            float nameW = text.measure(nameStr, 14f * s);
-            float defW = defaultText.length() > 0 ? text.measure(defaultText.toString(), 12f * s) : 0f;
-            targetWidth = nameW + defW + 30f * s;
-            targetHeight = DEFAULT_HEIGHT * s;
+            targetWidth = maxW;
+            targetHeight = totalH;
         }
 
-        // 平滑过渡（速度 0.5，约 0.2 秒内完成大部分变化）
-        currentWidth = smoothAnim(currentWidth, targetWidth, 0.5f, dt);
-        currentHeight = smoothAnim(currentHeight, targetHeight, 0.5f, dt);
+        // 平滑过渡（原版 AnimationUtil.smooth，speed=0.2f）
+        currentWidth = smooth(currentWidth, targetWidth, 0.2f);
+        currentHeight = smooth(currentHeight, targetHeight, 0.2f);
 
-        // 位置居中
-        targetX = (screenW - currentWidth) / 2f;
-        renderX = smoothAnim(renderX, targetX, 0.5f, dt);
+        // 位置居中（原版 AnimationUtil.smooth）
+        float targetX = (screenW - currentWidth) / 2f;
+        renderX = smooth(renderX, targetX, 0.2f);
 
-        // ---- 渲染（1:1 还原原版三层结构）----
-        // 原版: addBlur(black rect) → addBloom(black rect) → drawRoundedRect(black, alpha=130)
+        // ---- 渲染（原版三层结构）----
         float islandX = renderX;
         float islandY = ISLAND_Y * s;
         float islandW = currentWidth;
         float islandH = currentHeight;
         float cornerR = CORNER_RADIUS * s;
 
-        // 1. 背景模糊（可选）：捕获世界场景 → 模糊 → 毛玻璃面板裁剪
+        // 1. 背景模糊（可选）
         boolean blurBg = blurBgOpt != null && blurBgOpt.boolValue;
         if (blurBg) {
             blur.captureAndBlur(worldSceneDrawer);
@@ -240,16 +243,12 @@ public class DynamicIslandRenderer {
                     new float[]{0.02f, 0.02f, 0.02f, 0.5f}, a, sw, sh);
         }
 
-        // 2. 边缘模糊 (bloom)：捕获黑色形状 → 模糊 → alpha混合绘制柔和暗光晕
-        //    用 drawGlow (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) 而非 drawGlowColor (GL_ONE,GL_ONE)
-        //    因为黑色 RGB=0 在叠加混合下不可见，必须用 alpha 混合
+        // 2. 边缘模糊 (bloom)：原版 addBlur + addBloom
         blur.captureAndBlurTransparent(() -> {
             quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 1f});
             quad.flush(sw, sh);
         });
-        // 第一层：较大范围的暗光晕（原版 addBlur）
         blur.drawGlow(new float[]{0f, 0f, 0f, 0.5f * a}, sw, sh);
-        // 第二层：更紧凑的暗光晕（原版 addBloom，用 captureAndBlurTransparentTight 做更强扩散）
         blur.captureAndBlurTransparentTight(() -> {
             quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 1f});
             quad.flush(sw, sh);
@@ -260,114 +259,148 @@ public class DynamicIslandRenderer {
         quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 0.51f * a});
         quad.flush(sw, sh);
 
-        // 3. 裁剪区域
+        // 4. 裁剪区域
         GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
-        int scissorX = (int) islandX;
-        int scissorY = (int) (screenH - islandY - islandH);
-        int scissorW = (int) islandW;
-        int scissorH = (int) islandH;
-        GLES20.glScissor(scissorX, scissorY, scissorW, scissorH);
+        GLES20.glScissor((int) islandX, (int) (screenH - islandY - islandH),
+                (int) islandW, (int) islandH);
 
-        // 4. 内容渲染
-        if (hasContent) {
-            float contentY = islandY + 5f * s;
-            for (IslandContent ic : contents) {
-                TimedContent tc = ic.timedContent;
-                // 动画方向已在上面处理，这里只取输出值
-                double animProgress = tc.animation.getOutput(tc.timer.getTime(), tc.time);
-                float animAlpha = (float) animProgress;
-
-                // 图标区域
-                float iconSize = 24f * s;
-                float iconX = islandX + 7f * s;
-                float iconY = contentY + 8f * s;
-
-                // 根据类型绘制不同图标
-                float[] iconColor;
-                switch (tc.type) {
-                    case MODULE:
-                        // 模块开关：圆形动画
-                        float modAnim = (float) animProgress;
-                        // 外圈
-                        quad.addRect(iconX, iconY, iconSize, iconSize, iconSize / 2f,
-                                new float[]{0.2f, 0.2f, 0.2f, 0.9f * a * animAlpha});
-                        // 内圈：颜色随开关状态变化
-                        float r = tc.enabled ? 0.3f : 0.5f;
-                        float g = tc.enabled ? 0.56f : 0.5f;
-                        float b = tc.enabled ? 0.33f : 0.5f;
-                        float innerSize = iconSize * 0.7f * (0.3f + 0.7f * modAnim);
-                        float innerX = iconX + (iconSize - innerSize) / 2f;
-                        float innerY2 = iconY + (iconSize - innerSize) / 2f;
-                        quad.addRect(innerX, innerY2, innerSize, innerSize, innerSize / 2f,
-                                new float[]{r, g, b, 0.9f * a * animAlpha});
-                        break;
-                    case SUCCESS:
-                        iconColor = new float[]{0.37f, 0.56f, 0.31f, 0.78f * a * animAlpha};
-                        quad.addRect(iconX, iconY, iconSize, iconSize, 7f * s, iconColor);
-                        // 对号（简化为白色小矩形）
-                        float checkProg = Math.min(1f, (float) animProgress * 1.5f);
-                        float checkSize = iconSize * 0.4f * checkProg;
-                        quad.addRect(iconX + iconSize * 0.25f, iconY + iconSize * 0.45f, checkSize, 2f * s, 1f * s,
-                                new float[]{1f, 1f, 1f, a * animAlpha});
-                        break;
-                    case WARNING:
-                        iconColor = new float[]{0.56f, 0.31f, 0.31f, 0.78f * a * animAlpha};
-                        quad.addRect(iconX, iconY, iconSize, iconSize, 7f * s, iconColor);
-                        // 感叹号
-                        float exProg = Math.min(1f, (float) animProgress * 1.5f);
-                        float exH = iconSize * 0.5f * exProg;
-                        quad.addRect(iconX + iconSize * 0.42f, iconY + iconSize * 0.2f, 2.5f * s, exH, 1f * s,
-                                new float[]{1f, 1f, 1f, a * animAlpha});
-                        quad.addRect(iconX + iconSize * 0.42f, iconY + iconSize * 0.72f, 2.5f * s, 2.5f * s, 1f * s,
-                                new float[]{1f, 1f, 1f, a * animAlpha});
-                        break;
-                    case INFO:
-                        iconColor = new float[]{0.19f, 0.46f, 0.58f, 0.78f * a * animAlpha};
-                        quad.addRect(iconX, iconY, iconSize, iconSize, 7f * s, iconColor);
-                        // i 字母（竖线 + 点）
-                        float iProg = Math.min(1f, (float) animProgress * 1.5f);
-                        float iH = iconSize * 0.4f * iProg;
-                        quad.addRect(iconX + iconSize * 0.42f, iconY + iconSize * 0.15f, 2.5f * s, 2.5f * s, 1f * s,
-                                new float[]{1f, 1f, 1f, a * animAlpha});
-                        quad.addRect(iconX + iconSize * 0.42f, iconY + iconSize * 0.35f, 2.5f * s, iH, 1f * s,
-                                new float[]{1f, 1f, 1f, a * animAlpha});
-                        break;
-                }
-
-                // 标题文字
-                text.draw(tc.title, islandX + 38f * s, contentY + 8f * s, 14f * s,
-                        new float[]{1f, 1f, 1f, a * animAlpha}, sw, sh);
-
-                // 描述文字
-                text.draw(tc.description, islandX + 38f * s, contentY + 23f * s, 12f * s,
-                        new float[]{0.8f, 0.8f, 0.8f, a * animAlpha}, sw, sh);
-
-                contentY += ic.height;
-            }
-        } else {
-            // 默认状态：客户端名称 + FPS + Ping
+        // 5. 内容渲染
+        if (contents.isEmpty() && timedEmpty) {
+            // ---- 默认状态 ----
             String nameStr = "Rlin";
             StringBuilder defText = new StringBuilder();
             if (showFpsOpt != null && showFpsOpt.boolValue) defText.append(" | ").append(currentFps).append("fps");
             if (showPingOpt != null && showPingOpt.boolValue) defText.append(" | ").append(currentPing).append("ms");
             String def = defText.toString();
 
+            // 原版：图标在 renderX，名称在 renderX+22，默认文字在 renderX+39
+            // 简化：不使用自定义字体图标，用文字 "R" 作为图标替代
             float fontSize = 14f * s;
             float defSize = 12f * s;
             float nameW = text.measure(nameStr, fontSize);
             float defW = def.length() > 0 ? text.measure(def, defSize) : 0f;
-            float totalTextW = nameW + defW;
 
-            float startX = islandX + (islandW - totalTextW) / 2f;
+            // 居中
+            float totalW = nameW + defW + 8f * s; // 小间距
+            float startX = islandX + (islandW - totalW) / 2f;
             float textY = islandY + (islandH - fontSize) / 2f + 1f * s;
 
-            // 客户端名（白色粗体）
             text.draw(nameStr, startX, textY, fontSize,
                     new float[]{1f, 1f, 1f, a}, sw, sh);
-            // FPS/Ping（灰色）
             if (def.length() > 0) {
                 text.draw(def, startX + nameW, textY + 1f * s, defSize,
                         new float[]{0.7f, 0.7f, 0.7f, a}, sw, sh);
+            }
+        } else {
+            // ---- 有内容状态 ----
+            // 原版：每条内容用 translate(renderX, renderY, 0) 定位，内部坐标从 (0,0) 开始
+            float contentY = islandY;
+            for (IslandContent ic : contents) {
+                TimedContent tc = ic.timedContent;
+                double anim = tc.animation.getOutput();
+                float animF = (float) anim;
+
+                // 内部坐标基准（相当于原版的 translate 偏移）
+                float baseX = islandX;
+                float baseY = contentY;
+
+                // ---- 图标渲染（原版坐标）----
+                // 原版图标在 (7, 8) 大小 24×24
+                float iconX = baseX + 7f * s;
+                float iconY = baseY + 8f * s;
+                float iconSize = 24f * s;
+                float iconR = 7f * s;
+
+                switch (tc.type) {
+                    case MODULE: {
+                        // 原版 MODULE 开关动画（iOS toggle switch 风格）
+                        // 外圈：(6, 13, 26, 14, 6.5, DARK_GRAY)
+                        float trackX = baseX + 6f * s;
+                        float trackY = baseY + 13f * s;
+                        float trackW = 26f * s;
+                        float trackH = 14f * s;
+                        float trackR = 6.5f * s;
+                        quad.addRect(trackX, trackY, trackW, trackH, trackR,
+                                new float[]{0.25f, 0.25f, 0.25f, a}); // DARK_GRAY
+
+                        // 内圈颜色：从 gray(128,128,128) → green(48,117,147)
+                        // 原版: Color((int)(128-80*a), (int)(128-11*a), (int)(128+19*a), 255)
+                        float r = (128f - 80f * animF) / 255f;
+                        float g = (128f - 11f * animF) / 255f;
+                        float b = (128f + 19f * animF) / 255f;
+                        float innerX = baseX + 7f * s;
+                        float innerY = baseY + 14f * s;
+                        float innerW = 24f * s;
+                        float innerH = 12f * s;
+                        float innerR = 6f * s;
+                        quad.addRect(innerX, innerY, innerW, innerH, innerR,
+                                new float[]{r, g, b, a});
+
+                        // 开关旋钮：(8 + 12*animation, 15, 10, 10, 4.5, DARK_GRAY)
+                        float knobX = baseX + (8f + 12f * animF) * s;
+                        float knobY = baseY + 15f * s;
+                        float knobSize = 10f * s;
+                        float knobR = 4.5f * s;
+                        quad.addRect(knobX, knobY, knobSize, knobSize, knobR,
+                                new float[]{0.25f, 0.25f, 0.25f, a});
+                        break;
+                    }
+                    case SUCCESS: {
+                        // 原版 SUCCESS：绿色圆形 + stencil 填充动画
+                        // Color(95, 143, 80, 200)
+                        quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
+                                new float[]{95f / 255f, 143f / 255f, 80f / 255f, (200f / 255f) * a});
+                        // 填充动画：从左到右填充白色矩形（简化版 stencil）
+                        float fillW = iconSize * animF;
+                        if (fillW > 0) {
+                            quad.addRect(iconX, iconY, fillW, iconSize, 0f,
+                                    new float[]{1f, 1f, 1f, 0.6f * a});
+                        }
+                        break;
+                    }
+                    case WARNING: {
+                        // 原版 WARNING：红色圆形 + stencil 填充动画（从上到下）
+                        // Color(143, 80, 80, 200)
+                        quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
+                                new float[]{143f / 255f, 80f / 255f, 80f / 255f, (200f / 255f) * a});
+                        // 填充动画：从上到下填充
+                        float fillH = iconSize * animF;
+                        if (fillH > 0) {
+                            quad.addRect(iconX, iconY, iconSize, fillH, 0f,
+                                    new float[]{1f, 1f, 1f, 0.6f * a});
+                        }
+                        break;
+                    }
+                    case INFO: {
+                        // 原版 INFO：蓝色圆形 + 十字动画
+                        // Color(48, 117, 147, 200)
+                        quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
+                                new float[]{48f / 255f, 117f / 255f, 147f / 255f, (200f / 255f) * a});
+                        // 竖线：(18.2, 11, 1.5, 18*animation, 0.75, WHITE)
+                        float vBarH = 18f * animF * s;
+                        if (vBarH > 0) {
+                            quad.addRect(iconX + 11.2f * s, iconY + 3f * s, 1.5f * s, vBarH, 0.75f * s,
+                                    new float[]{1f, 1f, 1f, a});
+                        }
+                        // 横线：(10, 19, 18*animation, 1.5, 0.75, WHITE)
+                        float hBarW = 18f * animF * s;
+                        if (hBarW > 0) {
+                            quad.addRect(iconX + 3f * s, iconY + 11f * s, hBarW, 1.5f * s, 0.75f * s,
+                                    new float[]{1f, 1f, 1f, a});
+                        }
+                        break;
+                    }
+                }
+
+                // ---- 标题文字（原版 38, 9, bold 20）----
+                text.draw(tc.title, baseX + 38f * s, baseY + 9f * s, 14f * s,
+                        new float[]{1f, 1f, 1f, a}, sw, sh);
+
+                // ---- 描述文字（原版 38, 24, regular 18）----
+                text.draw(tc.description, baseX + 38f * s, baseY + 24f * s, 12f * s,
+                        new float[]{0.85f, 0.85f, 0.85f, a}, sw, sh);
+
+                contentY += ic.height;
             }
         }
 
@@ -375,12 +408,32 @@ public class DynamicIslandRenderer {
         quad.flush(sw, sh);
     }
 
-    /** 指数平滑（参考 AnimationUtil.smooth）— 帧率无关，速度更快 */
-    private float smoothAnim(float current, float target, float speed, float dt) {
-        // 帧率无关的指数平滑：speed 越大越快
-        // 每秒收敛比例 = 1 - e^(-speed * 10)，speed=0.5 时约 99..3%/秒
-        float factor = 1f - (float) Math.exp(-speed * 10f * dt);
-        return current + (target - current) * Math.max(factor, 0.1f); // 最小每帧 10%
+    // ---- 原版 AnimationUtil.smooth 精确还原 ----
+
+    /**
+     * 原版 AnimationUtil.smooth：
+     * speed = |target - current| * speed
+     * smoothing = max(speed * (deltaTime / 16), 0.15)
+     * if diff > speed: current = max(current - smoothing, target)
+     * else if diff < -speed: current = min(current + smoothing, target)
+     * else: current = target
+     */
+    private float smooth(float current, float target, float speed) {
+        long deltaTime = animDelta;
+        if (deltaTime < 1L) deltaTime = 1L;
+
+        speed = Math.abs(target - current) * speed;
+        float difference = current - target;
+        float smoothing = Math.max(speed * (deltaTime / 16F), 0.15F);
+
+        if (difference > speed) {
+            current = Math.max(current - smoothing, target);
+        } else if (difference < -speed) {
+            current = Math.min(current + smoothing, target);
+        } else {
+            current = target;
+        }
+        return current;
     }
 
     // ---- 内部类 ----
@@ -389,13 +442,11 @@ public class DynamicIslandRenderer {
         final TimedContent timedContent;
         final float width;
         final float height;
-        final int weight;
 
-        IslandContent(TimedContent tc, float width, float height, int weight) {
+        IslandContent(TimedContent tc, float width, float height) {
             this.timedContent = tc;
             this.width = width;
             this.height = height;
-            this.weight = weight;
         }
     }
 
@@ -406,7 +457,6 @@ public class DynamicIslandRenderer {
         final String moduleName;
         boolean enabled;
         long time;
-        boolean exiting = false; // 是否正在退场动画中
         final EaseOutExpoAnim animation;
         final MSTimer timer;
 
@@ -417,90 +467,112 @@ public class DynamicIslandRenderer {
             this.moduleName = moduleName;
             this.enabled = enabled;
             this.time = timeMs;
-            this.animation = new EaseOutExpoAnim(300);
+            // 原版：MODULE 用 300ms，SUCCESS/WARNING/INFO 用 800ms
+            int duration = (type == ContentType.MODULE) ? 300 : 800;
+            this.animation = new EaseOutExpoAnim(duration);
             this.timer = new MSTimer();
-            this.animation.setDirection(AnimDir.FORWARDS); // 入场动画
         }
     }
 
-    /** 方向枚举 */
-    private enum AnimDir {
+    /** 方向枚举（原版 Direction） */
+    private enum Direction {
         FORWARDS, BACKWARDS;
 
-        AnimDir opposite() {
+        Direction opposite() {
             return this == FORWARDS ? BACKWARDS : FORWARDS;
         }
 
-        boolean isForward() {
+        boolean forwards() {
             return this == FORWARDS;
         }
     }
 
-    /** EaseOutExpo 动画实现（参考原版 EaseOutExpo + Animation）
-     *  关键：反向播放时，要从当前进度倒退，而不是从0开始重新播放 */
+    /**
+     * EaseOutExpo 动画实现（1:1 还原原版 Animation + EaseOutExpo）
+     *
+     * 原版关键逻辑：
+     * - setDirection(dir): 如果方向改变，调整 timer 使其从剩余时间开始
+     *   timerUtil.setTime(now - (duration - min(duration, elapsed)))
+     * - getOutput() FORWARDS: equation(t) * endPoint, t = elapsed / duration
+     * - getOutput() BACKWARDS: (1 - equation(t)) * endPoint
+     * - easeOutExpo(x) = x >= 1 ? 1 : 1 - 2^(-10*x)
+     */
     private static class EaseOutExpoAnim {
         private final int duration;
-        private AnimDir direction = AnimDir.FORWARDS;
-        private long startTime;
-        // 反向时的起始进度（方向切换瞬间的进度值），用于从当前进度平滑倒退
-        private float reverseStartProgress = 1f;
-        private long reverseStartTime;
+        private final double endPoint = 1.0;
+        private Direction direction = Direction.FORWARDS;
+        private long lastMS; // AnimTimeUtil.lastMS
 
         EaseOutExpoAnim(int durationMs) {
             this.duration = durationMs;
-            this.startTime = System.currentTimeMillis();
-            this.reverseStartTime = this.startTime;
+            this.lastMS = System.currentTimeMillis();
         }
 
+        /** 原版 reset() */
         void reset() {
-            this.startTime = System.currentTimeMillis();
-            this.reverseStartTime = this.startTime;
-            this.reverseStartProgress = 0f;
+            this.lastMS = System.currentTimeMillis();
         }
 
-        void setDirection(AnimDir dir) {
+        /**
+         * 原版 setDirection(Direction):
+         * 如果方向改变：
+         *   timerUtil.setTime(now - (duration - min(duration, getTime())))
+         * 这使得反向动画从"当前进度的对称点"开始
+         */
+        void setDirection(Direction dir) {
             if (this.direction != dir) {
-                // 记录切换瞬间的当前进度
-                float currentProgress = (float) getOutputRaw(System.currentTimeMillis() - startTime);
-                this.reverseStartProgress = currentProgress;
-                this.reverseStartTime = System.currentTimeMillis();
                 this.direction = dir;
+                long elapsed = getTime();
+                long newTime = System.currentTimeMillis() - ((long) duration - Math.min(duration, elapsed));
+                this.lastMS = newTime;
             }
         }
 
-        boolean isForward() {
-            return direction.isForward();
+        /** 原版 AnimTimeUtil.getTime() */
+        private long getTime() {
+            return System.currentTimeMillis() - lastMS;
         }
 
-        /** 原始进度（不考虑方向） */
-        private double getOutputRaw(long elapsed) {
-            double t = Math.min(1.0, (double) elapsed / duration);
-            return easeOutExpo(t);
+        /** 原版 AnimTimeUtil.hasTimeElapsed(duration) */
+        private boolean isDone() {
+            return getTime() > duration;
         }
 
-        double getOutput(long elapsed, long totalTime) {
-            if (direction.isForward()) {
-                return getOutputRaw(elapsed);
+        /**
+         * 原版 Animation.getOutput():
+         * FORWARDS: if done return endPoint; else equation(t) * endPoint
+         * BACKWARDS: if done return 0; else (1 - equation(t)) * endPoint
+         * t = elapsed / duration
+         */
+        double getOutput() {
+            if (direction.forwards()) {
+                if (isDone()) return endPoint;
+                double t = (double) getTime() / (double) duration;
+                return easeOutExpo(t) * endPoint;
             } else {
-                // 反向：从切换瞬间的进度平滑过渡到0
-                long reverseElapsed = System.currentTimeMillis() - reverseStartTime;
-                double reverseT = Math.min(1.0, (double) reverseElapsed / duration);
-                double eased = easeOutExpo(reverseT);
-                // 从 reverseStartProgress 倒退到 0
-                return reverseStartProgress * (1.0 - eased);
+                if (isDone()) return 0.0;
+                double t = (double) getTime() / (double) duration;
+                return (1.0 - easeOutExpo(t)) * endPoint;
             }
         }
 
+        /** 原版 EaseOutExpo.getEquation(x) */
         private static double easeOutExpo(double x) {
             if (x >= 1.0) return 1.0;
             return 1 - Math.pow(2, -10 * x);
         }
     }
 
-    /** 毫秒计时器 */
+    /** 毫秒计时器（原版 MSTimer） */
     private static class MSTimer {
         private long lastMS = System.currentTimeMillis();
 
+        /** 原版 hasTimePassed(time) */
+        boolean hasTimePassed(long time) {
+            return System.currentTimeMillis() - lastMS > time;
+        }
+
+        /** 原版 getPassedTime() / getTime() */
         long getTime() {
             return System.currentTimeMillis() - lastMS;
         }
