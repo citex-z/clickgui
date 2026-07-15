@@ -274,6 +274,42 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         pendingToastEnabled = enabled;
         spawnToast(text);
     }
+
+    /** 检查模块冲突，触发灵动岛警告 */
+    private void checkModuleConflicts() {
+        if (dynamicIsland == null) return;
+        boolean scaffoldOn = false, killAuraOn = false;
+        for (Category c : categories) {
+            for (ModuleItem m : c.modules) {
+                if (m.name.equals("Scaffold") && m.enabled) scaffoldOn = true;
+                if (m.name.equals("KillAura") && m.enabled) killAuraOn = true;
+            }
+        }
+        if (scaffoldOn && killAuraOn) {
+            dynamicIsland.addWarning("Conflict Detected", "Scaffold and KillAura may conflict");
+        }
+    }
+
+    /** 登录成功时调用，触发灵动岛成功提示 */
+    public void onLoginSuccess() {
+        if (dynamicIsland != null) {
+            dynamicIsland.addSuccess("Login Success", "Welcome back to Rlin");
+        }
+    }
+
+    /** 配置保存成功时调用 */
+    public void onConfigSaved() {
+        if (dynamicIsland != null) {
+            dynamicIsland.addSuccess("Config Saved", "Module settings saved");
+        }
+    }
+
+    /** 配置加载成功时调用 */
+    public void onConfigLoaded() {
+        if (dynamicIsland != null) {
+            dynamicIsland.addSuccess("Config Loaded", "Module settings loaded");
+        }
+    }
     private ModuleItem watermarkSyncToggle, watermarkUnderlineToggle;
     private ModuleItem watermarkShadowToggle;
     private float watermarkShadowToggleRectX, watermarkShadowToggleRectY, watermarkShadowToggleW, watermarkShadowToggleH;
@@ -1212,6 +1248,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 openness.snapTo(0f);
                 ballX = ballRadius + 24f;
                 ballY = ballRadius + 24f;
+                // 登录成功，触发灵动岛提示
+                onLoginSuccess();
             } else if (loginRenderer.isLoginDone()) {
                 hideKeyboard(); // 登录已提交，立刻收起键盘
                 // loginDone 但淡出尚未完成，继续渲染登录界面（淡出中）
@@ -2552,6 +2590,7 @@ private void drawFloatingBall() {
                     spawnModuleToast(activeConfigModule.name, activeConfigModule.enabled);
                     com.visiolab.nativebridge.ModuleHook.onToggle(activeConfigModule);
                     if (dynamicIsland != null) dynamicIsland.addModuleToggle(activeConfigModule.name, activeConfigModule.enabled);
+                    checkModuleConflicts();
                     return;
                 }
                 // 检查滑块拖拽（M3 风格：热区已扩大到 48px 高，直接使用 configSlider 坐标）
@@ -2769,6 +2808,7 @@ private void drawFloatingBall() {
                         spawnModuleToast(m.name, m.enabled);
                         com.visiolab.nativebridge.ModuleHook.onToggle(m);
                         if (dynamicIsland != null) dynamicIsland.addModuleToggle(m.name, m.enabled);
+                        checkModuleConflicts();
                         return;
                     }
                     if ("CARD".equals(type)) {
