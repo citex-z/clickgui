@@ -290,6 +290,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private final TextRenderer text = new TextRenderer();
     private final BlurPipeline blur = new BlurPipeline();
     private DynamicIslandRenderer dynamicIsland;
+    private FloatingHotkeyRenderer floatingHotkeys;
+    private boolean hotkeyEditorOpen = false; // 快捷键编辑器是否打开
+    private String hotkeyEditorInputText = ""; // 编辑器输入的文字
+    private int hotkeyEditorSelectedModule = 0; // 编辑器选中的模块索引
     private float sceneTime = 0f;
     private float frameDt = 0.016f; // 当前帧的 deltaTime，供 drawConfigPage 等子方法使用
 
@@ -432,6 +436,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     public UIRenderer(Context ctx) {
         this.context = ctx;
         this.loginRenderer = new LoginRenderer(ctx);
+        com.visiolab.clickgui.hotkey.HotkeyManager.getInstance().init(ctx);
     }
 
     // ================================================================
@@ -465,6 +470,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                     searchQuery = str;
                 } else if (keyboardTarget == 2) {
                     loginRenderer.setActiveFieldText(str);
+                } else if (keyboardTarget == 3) {
+                    hotkeyEditorInputText = str;
                 }
             }
         });
@@ -489,6 +496,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             String cur = "";
             if (target == 1) cur = searchQuery == null ? "" : searchQuery;
             else if (target == 2) cur = loginRenderer.getActiveFieldText();
+            else if (target == 3) cur = hotkeyEditorInputText;
             hiddenInput.setText(cur);
             int len = cur.length();
             hiddenInput.setSelection(Math.max(0, Math.min(len, len)));
@@ -1264,6 +1272,21 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             dynamicIsland = new DynamicIslandRenderer(quad, text, blur, this::drawWorldScene);
         }
         dynamicIsland.refreshModuleRefs(categories);
+        // 悬浮快捷键初始化
+        if (floatingHotkeys == null) {
+            floatingHotkeys = new FloatingHotkeyRenderer(quad, text);
+        }
+        floatingHotkeys.setCategories(categories);
+        // 查找 Hotkeys 模块
+        for (Category c : categories) {
+            if (!c.name.equals("Client")) continue;
+            for (ModuleItem m : c.modules) {
+                if (m.name.equals("Hotkeys")) {
+                    floatingHotkeys.setHotkeysModule(m);
+                    break;
+                }
+            }
+        }
         updateHudAnimations(dt);
         // UI 元素动画更新
         sidebarIndicatorY.setTarget(sidebarIndicatorTargetY);
@@ -1280,6 +1303,14 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         // 灵动岛：最上层渲染
         if (dynamicIsland != null) {
             dynamicIsland.update(frameDt, screenW, screenH, uiScale);
+        }
+        // 悬浮快捷键：最上层
+        if (floatingHotkeys != null) {
+            floatingHotkeys.render(frameDt, screenW, screenH, uiScale);
+        }
+        // 快捷键编辑器：最高层
+        if (hotkeyEditorOpen) {
+            drawHotkeyEditor(guiOpenAnim.get());
         }
 
         // 长按展开已由卡片箭头点击替代，不再需要
@@ -1474,6 +1505,18 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 float m3TouchY = curY + rowH / 2f - m3TouchH / 2f;
                 configOptionRects.add(new Object[]{new float[]{m3TrackX, m3TouchY, m3TrackW, m3TouchH}, oi, ModuleItem.ConfigOption.TYPE_SLIDER});
                 curY += rowH + rowGap;
+            } else if (opt.type == ModuleItem.ConfigOption.TYPE_BUTTON) {
+                // 按钮配置项：全宽按钮，统一风格
+                float btnX = trackX + pad;
+                float btnW = contentW;
+                float btnH = rowH;
+                float btnY = curY;
+                quad.addRect(btnX, btnY, btnW, btnH, 8f * uiScale,
+                        withAlpha(SOUTH_MODULE_BG, alpha));
+                quad.flush(sw, sh);
+                // 注册热区
+                configOptionRects.add(new Object[]{new float[]{btnX, btnY, btnW, btnH}, oi, ModuleItem.ConfigOption.TYPE_BUTTON});
+                curY += rowH + rowGap;
             }
         }
 
@@ -1590,6 +1633,20 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 text.draw(valStr, contentX + contentW - 14f * uiScale - valW,
                         curY + rowH / 2f - valSize * 0.5f, valSize, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
                 curY += rowH + rowGap;
+            }
+        }
+
+        // 按钮行
+        if (m.options != null) {
+            for (ModuleItem.ConfigOption opt : m.options) {
+                if (opt.type == ModuleItem.ConfigOption.TYPE_BUTTON) {
+                    String label = Category.localizedName(opt.label, langZh);
+                    float labelW = text.measure(label, 14f * uiScale);
+                    float labelX = contentX + (contentW - labelW) / 2f;
+                    float labelY = curY + rowH / 2f - 14f * uiScale * 0.5f;
+                    text.draw(label, labelX, labelY, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+                    curY += rowH + rowGap;
+                }
             }
         }
 
@@ -2158,6 +2215,237 @@ private void drawFloatingBall() {
         // 调色板文字已迁移至配置页（drawConfigPageText 内绘制），卡片网格不再绘制"主题色"标签
     }
 
+    // ---------------- 快捷键编辑器 ----------------
+
+    private void drawHotkeyEditor(float alpha) {
+        float sw = screenW;
+        float sh = screenH;
+        // 遮罩
+        quad.addRect(0, 0, sw, sh, 0, new float[]{0f, 0f, 0f, 0.5f * alpha});
+        quad.flush((int) sw, (int) sh);
+
+        float dialogW = 300f * uiScale;
+        float dialogH = 380f * uiScale;
+        float dialogX = (sw - dialogW) / 2f;
+        float dialogY = (sh - dialogH) / 2f;
+        float radius = 16f * uiScale;
+
+        // 对话框背景
+        quad.addRect(dialogX, dialogY, dialogW, dialogH, radius, withAlpha(SOUTH_PANEL_BG, alpha));
+        quad.flush((int) sw, (int) sh);
+
+        float curY = dialogY + 16f * uiScale;
+        // 标题
+        String title = "Hotkeys Editor";
+        float titleW = text.measure(title, 16f * uiScale);
+        text.draw(title, dialogX + (dialogW - titleW) / 2f, curY, 16f * uiScale,
+                withAlpha(SOUTH_TEXT_WHITE, alpha), (int) sw, (int) sh);
+        curY += 28f * uiScale;
+
+        // 分割线
+        quad.addRect(dialogX + 12f * uiScale, curY, dialogW - 24f * uiScale, 1f * uiScale, 0.5f,
+                withAlpha(SOUTH_CARD_BORDER, alpha));
+        quad.flush((int) sw, (int) sh);
+        curY += 8f * uiScale;
+
+        // 已有快捷键列表
+        com.visiolab.clickgui.hotkey.HotkeyManager mgr = com.visiolab.clickgui.hotkey.HotkeyManager.getInstance();
+        java.util.List<com.visiolab.clickgui.hotkey.HotkeyItem> hks = mgr.getHotkeys();
+        if (hks.isEmpty()) {
+            String empty = "No hotkeys yet. Add one below.";
+            float emptyW = text.measure(empty, 12f * uiScale);
+            text.draw(empty, dialogX + (dialogW - emptyW) / 2f, curY + 20f * uiScale, 12f * uiScale,
+                    withAlpha(SOUTH_TEXT_DIM3, alpha), (int) sw, (int) sh);
+            curY += 50f * uiScale;
+        } else {
+            for (int i = 0; i < hks.size(); i++) {
+                com.visiolab.clickgui.hotkey.HotkeyItem hk = hks.get(i);
+                float rowH = 30f * uiScale;
+                float rowX = dialogX + 12f * uiScale;
+                float rowW = dialogW - 24f * uiScale;
+                // 行背景
+                quad.addRect(rowX, curY, rowW, rowH, 6f * uiScale, withAlpha(SOUTH_MODULE_BG, alpha));
+                quad.flush((int) sw, (int) sh);
+                // 文字
+                String displayText = hk.displayText;
+                if (displayText.length() > 12) displayText = displayText.substring(0, 11) + "..";
+                text.draw(displayText, rowX + 8f * uiScale, curY + 8f * uiScale, 13f * uiScale,
+                        withAlpha(SOUTH_TEXT_WHITE, alpha), (int) sw, (int) sh);
+                // 绑定模块名（灰色）
+                String modName = hk.boundModuleName;
+                if (modName.length() > 10) modName = modName.substring(0, 9) + "..";
+                text.draw(modName, rowX + 100f * uiScale, curY + 8f * uiScale, 12f * uiScale,
+                        withAlpha(SOUTH_TEXT_DIM2, alpha), (int) sw, (int) sh);
+                // 删除按钮
+                float delX = rowX + rowW - 24f * uiScale;
+                float delY = curY + 4f * uiScale;
+                float delSize = 22f * uiScale;
+                quad.addRect(delX, delY, delSize, delSize, 4f * uiScale,
+                        new float[]{0.56f, 0.31f, 0.31f, 0.8f * alpha});
+                quad.flush((int) sw, (int) sh);
+                text.draw("X", delX + 7f * uiScale, delY + 4f * uiScale, 14f * uiScale,
+                        new float[]{1f, 1f, 1f, alpha}, (int) sw, (int) sh);
+                curY += rowH + 4f * uiScale;
+            }
+        }
+
+        // 底部新建区域
+        curY = dialogY + dialogH - 110f * uiScale;
+        // 分割线
+        quad.addRect(dialogX + 12f * uiScale, curY, dialogW - 24f * uiScale, 1f * uiScale, 0.5f,
+                withAlpha(SOUTH_CARD_BORDER, alpha));
+        quad.flush((int) sw, (int) sh);
+        curY += 10f * uiScale;
+
+        // 输入框（显示当前输入文字）
+        float inputX = dialogX + 12f * uiScale;
+        float inputW = dialogW - 24f * uiScale;
+        float inputH = 32f * uiScale;
+        quad.addRect(inputX, curY, inputW, inputH, 6f * uiScale, withAlpha(SOUTH_SEARCH_BG, alpha));
+        quad.flush((int) sw, (int) sh);
+        String inputDisplay = hotkeyEditorInputText.isEmpty() ? "Enter name..." : hotkeyEditorInputText;
+        float[] inputColor = hotkeyEditorInputText.isEmpty() ? withAlpha(SOUTH_TEXT_DIM3, alpha) : withAlpha(SOUTH_TEXT_WHITE, alpha);
+        text.draw(inputDisplay, inputX + 8f * uiScale, curY + 10f * uiScale, 13f * uiScale,
+                inputColor, (int) sw, (int) sh);
+        curY += inputH + 6f * uiScale;
+
+        // 模块选择 + 添加按钮
+        // 收集所有模块名
+        java.util.List<String> allModuleNames = new java.util.ArrayList<>();
+        for (Category c : categories) {
+            for (ModuleItem mm : c.modules) {
+                allModuleNames.add(mm.name);
+            }
+        }
+        if (hotkeyEditorSelectedModule >= allModuleNames.size()) hotkeyEditorSelectedModule = 0;
+
+        // 当前选中模块
+        String selMod = allModuleNames.isEmpty() ? "None" : allModuleNames.get(hotkeyEditorSelectedModule);
+        float selX = inputX;
+        float selW = inputW * 0.6f;
+        quad.addRect(selX, curY, selW, 28f * uiScale, 6f * uiScale, withAlpha(SOUTH_MODULE_BG, alpha));
+        quad.flush((int) sw, (int) sh);
+        text.draw("Mod: " + selMod, selX + 8f * uiScale, curY + 8f * uiScale, 12f * uiScale,
+                withAlpha(SOUTH_TEXT_WHITE, alpha), (int) sw, (int) sh);
+
+        // 添加按钮
+        float addX = inputX + selW + 6f * uiScale;
+        float addW = inputW - selW - 6f * uiScale;
+        quad.addRect(addX, curY, addW, 28f * uiScale, 6f * uiScale,
+                new float[]{0.30f, 0.56f, 0.33f, 0.9f * alpha});
+        quad.flush((int) sw, (int) sh);
+        String addLabel = "Add";
+        float addLabelW = text.measure(addLabel, 13f * uiScale);
+        text.draw(addLabel, addX + (addW - addLabelW) / 2f, curY + 8f * uiScale, 13f * uiScale,
+                new float[]{1f, 1f, 1f, alpha}, (int) sw, (int) sh);
+
+        // 关闭按钮（右上角）
+        float closeX = dialogX + dialogW - 30f * uiScale;
+        float closeY = dialogY + 10f * uiScale;
+        float closeSize = 24f * uiScale;
+        quad.addRect(closeX, closeY, closeSize, closeSize, 4f * uiScale,
+                new float[]{0.56f, 0.31f, 0.31f, 0.8f * alpha});
+        quad.flush((int) sw, (int) sh);
+        text.draw("X", closeX + 7f * uiScale, closeY + 4f * uiScale, 14f * uiScale,
+                new float[]{1f, 1f, 1f, alpha}, (int) sw, (int) sh);
+
+        // 保存对话框区域用于触摸检测
+        hotkeyEditorDialogRect = new float[]{dialogX, dialogY, dialogW, dialogH};
+    }
+
+    private float[] hotkeyEditorDialogRect;
+
+    private void handleHotkeyEditorTouch(MotionEvent event, float ex, float ey, int action) {
+        if (action != MotionEvent.ACTION_DOWN && action != MotionEvent.ACTION_UP) {
+            if (action == MotionEvent.ACTION_MOVE) return; // 编辑器不处理拖动
+            return;
+        }
+        if (action == MotionEvent.ACTION_DOWN) return; // 只处理 UP（点击）
+
+        float[] dr = hotkeyEditorDialogRect;
+        if (dr == null) return;
+        float dialogX = dr[0], dialogY = dr[1], dialogW = dr[2], dialogH = dr[3];
+
+        // 点击遮罩区域关闭
+        if (ex < dialogX || ex > dialogX + dialogW || ey < dialogY || ey > dialogY + dialogH) {
+            hotkeyEditorOpen = false;
+            hideKeyboard();
+            return;
+        }
+
+        // 关闭按钮
+        float closeX = dialogX + dialogW - 30f * uiScale;
+        float closeY = dialogY + 10f * uiScale;
+        float closeSize = 24f * uiScale;
+        if (ex >= closeX && ex <= closeX + closeSize && ey >= closeY && ey <= closeY + closeSize) {
+            hotkeyEditorOpen = false;
+            hideKeyboard();
+            return;
+        }
+
+        // 收集所有模块名
+        java.util.List<String> allModuleNames = new java.util.ArrayList<>();
+        for (Category c : categories) {
+            for (ModuleItem mm : c.modules) {
+                allModuleNames.add(mm.name);
+            }
+        }
+
+        // 模块选择区域（点击循环切换）
+        float inputX = dialogX + 12f * uiScale;
+        float inputW = dialogW - 24f * uiScale;
+        float selX = inputX;
+        float selW = inputW * 0.6f;
+        float selY = dialogY + dialogH - 56f * uiScale;
+        if (ex >= selX && ex <= selX + selW && ey >= selY && ey <= selY + 28f * uiScale) {
+            if (!allModuleNames.isEmpty()) {
+                hotkeyEditorSelectedModule = (hotkeyEditorSelectedModule + 1) % allModuleNames.size();
+            }
+            return;
+        }
+
+        // 添加按钮
+        float addX = inputX + selW + 6f * uiScale;
+        float addW = inputW - selW - 6f * uiScale;
+        if (ex >= addX && ex <= addX + addW && ey >= selY && ey <= selY + 28f * uiScale) {
+            if (!hotkeyEditorInputText.isEmpty() && !allModuleNames.isEmpty()) {
+                com.visiolab.clickgui.hotkey.HotkeyManager.getInstance().addHotkey(
+                        new com.visiolab.clickgui.hotkey.HotkeyItem(
+                                hotkeyEditorInputText,
+                                allModuleNames.get(hotkeyEditorSelectedModule)));
+                hotkeyEditorInputText = "";
+            }
+            return;
+        }
+
+        // 输入框：唤出键盘输入
+        float inputY = selY - 32f * uiScale - 6f * uiScale;
+        if (ex >= inputX && ex <= inputX + inputW && ey >= inputY && ey <= inputY + 32f * uiScale) {
+            showKeyboard(3);
+            return;
+        }
+
+        // 删除按钮
+        com.visiolab.clickgui.hotkey.HotkeyManager mgr = com.visiolab.clickgui.hotkey.HotkeyManager.getInstance();
+        java.util.List<com.visiolab.clickgui.hotkey.HotkeyItem> hks = mgr.getHotkeys();
+        if (!hks.isEmpty()) {
+            float listStartY = dialogY + 52f * uiScale;
+            for (int i = 0; i < hks.size(); i++) {
+                float rowY = listStartY + i * (30f * uiScale + 4f * uiScale);
+                if (rowY > selY - 40f * uiScale) break;
+                float rowX = dialogX + 12f * uiScale;
+                float rowW = dialogW - 24f * uiScale;
+                float delX = rowX + rowW - 24f * uiScale;
+                float delY = rowY + 4f * uiScale;
+                float delSize = 22f * uiScale;
+                if (ex >= delX && ex <= delX + delSize && ey >= delY && ey <= delY + delSize) {
+                    mgr.removeHotkey(i);
+                    return;
+                }
+            }
+        }
+    }
+
     // ---------------- 触摸交互 ----------------
 
     public void onTouch(MotionEvent event) {
@@ -2184,6 +2472,19 @@ private void drawFloatingBall() {
                 hideKeyboard();
             }
             return;
+        }
+
+        // 快捷键编辑器：打开时拦截所有触摸事件
+        if (hotkeyEditorOpen) {
+            handleHotkeyEditorTouch(event, ex, ey, action);
+            return;
+        }
+
+        // 悬浮快捷键：优先处理（在 ClickGUI 之上）
+        if (floatingHotkeys != null) {
+            if (floatingHotkeys.onTouchEvent(event, uiScale, (int) screenW, (int) screenH)) {
+                return; // 事件被快捷键消费
+            }
         }
 
         // 悬浮球：拖动改变位置；如果没怎么移动就当成一次点击，用来开关整个面板
@@ -2306,6 +2607,11 @@ private void drawFloatingBall() {
                             draggingOptionSliderW = rect[2];
                             float t = (ex - rect[0]) / rect[2];
                             opt.sliderValue = Math.max(0f, Math.min(1f, t));
+                        } else if (optType == ModuleItem.ConfigOption.TYPE_BUTTON) {
+                            // 按钮点击：打开快捷键编辑器
+                            if ("Edit Hotkeys...".equals(opt.label)) {
+                                hotkeyEditorOpen = true;
+                            }
                         }
                         return;
                     }

@@ -199,6 +199,9 @@ public class Category {
                 .addSlider("Duration", 3, 2, 8, "s")
                 .addSlider("Scale", 1, 0.7f, 1.5f, "x")
         );
+        client.add(new ModuleItem("Hotkeys", "Floating quick-toggle buttons", true)
+                .addButton("Edit Hotkeys...")
+        );
         client.add(new ModuleItem("Radar", "Entity radar HUD", false)
                 .addDropdown("Shape", new String[]{"Circle", "Square"}, 0)
                 .addSlider("Range", 50, 10, 200, "blocks"));

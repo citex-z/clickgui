@@ -68,6 +68,12 @@ public class ModuleItem {
         return this;
     }
 
+    /** 添加一个按钮配置项（点击触发动作） */
+    public ModuleItem addButton(String label) {
+        options.add(new ConfigOption(label, ConfigOption.TYPE_BUTTON, null, 0f));
+        return this;
+    }
+
     public float getRealValue() {
         return sliderMin + (sliderMax - sliderMin) * sliderValue;
     }
@@ -77,6 +83,7 @@ public class ModuleItem {
         public static final int TYPE_DROPDOWN = 0;
         public static final int TYPE_SWITCH = 1;
         public static final int TYPE_SLIDER = 2;
+        public static final int TYPE_BUTTON = 3; // 按钮（点击触发动作）
 
         public final String label;
         public final int type;
