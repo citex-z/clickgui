@@ -45,18 +45,18 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private static final float[] WORLD_BG = {0.04f, 0.05f, 0.06f, 1f};
     private static final float[] KNOB_COLOR = {1f, 1f, 1f, 1f}; // 拖钮/滑块圆点固定用白色，不跟随主题切换（否则浅色主题下会变黑看不清）
     // ---- 南方客户端真实颜色 (from source: Colors.java + SouthsideDarkStyle.java) ----
-    private static final float[] HDR_BG = {0.094f, 0.086f, 0.090f, 1f};           // #181818 标题栏 (SouthsideDarkStyle topBar)
-    private static final float[] SOUTH_SIDEBAR_BG = {0.082f, 0.082f, 0.090f, 0.945f}; // #151617 95%
-    private static final float[] SOUTH_PANEL_BG = {0.082f, 0.082f, 0.090f, 1f};    // #151617
+    private static final float[] HDR_BG = {0.22f, 0.22f, 0.22f, 1f};               // #383838 标题栏（浅灰）
+    private static final float[] SOUTH_SIDEBAR_BG = {0.18f, 0.18f, 0.18f, 0.95f};  // #2E2E2E 侧栏
+    private static final float[] SOUTH_PANEL_BG = {0.15f, 0.15f, 0.15f, 1f};       // #262626 面板背景
     private static final float[] SOUTH_CARD_BORDER = {0.20f, 0.20f, 0.20f, 1f};    // #333333
     private static final float[] SOUTH_CARD_BORDER_SEL = {0.85f, 0.85f, 0.85f, 1f}; // #D9D9D9 白灰选中
-    private static final float[] SOUTH_SEARCH_BG = {0.16f, 0.16f, 0.16f, 1f};      // #292929
+    private static final float[] SOUTH_SEARCH_BG = {0.22f, 0.22f, 0.22f, 1f};      // #383838
     private static final float[] SOUTH_TRACK_OFF = {0.18f, 0.18f, 0.18f, 1f};      // #2E2E2E
     private static final float[] SOUTH_TAB_OFF = {0.35f, 0.35f, 0.35f, 1f};        // #595959
     private static final float[] SOUTH_SECTION_LBL = {0.35f, 0.35f, 0.35f, 1f};     // #595959
     private static final float[] SOUTH_SLIDER_TRACK = {0.16f, 0.16f, 0.16f, 1f};    // #292929
-    private static final float[] SOUTH_MODULE_BG = {0.14f, 0.14f, 0.14f, 1f};       // #242424
-    private static final float[] SOUTH_CARD_BG = {0.094f, 0.094f, 0.094f, 1f};     // #181818
+    private static final float[] SOUTH_MODULE_BG = {0.20f, 0.20f, 0.20f, 1f};       // #333333 配置行背景
+    private static final float[] SOUTH_CARD_BG = {0.16f, 0.16f, 0.16f, 1f};     // #292929 卡片背景
     private static final float[] SOUTH_TOGGLE_ON = {0.85f, 0.85f, 0.85f, 1f};     // #D9D9D9 白灰（替代蓝色）
     private static final float[] SOUTH_TOGGLE_OFF = {0.18f, 0.18f, 0.18f, 1f};      // #2E2E2E
     private static final float[] SOUTH_TEXT_WHITE = {1f, 1f, 1f, 0.8f};             // WHITE_80
@@ -828,8 +828,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
     }
 
-    /** 通知提示：初版玻璃模糊背景+阴影，单行文字，底部进度条。
-     *  从屏幕右侧滑入、贴近右下角；多条垂直堆叠；显示约 2 秒后淡出滑出。 */
+    /** 开关提示：长条镂空玻璃 + 四周发散阴影 + 底部黑色倒计时条。
+     *  真正从屏幕外滑入到贴近右下角的位置；滑出时从"当前所在的位置"继续往屏幕外滑。 */
     private void drawToasts() {
         if (toasts.isEmpty()) return;
 
@@ -837,31 +837,52 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float baseX = screenW - 10f * uiScale - rectW;
         float offDist = Math.max(screenW, screenH) * 0.35f;
 
-        float holdDuration = notificationDurationSlider != null ? (1.0f + notificationDurationSlider.sliderValue * 3.0f) : TOAST_HOLD;
-        float fontSize = 14f * uiScale * (notificationFontSizeSlider != null ? (0.75f + notificationFontSizeSlider.sliderValue * 0.7f) : 1f);
-        float cornerR = 10f * uiScale;
-        float padX = 14f * uiScale;
-        float[] glassTint = {0f, 0f, 0f, 0.45f}; // 深色半透明玻璃
+        // ---- 阴影：所有提示的形状整体画进透明贴图模糊一遍 ----
+        final float fRectW = rectW, fRectH = rectH, fBaseX = baseX, fOffDist = offDist;
+        blur.captureAndBlurTransparent(() -> {
+            for (ToastNotice t : toasts) {
+                float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
+                if (rv <= 0.01f) continue;
+                float slide = (1f - smoothstep(rv)) * fOffDist;
+                float dx = fBaseX + slide, dy = t.posY.get() + slide;
+                quad.addRect(dx, dy, fRectW, fRectH, 10f * uiScale, new float[]{1f, 1f, 1f, rv});
+            }
+            quad.flush(screenW, screenH);
+        });
+        blur.drawGlow(new float[]{0f, 0f, 0f, 0.6f}, screenW, screenH);
 
+        // ---- 镂空玻璃本体：scissor裁剪只在提示范围内重画一遍干净背景 ----
+        for (ToastNotice t : toasts) {
+            float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
+            if (rv <= 0.01f) continue;
+            float slide = (1f - smoothstep(rv)) * offDist;
+            float dx = baseX + slide, dy = t.posY.get() + slide;
+            GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
+            GLES20.glScissor((int) dx, (int) (screenH - (dy + rectH)), (int) rectW, (int) rectH);
+            drawWorldScene();
+            GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        }
+
+        float holdDuration = notificationDurationSlider != null ? (1.0f + notificationDurationSlider.sliderValue * 3.0f) : TOAST_HOLD;
+        float fontSize = 12f * uiScale * (notificationFontSizeSlider != null ? (0.75f + notificationFontSizeSlider.sliderValue * 0.7f) : 1f);
+
+        // ---- 底部黑色倒计时条 + 文字 ----
         for (ToastNotice t : toasts) {
             float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
             if (rv <= 0.01f) continue;
             float slide = (1f - smoothstep(rv)) * offDist;
             float dx = baseX + slide, dy = t.posY.get() + slide;
 
-            // 1) 玻璃模糊背景 + 阴影（初版样式）
-            blur.drawGlassPanel(dx, dy, rectW, rectH, cornerR, glassTint, rv, screenW, screenH);
-
-            // 2) 文字：单行，白色 + 黑色阴影
-            float textY = dy + rectH / 2f - fontSize / 2f;
-            text.draw(t.text, dx + padX + 1f * uiScale, textY + 1.2f * uiScale, fontSize, new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
-            text.draw(t.text, dx + padX, textY, fontSize, new float[]{1f, 1f, 1f, rv}, screenW, screenH);
-
-            // 3) 底部进度条
             float frac = Math.max(0f, Math.min(1f, 1f - (t.age - TOAST_ENTER) / holdDuration));
-            float pbH = 2.5f * uiScale;
-            quad.addRect(dx, dy + rectH - pbH, rectW * frac, pbH, 0f, withAlpha(ACCENT_1, 0.7f * rv));
+            float barH = 2.5f * uiScale;
+            quad.addRect(dx, dy + rectH - barH, rectW * frac, barH, 1.2f * uiScale, new float[]{0f, 0f, 0f, 0.85f * rv});
             quad.flush(screenW, screenH);
+
+            float tw = text.measure(t.text, fontSize);
+            float tx = dx + rectW / 2f - tw / 2f;
+            float ty = dy + rectH / 2f - fontSize / 2f - 2f * uiScale;
+            text.draw(t.text, tx + 1f * uiScale, ty + 1.2f * uiScale, fontSize, new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
+            text.draw(t.text, tx, ty, fontSize, new float[]{1f, 1f, 1f, rv}, screenW, screenH);
         }
     }
 
@@ -1052,7 +1073,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
             GLES20.glScissor((int) clipX, (int) (screenH - (clipY + clipH)), (int) clipW, (int) clipH);
             if (activeConfigModule != null) {
-                drawConfigPageText(drawX, drawY, drawW, drawH, panelAlpha);
+                drawConfigPageText(drawX + pageSlide, drawY, drawW, drawH, panelAlpha);
             } else {
                 drawModuleCardText(drawX, drawY, drawW, drawH, panelAlpha);
             }
