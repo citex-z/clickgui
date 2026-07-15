@@ -273,6 +273,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float radius = 20f; // 面板圆角 (真实南方: 20px)
     private float uiScale = 1f; // 整体控件/字号缩放系数，基准是原始 620x400 设计尺寸
 
+    // ---- HUD 样式系统：为后续多种 ArrayList HUD 样式做准备 ----
+    // 0=Classic(渐变条+竖线), 1=Modern(纯色背景+圆角), 2=Outline(描边无背景)
+    private int arrayListStyle = 0;
+
     // 内容列表的裁剪区域（屏幕坐标，每帧在 drawSidebarAndHeader 里重新计算）
     private float clipX, clipY, clipW, clipH;
     private float maxScroll = 0f;
@@ -286,17 +290,24 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private final List<Object[]> moduleHitRects = new java.util.concurrent.CopyOnWriteArrayList<>();  // rect,type,module
     private final List<float[]> paletteHitRects = new java.util.concurrent.CopyOnWriteArrayList<>();  // x,y,w,h (每个色块一个)
 
-    // ---- 模块展开配置弹窗：点击带滑块的模块整行时，弹出居中的独立配置面板 ----
-    private ModuleItem expandedModule = null;
-    private float[] overlayRect, overlayCloseRect, overlayToggleRect;
-    private float overlaySliderX, overlaySliderW, overlaySliderY, overlaySliderH;
-    private boolean draggingOverlaySlider = false;
-    // 弹窗内容可能比屏幕还高，需要能上下滚动才能够到所有设置项
-    private float overlayScrollOffset = 0f;
-    private float overlayMaxScroll = 0f;
-    private boolean draggingOverlayScroll = false;
-    private float overlayScrollDownY = 0f, overlayScrollStartOffset = 0f;
-    private final Anim overlayOpenness = new Anim(0f, 14f); // 弹窗展开/收起动画，0=收起，1=展开（展开速度适中，关闭速度较快使半透明残影更快消失）
+    // ---- 配置页：点击卡片后内容区切换为配置页（页面切换，非模态弹窗） ----
+    private ModuleItem activeConfigModule = null; // null=卡片网格视图, 非null=配置页视图
+    private float configScrollOffset = 0f;
+    private float configMaxScroll = 0f;
+    private float[] configBackRect = null;     // 面包屑返回按钮热区
+    private float[] configToggleRect = null;   // 配置页内开关热区
+    private float configSliderX, configSliderW, configSliderY, configSliderH;
+    private boolean draggingConfigSlider = false;
+    // 旧弹窗字段保留兼容（标记为废弃，不再使用）
+    @Deprecated private ModuleItem expandedModule = null;
+    @Deprecated private final Anim overlayOpenness = new Anim(0f, 14f);
+    @Deprecated private float[] overlayRect, overlayCloseRect, overlayToggleRect;
+    @Deprecated private float overlaySliderX, overlaySliderW, overlaySliderY, overlaySliderH;
+    @Deprecated private boolean draggingOverlaySlider = false;
+    @Deprecated private float overlayScrollOffset = 0f;
+    @Deprecated private float overlayMaxScroll = 0f;
+    @Deprecated private boolean draggingOverlayScroll = false;
+    @Deprecated private float overlayScrollDownY = 0f, overlayScrollStartOffset = 0f;
 
     private float dragStartY = -1;
     private float scrollStartOffset = 0;
@@ -501,16 +512,17 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
     }
 
-    /** 打开/关闭指定模块的配置面板：齿轮点击和整行长按共用这一份逻辑 */
+    /** 点击卡片：切换到该模块的配置页（页面切换，非弹窗） */
     private void toggleConfigPanelFor(ModuleItem targetM) {
-        if (expandedModule == targetM) {
-            overlayOpenness.setTarget(0f);
-        } else {
-            expandedModule = targetM;
-            overlayScrollOffset = 0f; // 换了个模块，滚动位置重新从顶部开始
-            overlayOpenness.snapTo(0f);
-            overlayOpenness.setTarget(1f);
-        }
+        activeConfigModule = targetM;
+        configScrollOffset = 0f;
+        contentScroll.snapTo(0);
+    }
+
+    /** 返回卡片网格视图 */
+    private void backToCardGrid() {
+        activeConfigModule = null;
+        configScrollOffset = 0f;
     }
 
     /** 模块行的错落进场动画：面板刚展开时，越往下的行越晚出现，带一点回弹和轻微上浮位移。
@@ -560,11 +572,15 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private void drawArrayListHud() {
         if (arrayListToggle != null && !arrayListToggle.enabled) return; // 总开关关掉，整个列表不画
 
-        Category moduleCat = null;
+        // 扫描所有分类，收集所有开启中的模块（不再只看单个 "Module" 分类）
+        List<ModuleItem> allEnabled = new ArrayList<>();
         for (Category c : categories) {
-            if (c.name.equals("Module")) { moduleCat = c; break; }
+            if (c.name.equals("Preferences")) continue; // 偏好设置不算功能模块
+            for (ModuleItem m : c.modules) {
+                if (m.enabled || m.hudAnim.get() > 0.01f) allEnabled.add(m);
+            }
         }
-        if (moduleCat == null) return;
+        if (allEnabled.isEmpty()) return;
 
         float fontSize = (11f + (arrayListFontSizeSlider != null ? arrayListFontSizeSlider.sliderValue : 0.3f) * 9f) * uiScale;
         float barH = fontSize + 10f * uiScale;  // 条形本身就是一整行，稍微高一点，容得下文字上下留白
@@ -579,11 +595,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float bgOpacity = arrayListBgOpacitySlider != null ? (0.15f + arrayListBgOpacitySlider.sliderValue * 0.55f) : 0.38f;
         float shadowSpread = (2f + (arrayListShadowSizeSlider != null ? arrayListShadowSizeSlider.sliderValue : 0.5f) * 10f) * uiScale;
 
-        // 只保留“正在显示”的模块（开启中，或者还没淡出完的）
-        List<ModuleItem> visible = new ArrayList<>();
-        for (ModuleItem m : moduleCat.modules) {
-            if (m.enabled || m.hudAnim.get() > 0.01f) visible.add(m);
-        }
+        // visible 直接复用 allEnabled（已过滤过 enabled/hudAnim）
+        List<ModuleItem> visible = allEnabled;
         if (visible.isEmpty()) return;
 
         // 每一行要显示的完整文字：有参数的模块在名字后面跟一个数值（比如 "Speed 3"），
@@ -817,7 +830,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float a = Math.max(0f, Math.min(1f, watermarkToggle.hudAnim.get()));
         if (a <= 0.01f) return;
 
-        String text2 = "Rlin";
+        String text2 = "SOUTHSIDE";
         float fontSize = (14f + (watermarkFontSizeSlider != null ? watermarkFontSizeSlider.sliderValue : 0.45f) * 20f) * uiScale;
         float tx = (watermarkXSlider != null ? watermarkXSlider.sliderValue : 0.1f) * (screenW * 0.4f);
         float ty = (watermarkYSlider != null ? watermarkYSlider.sliderValue : 0.1f) * (screenH * 0.3f);
@@ -961,175 +974,156 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             drawFooterBar(drawX, drawY, drawW, drawH, panelAlpha);
             quad.flush(screenW, screenH);
 
-            // 5) 模块卡片列表：开启 scissor 裁剪，滑动时超出面板范围的部分不会再画出来
+            // 5) 内容区：根据状态切换卡片网格或配置页
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
             GLES20.glScissor((int) clipX, (int) (screenH - (clipY + clipH)), (int) clipW, (int) clipH);
-            drawModuleCards(drawX, drawY, drawW, drawH, panelAlpha);
+            if (activeConfigModule != null) {
+                drawConfigPage(drawX, drawY, drawW, drawH, panelAlpha);
+            } else {
+                drawModuleCards(drawX, drawY, drawW, drawH, panelAlpha);
+            }
             quad.flush(screenW, screenH);
             GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
 
             drawTextLayer(drawX, drawY, drawW, drawH, panelAlpha);
 
-            // 6) 卡片文字同样要在裁剪区域内画，否则滑动时文字会先于色块溢出面板
+            // 6) 文字层同样要在裁剪区域内画
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
             GLES20.glScissor((int) clipX, (int) (screenH - (clipY + clipH)), (int) clipW, (int) clipH);
-            drawModuleCardText(drawX, drawY, drawW, drawH, panelAlpha);
+            if (activeConfigModule != null) {
+                drawConfigPageText(drawX, drawY, drawW, drawH, panelAlpha);
+            } else {
+                drawModuleCardText(drawX, drawY, drawW, drawH, panelAlpha);
+            }
             GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         }
 
-        // 7) 展开的模块配置弹窗：居中显示，层级在整个面板之上（但仍在悬浮球下面）
-        drawExpandedPanel(panelAlpha);
+        // 7) 配置页已在内容区内绘制（页面切换，非弹窗）
 
         // 8) 悬浮球始终画在最上层，用来开关整个面板
         drawFloatingBall();
     }
 
-    /** 点击带滑块的模块行时弹出的独立配置面板：居中显示，比整个ClickGUI的层级更高 */
-    private void drawExpandedPanel(float alpha) {
-        float ot = Math.max(0f, Math.min(1f, overlayOpenness.get()));
-        // 关键修复：之前只看"当前值是否接近0"就判定为关闭并清空 expandedModule。
-        // 但长按刚触发的那一帧，target 已经被设成1了，value 却还没来得及从0爬升
-        // （因为 overlayOpenness.update() 在这帧更早的地方就跑过一次了），
-        // 这段保护逻辑会把刚刚设好的 expandedModule 立刻清空，弹窗永远打不开。
-        // 必须同时确认"目标也是0"才能真正判定为关闭状态。
-        if (ot < 0.003f && overlayOpenness.getTarget() < 0.5f) {
-            // 动画完全结束，清理关闭状态
-            expandedModule = null;
-            overlayRect = null;
-            overlayCloseRect = null;
-            overlayToggleRect = null;
-            overlaySliderW = 0;
-            overlaySliderH = 0;
-            overlayOpenness.snapTo(0f); // 重置动画当前值，确保下次打开时从0开始
-            return; // 完全收起时跳过绘制
-        }
-        float easedOT = Anim.backEaseOut(ot); // 带回弹的缓出效果
+    /** 配置页：在内容区内绘制模块配置选项（页面切换，非模态弹窗） */
+    private void drawConfigPage(float x, float y, float w, float h, float alpha) {
+        ModuleItem m = activeConfigModule;
+        if (m == null) return;
 
-        // 弹窗缩放：从0.1缩放到1.0，配合backEaseOut缓动，透明度用立方让淡入稍缓、淡出更快（关闭时不会残留半透明残影）
-        float scaledOT = ot * ot * ot * ot; // 四阶：展开时略显延迟（完全展开后才完全可见），关闭时快速消失
-        float overlayScale = 0.1f + 0.9f * easedOT;
-        float overlayAlpha = scaledOT;
+        float sbW = sidebarW * (w / panelW);
+        float pad = 16f * uiScale * (h / panelH);
+        float contentX = x + sbW + pad;
+        float contentW = w - sbW - pad * 2;
+        float hdrH = 72f * uiScale * (h / panelH);
+        float titleH = 30f * uiScale * (h / panelH);
+        float startY = y + hdrH + titleH - configScrollOffset;
 
-        ModuleItem m = expandedModule;
-        if (m == null) return; // 安全兜底（关闭动画中expandedModule应该还在）
+        float rowH = 48f * uiScale * (h / panelH);
+        float rowGap = 8f * uiScale * (h / panelH);
+        float cornerR = 10f * uiScale;
+        float trackX = contentX;
+        float trackW = contentW;
 
-        // 南方风格全内容页：占屏幕 75% 宽度、70% 高度（比旧版小弹窗大很多）
-        float ow = screenW * 0.75f;
-        float headerH = 56f * uiScale;
-        float rowGap = 12f * uiScale;
-        // 内容实际高度：头部 + Enabled 行 + (滑块行) + 描述行 + 底部留白
-        float contentH = headerH + rowGap + 48f * uiScale + rowGap;
-        if (m.hasSlider) contentH += 56f * uiScale + rowGap;
-        contentH += 60f * uiScale + 16f * uiScale;
-        float oh = Math.min(contentH, screenH * 0.70f);
-        overlayMaxScroll = Math.max(0f, contentH - oh);
-        overlayScrollOffset = Math.max(0f, Math.min(overlayScrollOffset, overlayMaxScroll));
+        // 清空配置页热区
+        configToggleRect = null;
+        configSliderX = 0; configSliderW = 0; configSliderY = 0; configSliderH = 0;
 
-        float drawOW = ow * overlayScale;
-        float drawOH = oh * overlayScale;
-        float ox = screenW / 2f - drawOW / 2f;
-        float oy = screenH / 2f - drawOH / 2f - (1f - easedOT) * 26f * uiScale; // 从稍微高一点的位置落下来，加一点方向感
+        float curY = startY;
 
-        // 只有弹窗完全展开时才更新触摸区域（ot接近1时），关闭动画期间不响应触摸
-        if (ot > 0.95f) {
-            overlayRect = new float[]{ox, oy, drawOW, drawOH};
-        } else {
-            overlayRect = null;
-        }
-
-        // 半透明遮罩，透明度也随动画淡入淡出
-        quad.addRect(0, 0, screenW, screenH, 0, new float[]{0f, 0f, 0f, 0.35f * overlayAlpha * alpha});
-        quad.flush(screenW, screenH);
-
-        // 面板背景：南方色 SOUTH_PANEL_BG (#151617)
-        float[] tint = {SOUTH_PANEL_BG[0], SOUTH_PANEL_BG[1], SOUTH_PANEL_BG[2], 0.96f * overlayAlpha * alpha};
-        blur.drawGlassPanel(ox, oy, drawOW, drawOH, 16f * uiScale, tint, overlayAlpha * alpha, screenW, screenH);
-
-        float pad = 16f * uiScale;
-        float closeD = 24f * uiScale;
-        // 关闭按钮（右上角，× 图标，24x24 圆角背景）
-        overlayCloseRect = new float[]{ox + drawOW - pad - closeD, oy + pad, closeD, closeD};
-        quad.addRect(overlayCloseRect[0], overlayCloseRect[1], closeD, closeD, 8f * uiScale, withAlpha(SOUTH_MODULE_BG, overlayAlpha * alpha));
-
-        // 内容区域整体往上滚 overlayScrollOffset 这么多像素——标题和关闭按钮固定在头部，不受滚动影响；
-        // 下面所有配置控件的Y坐标基准都换成 contentOy，超出面板边界的部分靠 scissor 裁掉，不会画出面板外。
-        float contentOy = oy - overlayScrollOffset;
-        int scissorTop = (int) (oy + headerH);
-        int scissorH = Math.max(0, (int) (drawOH - headerH));
-        GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glScissor((int) ox, (int) (screenH - (scissorTop + scissorH)), (int) drawOW, scissorH);
-
-        // === 内容区域：通用的 Enabled 开关 + 滑块 + 描述（南方风格全内容页） ===
-        float trackX = ox + pad;
-        float trackW = drawOW - pad * 2;
-        float enabledRowH = 48f * uiScale;
-        float sliderRowH = 56f * uiScale;
-        float descRowH = 60f * uiScale;
-        float curRowY = contentOy + headerH + rowGap;
-
-        // --- "Enabled" 开关行：左侧标签，右侧 toggle switch ---
-        quad.addRect(trackX, curRowY, trackW, enabledRowH, 10f * uiScale, withAlpha(SOUTH_MODULE_BG, overlayAlpha * alpha));
+        // --- "Enabled" 开关行 ---
+        quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
         float toggleW = 44f * uiScale, toggleH = 22f * uiScale;
-        float toggleX = ox + drawOW - pad - toggleW;
-        float toggleY = curRowY + enabledRowH / 2f - toggleH / 2f;
-        overlayToggleRect = new float[]{toggleX, toggleY, toggleW, toggleH};
+        float toggleX = trackX + trackW - pad - toggleW;
+        float toggleY = curY + rowH / 2f - toggleH / 2f;
+        configToggleRect = new float[]{toggleX, toggleY, toggleW, toggleH};
         m.toggleAnim.setTarget(m.enabled ? 1f : 0f);
         m.toggleAnim.update(0.016f);
         float tst = m.toggleAnim.get();
         float[] tc = mixColor(SOUTH_TOGGLE_OFF, SOUTH_TOGGLE_ON, tst);
-        quad.addRect(toggleX, toggleY, toggleW, toggleH, toggleH / 2f, withAlpha(tc, overlayAlpha * alpha));
+        quad.addRect(toggleX, toggleY, toggleW, toggleH, toggleH / 2f, withAlpha(tc, alpha));
         float tknobD = toggleH - 6f * uiScale;
         float tknobX = toggleX + 3f * uiScale + (toggleW - tknobD - 6f * uiScale) * tst;
-        quad.addRect(tknobX, toggleY + 3f * uiScale, tknobD, tknobD, tknobD / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
-        float enabledRowY = curRowY;
-        curRowY += enabledRowH + rowGap;
+        quad.addRect(tknobX, toggleY + 3f * uiScale, tknobD, tknobD, tknobD / 2f, withAlpha(KNOB_COLOR, alpha));
+        curY += rowH + rowGap;
 
-        // --- 滑块行（仅有滑块的模块才显示）：标签 + 滑块 + 数值 ---
-        float sliderRowY = curRowY;
+        // --- 滑块行（仅有滑块的模块） ---
         if (m.hasSlider) {
-            quad.addRect(trackX, sliderRowY, trackW, sliderRowH, 10f * uiScale, withAlpha(SOUTH_MODULE_BG, overlayAlpha * alpha));
+            quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
             float sTrackH = 14f * uiScale;
             float sTrackX = trackX + 14f * uiScale;
             float sTrackW = trackW - 28f * uiScale;
-            float sTrackY = sliderRowY + sliderRowH / 2f - sTrackH / 2f + 6f * uiScale;
-            quad.addRect(sTrackX, sTrackY, sTrackW, sTrackH, sTrackH / 2f, withAlpha(SOUTH_SLIDER_TRACK, overlayAlpha * alpha));
+            float sTrackY = curY + rowH / 2f - sTrackH / 2f;
+            quad.addRect(sTrackX, sTrackY, sTrackW, sTrackH, sTrackH / 2f, withAlpha(SOUTH_SLIDER_TRACK, alpha));
             float fillW = sTrackW * m.sliderValue;
-            float[][] diag = diagGradient(ACCENT_1, ACCENT_2, overlayAlpha * alpha);
+            float[][] diag = diagGradient(ACCENT_1, ACCENT_2, alpha);
             quad.addRectGradient(sTrackX, sTrackY, Math.max(sTrackH, fillW), sTrackH, sTrackH / 2f, diag[0], diag[1], diag[2], diag[3]);
             float knobD = sTrackH + 10f * uiScale;
             float knobX = sTrackX + fillW - knobD / 2f;
-            quad.addRect(knobX, sTrackY + sTrackH / 2f - knobD / 2f, knobD, knobD, knobD / 2f, withAlpha(KNOB_COLOR, overlayAlpha * alpha));
-            overlaySliderX = sTrackX; overlaySliderW = sTrackW;
-            overlaySliderY = sTrackY; overlaySliderH = sTrackH;
-            curRowY += sliderRowH + rowGap;
-        } else {
-            overlaySliderX = 0; overlaySliderW = 0;
-            overlaySliderY = 0; overlaySliderH = 0;
+            quad.addRect(knobX, sTrackY + sTrackH / 2f - knobD / 2f, knobD, knobD, knobD / 2f, withAlpha(KNOB_COLOR, alpha));
+            configSliderX = sTrackX; configSliderW = sTrackW;
+            configSliderY = sTrackY; configSliderH = sTrackH;
+            curY += rowH + rowGap;
         }
 
         // --- 描述区 ---
-        float descRowY = curRowY;
-        quad.addRect(trackX, descRowY, trackW, descRowH, 10f * uiScale, withAlpha(SOUTH_MODULE_BG, overlayAlpha * alpha));
+        float descH = 80f * uiScale * (h / panelH);
+        quad.addRect(trackX, curY, trackW, descH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
+        curY += descH + rowGap;
 
-        // 形状全部攒完，一次 flush 上屏，再画文字叠在上面（否则批量形状会盖住先画的文字）
-        quad.flush(screenW, screenH);
-
-        // 文字层（可滚动内容）
-        text.draw("Enabled", trackX + 14f * uiScale, enabledRowY + enabledRowH / 2f - 7f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, overlayAlpha * alpha), screenW, screenH);
-        if (m.hasSlider) {
-            text.draw("Value", trackX + 14f * uiScale, sliderRowY + 12f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, overlayAlpha * alpha), screenW, screenH);
-            String valStr = String.format("%.0f%s", m.getRealValue(), m.sliderUnit);
-            float valW = text.measure(valStr, 13f * uiScale);
-            text.draw(valStr, trackX + trackW - 14f * uiScale - valW, sliderRowY + 12f * uiScale, 13f * uiScale, withAlpha(SOUTH_TEXT_DIM2, overlayAlpha * alpha), screenW, screenH);
+        // --- 调色板（仅 Preferences 分类下的 Theme 模块） ---
+        if (m.name.equals("Theme") || m.name.equals("Theme Color")) {
+            float pickerH = accentCardH(h);
+            quad.addRect(trackX, curY, trackW, pickerH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
+            drawColorPicker(trackX, curY, trackW, alpha, h);
+            curY += pickerH + rowGap;
         }
-        text.draw("Description", trackX + 14f * uiScale, descRowY + 12f * uiScale, 12f * uiScale, withAlpha(SOUTH_TEXT_DIM2, overlayAlpha * alpha), screenW, screenH);
-        text.draw(m.description, trackX + 14f * uiScale, descRowY + 30f * uiScale, 12f * uiScale, withAlpha(SOUTH_TEXT_WHITE, overlayAlpha * alpha), screenW, screenH);
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
 
-        // 头部固定区域文字（不受滚动影响）：模块名(大字 18px) + 描述(小字 12px) + 关闭按钮 ×
-        text.draw(m.name, ox + pad, oy + pad, 18f * uiScale, withAlpha(SOUTH_TEXT_WHITE, overlayAlpha * alpha), screenW, screenH);
-        text.draw(m.description, ox + pad, oy + pad + 28f * uiScale, 12f * uiScale, withAlpha(SOUTH_TEXT_DIM2, overlayAlpha * alpha), screenW, screenH);
-        text.draw("\u00D7", overlayCloseRect[0] + closeD / 2f - 5f * uiScale, overlayCloseRect[1] + closeD / 2f - 7f * uiScale, 15f * uiScale, withAlpha(SOUTH_TEXT_WHITE, overlayAlpha * alpha), screenW, screenH);
+        // 计算滚动范围
+        float totalContentH = curY - startY;
+        float visibleH = clipH;
+        configMaxScroll = Math.max(0f, totalContentH - visibleH);
+        configScrollOffset = Math.max(0f, Math.min(configScrollOffset, configMaxScroll));
+    }
+
+    /** 配置页文字层 */
+    private void drawConfigPageText(float x, float y, float w, float h, float alpha) {
+        ModuleItem m = activeConfigModule;
+        if (m == null) return;
+
+        float sbW = sidebarW * (w / panelW);
+        float pad = 16f * uiScale * (h / panelH);
+        float contentX = x + sbW + pad;
+        float contentW = w - sbW - pad * 2;
+        float hdrH = 72f * uiScale * (h / panelH);
+        float titleH = 30f * uiScale * (h / panelH);
+        float startY = y + hdrH + titleH - configScrollOffset;
+
+        float rowH = 48f * uiScale * (h / panelH);
+        float rowGap = 8f * uiScale * (h / panelH);
+        float curY = startY;
+
+        // Enabled 行
+        text.draw("Enabled", contentX + 14f * uiScale, curY + rowH / 2f - 7f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+        curY += rowH + rowGap;
+
+        // 滑块行
+        if (m.hasSlider) {
+            String valStr = String.format("%.1f%s", m.getRealValue(), m.sliderUnit);
+            float valW = text.measure(valStr, 13f * uiScale);
+            text.draw("Value", contentX + 14f * uiScale, curY + 12f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+            text.draw(valStr, contentX + contentW - 14f * uiScale - valW, curY + 12f * uiScale, 13f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
+            curY += rowH + rowGap;
+        }
+
+        // 描述区
+        float descH = 80f * uiScale * (h / panelH);
+        text.draw("Description", contentX + 14f * uiScale, curY + 14f * uiScale, 12f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
+        text.draw(m.description, contentX + 14f * uiScale, curY + 34f * uiScale, 13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+        curY += descH + rowGap;
+
+        // 调色板文字
+        if (m.name.equals("Theme") || m.name.equals("Theme Color")) {
+            text.draw("Color Picker", contentX + 14f * uiScale, curY + 14f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+        }
     }
 
     /** 悬浮球：拖拽移动位置，单击（未拖动）时开关整个 ClickGUI 面板 */
@@ -1257,6 +1251,14 @@ private void drawFloatingBall() {
         quad.addRect(hdrX, y, hdrW, hdrH, 0f, withAlpha(HDR_BG, alpha));
         quad.addRect(hdrX, y, hdrW, radius, 0f, withAlpha(HDR_BG, alpha));
 
+        // 面包屑返回按钮热区（仅在配置页模式下生效；卡片网格模式下置空）
+        if (activeConfigModule != null) {
+            float backW = 220f * uiScale * (w / panelW);
+            configBackRect = new float[]{hdrX, y, backW, hdrH};
+        } else {
+            configBackRect = null;
+        }
+
         // 搜索框 (右侧)
         float searchW = 160f * uiScale * (w / panelW);
         float searchH = 36f * uiScale * (h / panelH);
@@ -1378,15 +1380,7 @@ private void drawFloatingBall() {
             if ((i + 1) % cols == 0) curY += cardH + cardGap;
         }
 
-        // Preferences 分类的取色器
-        if (cat.name.equals("Preferences")) {
-            float cy = curY + cardGap;
-            float accH = accentCardH(h);
-            if (cy + accH >= clipY && cy <= clipY + clipH) {
-                quad.addRect(contentX, cy, contentW, accH, 12f * uiScale, withAlpha(SOUTH_MODULE_BG, alpha));
-                drawColorPicker(contentX, cy, contentW, alpha, h);
-            }
-        }
+        // 调色板已迁移至配置页（drawConfigPage 内绘制），卡片网格不再绘制取色器
     }
     private void drawExpandedCardContent(float x, float y, float w, float h, float alpha, ModuleItem m, float panelHeight) {
         // 南方客户端卡片不内联展开，点击卡片打开独立配置页
@@ -1471,11 +1465,18 @@ private void drawFloatingBall() {
         float hdrH = 72f * uiScale * (h / panelH);
 
         // ---- 标题栏文字 ----
-        text.draw("SOUTHSIDE b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 6f * uiScale,
-                13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         Category curCat = categories.get(currentCategoryIndex);
-        text.draw("\u2190 \u2192 " + curCat.name, x + sbW + 80f * uiScale, y + hdrH / 2f - 5f * uiScale,
-                11f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
+        if (activeConfigModule != null) {
+            // 配置页：显示面包屑导航 "← 分类名 > 模块名"，左侧返回箭头对应 configBackRect 热区
+            String breadcrumb = "\u2190 " + curCat.name + " > " + activeConfigModule.name;
+            text.draw(breadcrumb, x + sbW + 14f * uiScale, y + hdrH / 2f - 6f * uiScale,
+                    13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+        } else {
+            text.draw("SOUTHSIDE b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 6f * uiScale,
+                    13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+            text.draw("\u2190 \u2192 " + curCat.name, x + sbW + 80f * uiScale, y + hdrH / 2f - 5f * uiScale,
+                    11f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
+        }
         if (searchBoxRect != null) {
             String searchText = searchActive ? searchQuery : "\u2315 search...";
             text.draw(searchText, searchBoxRect[0] + 12f * uiScale,
@@ -1598,13 +1599,7 @@ private void drawFloatingBall() {
             if ((i + 1) % cols == 0) curY += cardH + cardGap;
         }
 
-        if (cat.name.equals("Preferences")) {
-            float cy = curY + cardGap;
-            if (cy + accentCardH(h) >= clipY && cy <= clipY + clipH) {
-                text.draw("\u4e3b\u9898\u8272", contentX + 16f * uiScale, cy + 12f * uiScale,
-                        15f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
-            }
-        }
+        // 调色板文字已迁移至配置页（drawConfigPageText 内绘制），卡片网格不再绘制"主题色"标签
     }
 
     // ---------------- 触摸交互 ----------------
@@ -1652,55 +1647,75 @@ private void drawFloatingBall() {
         // 之前是等透明度淡到接近0才屏蔽，淡出尾巴那段时间面板显得"卡住没关掉"。
         if (!guiOpen) return;
 
-        // 展开的模块配置弹窗打开时，独占触摸（模态）：弹窗内处理自己的控件，弹窗外一点就关闭
-        // 关闭动画期间（ot < 0.95f）不独占触摸，允许用户点击其他模块展开
-        float ot = Math.max(0f, Math.min(1f, overlayOpenness.get()));
-        if (expandedModule != null && ot > 0.95f) {
+        // 配置页视图下的触摸处理（页面切换架构：activeConfigModule != null 时独占触摸）
+        if (activeConfigModule != null) {
             if (action == MotionEvent.ACTION_DOWN) {
-                // 关闭按钮（右上角 ×）
-                if (overlayCloseRect != null && inside(ex, ey, overlayCloseRect)) {
+                // 检查返回按钮
+                if (configBackRect != null && inside(ex, ey, configBackRect)) {
+                    backToCardGrid();
+                    return;
+                }
+                // 检查关闭按钮（标题栏右上角）
+                if (closeBtnRect != null && inside(ex, ey, closeBtnRect)) {
+                    guiOpen = false;
                     overlayOpenness.setTarget(0f);
-                    overlayJustClosed = true;
+                    openness.setTarget(0f);
                     return;
                 }
-                // 通用 Enabled 开关点击
-                if (overlayToggleRect != null && inside(ex, ey, overlayToggleRect)) {
-                    expandedModule.enabled = !expandedModule.enabled;
+                // 检查搜索框（配置页模式下搜索框禁用，点击返回卡片视图）
+                if (searchBoxRect != null && inside(ex, ey, searchBoxRect)) {
+                    backToCardGrid();
                     return;
                 }
-                // 通用滑块拖拽（仅带滑块的模块）
-                if (overlaySliderW > 0 && overlaySliderH > 0
-                        && ex >= overlaySliderX - 6f && ex <= overlaySliderX + overlaySliderW + 6f
-                        && ey >= overlaySliderY - 8f && ey <= overlaySliderY + overlaySliderH + 8f) {
-                    draggingOverlaySlider = true;
-                    updateOverlaySliderFromX(ex);
+                // 检查 Enabled 开关
+                if (configToggleRect != null && inside(ex, ey, configToggleRect)) {
+                    activeConfigModule.enabled = !activeConfigModule.enabled;
+                    spawnToast(activeConfigModule.name + (activeConfigModule.enabled ? " ON" : " OFF"));
                     return;
                 }
-                // 面板内空白：开始拖动滚动（内容比可视区域高时）
-                if (overlayRect != null && inside(ex, ey, overlayRect)) {
-                    draggingOverlayScroll = true;
-                    overlayScrollDownY = ey;
-                    overlayScrollStartOffset = overlayScrollOffset;
+                // 检查滑块拖拽
+                if (configSliderW > 0 && ex >= configSliderX && ex <= configSliderX + configSliderW + 20f &&
+                    ey >= configSliderY - 10f && ey <= configSliderY + configSliderH + 10f) {
+                    draggingConfigSlider = true;
+                    float t = (ex - configSliderX) / configSliderW;
+                    activeConfigModule.sliderValue = Math.max(0f, Math.min(1f, t));
                     return;
                 }
-                // 点在弹窗外的遮罩上：关闭
-                overlayOpenness.setTarget(0f);
-                overlayJustClosed = true;
-                return;
-            } else if (action == MotionEvent.ACTION_MOVE) {
-                if (draggingOverlayScroll) {
-                    float dy = ey - overlayScrollDownY;
-                    overlayScrollOffset = Math.max(0f, Math.min(overlayMaxScroll, overlayScrollStartOffset - dy));
-                    return;
-                }
-                if (draggingOverlaySlider) updateOverlaySliderFromX(ex);
-                return;
-            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                draggingOverlaySlider = false;
-                draggingOverlayScroll = false;
+                // 检查配置页内滚动（非配置页时使用卡片滚动逻辑）
+                // 侧栏按钮（配置页模式下也可以切换分类，返回卡片视图）
+            }
+            if (action == MotionEvent.ACTION_MOVE && draggingConfigSlider) {
+                float t = (ex - configSliderX) / configSliderW;
+                activeConfigModule.sliderValue = Math.max(0f, Math.min(1f, t));
                 return;
             }
-            return;
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                draggingConfigSlider = false;
+            }
+
+            // 在配置页模式下，侧栏分类点击仍然生效（切换分类后返回卡片视图）
+            for (int i = 0; i < categoryHitRects.size(); i++) {
+                if (inside(ex, ey, categoryHitRects.get(i))) {
+                    if (currentCategoryIndex != i) {
+                        currentCategoryIndex = i;
+                        activeConfigModule = null; // 切换分类时返回卡片视图
+                        contentScroll.snapTo(0);
+                        configScrollOffset = 0f;
+                    }
+                    return;
+                }
+            }
+
+            // 配置页滚动（垂直滑动）
+            if (action == MotionEvent.ACTION_DOWN) {
+                dragStartY = ey;
+                scrollStartOffset = configScrollOffset;
+            } else if (action == MotionEvent.ACTION_MOVE) {
+                float dy = ey - dragStartY;
+                configScrollOffset = Math.max(0f, Math.min(configMaxScroll, scrollStartOffset - dy));
+                return;
+            }
+            return; // 配置页模式下不继续处理卡片热区
         }
 
         switch (action) {
@@ -1914,75 +1929,7 @@ private void drawFloatingBall() {
         return new float[]{h, s, v};
     }
 
-    private void updateOverlaySliderFromX(float ex) {
-    if (expandedModule == null || overlaySliderW <= 0) return;
-    float v = (ex - overlaySliderX) / overlaySliderW;
-    expandedModule.sliderValue = Math.max(0f, Math.min(1f, v));
-}
-
-/** 更新阴影配置面板中指定索引的滑块值：0=色相，1=大小，2=透明度 */
-private void updateShadowSliderFromX(int si, float ex) {
-    if (overlayRect == null) return;
-    float pad = 16f * uiScale;
-    float trackX = overlayRect[0] + pad;
-    float trackW = overlayRect[2] - pad * 2;
-    float v = (ex - trackX) / trackW;
-    v = Math.max(0f, Math.min(1f, v));
-    if (si == 0 && shadowHueSlider != null) shadowHueSlider.sliderValue = v;
-    else if (si == 1 && shadowSizeSlider != null) shadowSizeSlider.sliderValue = v;
-    else if (si == 2 && shadowOpacitySlider != null) shadowOpacitySlider.sliderValue = v;
-}
-
-private void updateArrayListSliderFromX(int si, float ex) {
-    if (overlayRect == null) return;
-    float pad = 16f * uiScale;
-    float trackX = overlayRect[0] + pad;
-    float trackW = overlayRect[2] - pad * 2;
-    float v = (ex - trackX) / trackW;
-    v = Math.max(0f, Math.min(1f, v));
-    switch (si) {
-        case 0: if (arrayListColor1Slider != null) arrayListColor1Slider.sliderValue = v; break;
-        case 1: if (arrayListColor2Slider != null) arrayListColor2Slider.sliderValue = v; break;
-        case 2: if (arrayListFontSizeSlider != null) arrayListFontSizeSlider.sliderValue = v; break;
-        case 3: if (arrayListBgOpacitySlider != null) arrayListBgOpacitySlider.sliderValue = v; break;
-        case 4: if (arrayListShadowSizeSlider != null) arrayListShadowSizeSlider.sliderValue = v; break;
-        case 5: if (arrayListShadowXSlider != null) arrayListShadowXSlider.sliderValue = v; break;
-        case 6: if (arrayListShadowYSlider != null) arrayListShadowYSlider.sliderValue = v; break;
-        default: if (arrayListFlowSpeedSlider != null) arrayListFlowSpeedSlider.sliderValue = v; break;
-    }
-}
-
-private void updateWatermarkSliderFromX(int si, float ex) {
-    if (overlayRect == null) return;
-    float pad = 16f * uiScale;
-    float trackX = overlayRect[0] + pad;
-    float trackW = overlayRect[2] - pad * 2;
-    float v = (ex - trackX) / trackW;
-    v = Math.max(0f, Math.min(1f, v));
-    switch (si) {
-        case 0: if (watermarkFontSizeSlider != null) watermarkFontSizeSlider.sliderValue = v; break;
-        case 1: if (watermarkXSlider != null) watermarkXSlider.sliderValue = v; break;
-        case 2: if (watermarkYSlider != null) watermarkYSlider.sliderValue = v; break;
-        default: if (watermarkHueSlider != null) watermarkHueSlider.sliderValue = v; break;
-    }
-}
-
-private void updateNotificationSliderFromX(int si, float ex) {
-    if (overlayRect == null) return;
-    float pad = 16f * uiScale;
-    float trackX = overlayRect[0] + pad;
-    float trackW = overlayRect[2] - pad * 2;
-    float v = (ex - trackX) / trackW;
-    v = Math.max(0f, Math.min(1f, v));
-    switch (si) {
-        case 0: if (notificationSizeSlider != null) notificationSizeSlider.sliderValue = v; break;
-        case 1: if (notificationFontSizeSlider != null) notificationFontSizeSlider.sliderValue = v; break;
-        case 2: if (notificationSpacingSlider != null) notificationSpacingSlider.sliderValue = v; break;
-        default: if (notificationDurationSlider != null) notificationDurationSlider.sliderValue = v; break;
-    }
-}
-
-private boolean inside(float px, float py, float[] r) {
+    private boolean inside(float px, float py, float[] r) {
         return px >= r[0] && px <= r[0] + r[2] && py >= r[1] && py <= r[1] + r[3];
     }
 
