@@ -249,9 +249,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
     /** 模块开关提示：显示 "某某某模块已启用/已禁用"，不再出现 "ON"/"OFF" */
     private void spawnModuleToast(String moduleName, boolean enabled) {
-        String dispName = Category.localizedName(moduleName, langZh);
-        String text = dispName + " " + t("已启用", "enabled");
-        if (!enabled) text = dispName + " " + t("已禁用", "disabled");
+        String text = moduleName + (enabled ? " enabled" : " disabled");
         pendingToastEnabled = enabled;
         spawnToast(text);
     }
@@ -830,8 +828,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
     }
 
-    /** 通知提示（南方客户端风格）：100%透明背景 + 外围深色柔光阴影 + 左侧图标(✓/✗) + 两行文字 + 底部蓝色进度条。
-     *  不画任何背景矩形，仅通过 blur 系统在通知形状外围生成一圈深色阴影让通知从背景中"浮起"。
+    /** 通知提示：初版玻璃模糊背景+阴影，单行文字，底部进度条。
      *  从屏幕右侧滑入、贴近右下角；多条垂直堆叠；显示约 2 秒后淡出滑出。 */
     private void drawToasts() {
         if (toasts.isEmpty()) return;
@@ -841,18 +838,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float offDist = Math.max(screenW, screenH) * 0.35f;
 
         float holdDuration = notificationDurationSlider != null ? (1.0f + notificationDurationSlider.sliderValue * 3.0f) : TOAST_HOLD;
-        float titleSize = 14f * uiScale;
-        float msgSize = 12f * uiScale;
-        float cornerR = 8f * uiScale;
-        float iconSize = 20f * uiScale;
+        float fontSize = 14f * uiScale * (notificationFontSizeSlider != null ? (0.75f + notificationFontSizeSlider.sliderValue * 0.7f) : 1f);
+        float cornerR = 10f * uiScale;
         float padX = 14f * uiScale;
-        float padY = 10f * uiScale;
-        float lineGap = 3f * uiScale;
-        float iconTextGap = 10f * uiScale;
-        // 重新计算高度：两行文字 + 内边距
-        float contentH = titleSize + lineGap + msgSize;
-        rectH = contentH + padY * 2;
-        final float fRectW = rectW, fRectH = rectH, fCornerR = cornerR;
+        float[] glassTint = {0f, 0f, 0f, 0.45f}; // 深色半透明玻璃
 
         for (ToastNotice t : toasts) {
             float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
@@ -860,51 +849,18 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             float slide = (1f - smoothstep(rv)) * offDist;
             float dx = baseX + slide, dy = t.posY.get() + slide;
 
-            float[] barColor = t.enabled ? TOAST_GREEN : TOAST_RED;
+            // 1) 玻璃模糊背景 + 阴影（初版样式）
+            blur.drawGlassPanel(dx, dy, rectW, rectH, cornerR, glassTint, rv, screenW, screenH);
 
-            // 1) 外围深色阴影：在透明贴图上画形状，模糊后叠加成柔光阴影
-            // 不画背景矩形，只通过 blur 系统在外围生成阴影
-            final float sDx = dx, sDy = dy, sRv = rv;
-            blur.captureAndBlurTransparentTight(() -> {
-                quad.addRect(sDx, sDy, fRectW, fRectH, fCornerR, new float[]{0f, 0f, 0f, 0.7f * sRv});
-            });
-            blur.drawGlow(new float[]{0f, 0f, 0f, 0.6f * rv}, screenW, screenH);
+            // 2) 文字：单行，白色 + 黑色阴影
+            float textY = dy + rectH / 2f - fontSize / 2f;
+            text.draw(t.text, dx + padX + 1f * uiScale, textY + 1.2f * uiScale, fontSize, new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
+            text.draw(t.text, dx + padX, textY, fontSize, new float[]{1f, 1f, 1f, rv}, screenW, screenH);
 
-            // 不画背景矩形！保持100%透明
-
-            // 2) 左侧图标：✓（启用）或 ✗（禁用）
-            float iconX = dx + padX;
-            float iconY = dy + padY + (contentH - iconSize) / 2f;
-            String iconStr = t.enabled ? "\u2713" : "\u2717";  // ✓ 或 ✗
-            // 图标阴影
-            text.draw(iconStr, iconX + 1f * uiScale, iconY + 1.2f * uiScale, iconSize,
-                    new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
-            text.draw(iconStr, iconX, iconY, iconSize,
-                    new float[]{1f, 1f, 1f, rv}, screenW, screenH);
-
-            // 3) 右侧两行文字
-            float textX = iconX + iconSize + iconTextGap;
-            float titleY = dy + padY;
-
-            // 标题行：固定文字 "Module"（参照南方）
-            text.draw(t("模块", "Module"), textX + 1f * uiScale, titleY + 1.2f * uiScale, titleSize,
-                    new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
-            text.draw(t("模块", "Module"), textX, titleY, titleSize,
-                    new float[]{1f, 1f, 1f, rv}, screenW, screenH);
-
-            // 内容行：模块名 + 启用/禁用
-            float msgY = titleY + titleSize + lineGap;
-            text.draw(t.text, textX + 1f * uiScale, msgY + 1.2f * uiScale, msgSize,
-                    new float[]{0f, 0f, 0f, 0.4f * rv}, screenW, screenH);
-            // 浅灰色文字
-            text.draw(t.text, textX, msgY, msgSize,
-                    new float[]{0.7f, 0.7f, 0.7f, rv}, screenW, screenH);
-
-            // 4) 底部进度条（蓝色，随时间收缩）
+            // 3) 底部进度条
             float frac = Math.max(0f, Math.min(1f, 1f - (t.age - TOAST_ENTER) / holdDuration));
-            float pbH = 2f * uiScale;
-            quad.addRect(dx, dy + rectH - pbH, rectW * frac, pbH, 0f,
-                    withAlpha(ACCENT_1, 0.85f * rv));
+            float pbH = 2.5f * uiScale;
+            quad.addRect(dx, dy + rectH - pbH, rectW * frac, pbH, 0f, withAlpha(ACCENT_1, 0.7f * rv));
             quad.flush(screenW, screenH);
         }
     }
@@ -1252,7 +1208,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float curY = startY;
 
         // Enabled 行
-        text.draw(t("启用", "Enabled"), contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+        text.draw(t("启用", "Enabled"), contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.5f, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         curY += rowH + rowGap;
 
         // 模块额外配置项文字
@@ -1261,7 +1217,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             if (opt.type == ModuleItem.ConfigOption.TYPE_DROPDOWN) {
                 // label 左侧
                 String optLabel = Category.localizedName(opt.label, langZh);
-                text.draw(optLabel, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
+                text.draw(optLabel, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.5f,
                         14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
                 // 当前选中项 + 下拉箭头 ▼ 右侧
                 String curChoice = (opt.dropdownChoices != null && opt.dropdownIndex >= 0
@@ -1270,25 +1226,25 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 float dropSize = 13f * uiScale;
                 float dropW = text.measure(dropText, dropSize);
                 text.draw(dropText, contentX + contentW - 14f * uiScale - dropW,
-                        curY + rowH / 2f - dropSize * 0.4f, dropSize, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
+                        curY + rowH / 2f - dropSize * 0.5f, dropSize, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
                 curY += rowH + rowGap;
             } else if (opt.type == ModuleItem.ConfigOption.TYPE_SWITCH) {
                 // 开关：值由图形层显示，这里只画 label
                 String optLabel = Category.localizedName(opt.label, langZh);
-                text.draw(optLabel, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
+                text.draw(optLabel, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.5f,
                         14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
                 curY += rowH + rowGap;
             } else if (opt.type == ModuleItem.ConfigOption.TYPE_SLIDER) {
                 // label 左侧 + 当前数值右侧
                 String optLabel = Category.localizedName(opt.label, langZh);
-                text.draw(optLabel, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
+                text.draw(optLabel, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.5f,
                         14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
                 String unit = opt.sliderUnit != null ? opt.sliderUnit : "";
                 String valStr = String.format("%.1f%s", opt.getRealSliderValue(), unit);
                 float valSize = 13f * uiScale;
                 float valW = text.measure(valStr, valSize);
                 text.draw(valStr, contentX + contentW - 14f * uiScale - valW,
-                        curY + rowH / 2f - valSize * 0.4f, valSize, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
+                        curY + rowH / 2f - valSize * 0.5f, valSize, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
                 curY += rowH + rowGap;
             }
         }
@@ -1675,23 +1631,23 @@ private void drawFloatingBall() {
         if (activeConfigModule != null) {
             // 配置页：显示面包屑导航 "← 分类名 > 模块名"，左侧返回箭头对应 configBackRect 热区
             String breadcrumb = "\u2190 " + Category.localizedCategory(curCat.name, langZh) + " > " + Category.localizedName(activeConfigModule.name, langZh);
-            text.draw(breadcrumb, x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.4f,
+            text.draw(breadcrumb, x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.5f,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         } else {
-            text.draw(t("Rlin", "Rlin") + " b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.4f,
+            text.draw(t("Rlin", "Rlin") + " b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.5f,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
-            text.draw("\u2190 \u2192 " + Category.localizedCategory(curCat.name, langZh), x + sbW + 80f * uiScale, y + hdrH / 2f - 11f * uiScale * 0.4f,
+            text.draw("\u2190 \u2192 " + Category.localizedCategory(curCat.name, langZh), x + sbW + 80f * uiScale, y + hdrH / 2f - 11f * uiScale * 0.5f,
                     11f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         }
         if (searchBoxRect != null) {
             String searchText = searchActive ? searchQuery : t("\u2315 搜索...", "\u2315 search...");
             text.draw(searchText, searchBoxRect[0] + 12f * uiScale,
-                    searchBoxRect[1] + searchBoxRect[3] / 2f - 10f * uiScale * 0.4f,
+                    searchBoxRect[1] + searchBoxRect[3] / 2f - 10f * uiScale * 0.5f,
                     10f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         }
         if (closeBtnRect != null) {
             text.draw("\u00D7", closeBtnRect[0] + closeBtnRect[2] / 2f - 5f * uiScale,
-                    closeBtnRect[1] + closeBtnRect[3] / 2f - 18f * uiScale * 0.4f,
+                    closeBtnRect[1] + closeBtnRect[3] / 2f - 18f * uiScale * 0.5f,
                     18f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         }
 
@@ -1701,7 +1657,7 @@ private void drawFloatingBall() {
             float langTextSize = 11f * uiScale;
             float langTextW = text.measure(langText, langTextSize);
             text.draw(langText, langBtnRect[0] + langBtnRect[2] / 2f - langTextW / 2f,
-                    langBtnRect[1] + langBtnRect[3] / 2f - langTextSize * 0.4f,
+                    langBtnRect[1] + langBtnRect[3] / 2f - langTextSize * 0.5f,
                     langTextSize, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         }
 
@@ -1728,20 +1684,20 @@ private void drawFloatingBall() {
             float ry = curY;
             boolean sel = i == currentCategoryIndex;
             float[] col = withAlpha(sel ? SOUTH_TEXT_WHITE : SOUTH_TEXT_DIM2, alpha);
-            text.draw(c.icon, x + btnPadX + 8f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.4f, 13f * uiScale, col, screenW, screenH);
-            text.draw(Category.localizedCategory(c.name, langZh), x + btnPadX + 30f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.4f, 13f * uiScale, col, screenW, screenH);
+            text.draw(c.icon, x + btnPadX + 8f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.5f, 13f * uiScale, col, screenW, screenH);
+            text.draw(Category.localizedCategory(c.name, langZh), x + btnPadX + 30f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.5f, 13f * uiScale, col, screenW, screenH);
             curY += rowH + 4f * uiScale * (h / panelH);
         }
 
         // 侧栏底部按钮文字
         if (editHudRect != null) {
             text.draw(t("编辑HUD", "Edit HUD"), editHudRect[0] + 12f * uiScale,
-                    editHudRect[1] + editHudRect[3] / 2f - 12f * uiScale * 0.4f,
+                    editHudRect[1] + editHudRect[3] / 2f - 12f * uiScale * 0.5f,
                     12f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         }
         if (closeSideRect != null) {
             text.draw(t("关闭", "Close"), closeSideRect[0] + 12f * uiScale,
-                    closeSideRect[1] + closeSideRect[3] / 2f - 12f * uiScale * 0.4f,
+                    closeSideRect[1] + closeSideRect[3] / 2f - 12f * uiScale * 0.5f,
                     12f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         }
 
@@ -1806,14 +1762,14 @@ private void drawFloatingBall() {
             float nameSize = 16f * uiScale;
             String dispName = Category.localizedName(m.name, langZh);
             float nameW = text.measure(dispName, nameSize);
-            text.draw(dispName, cardX + cardW / 2f - nameW / 2f, drawY + iconAreaH / 2f - nameSize * 0.4f,
+            text.draw(dispName, cardX + cardW / 2f - nameW / 2f, drawY + iconAreaH / 2f - nameSize * 0.5f,
                     nameSize, withAlpha(SOUTH_TEXT_WHITE, rowAlpha), screenW, screenH);
 
             // 下方配置栏: "Configure" 文字
             float cfgSize = 11f * uiScale;
             String cfgText = "\u2699 " + t("配置", "Configure");
             float cfgW = text.measure(cfgText, cfgSize);
-            text.draw(cfgText, cardX + cardW / 2f - cfgW / 2f, drawY + iconAreaH + toggleBarH / 2f - cfgSize * 0.4f,
+            text.draw(cfgText, cardX + cardW / 2f - cfgW / 2f, drawY + iconAreaH + toggleBarH / 2f - cfgSize * 0.5f,
                     cfgSize, withAlpha(SOUTH_TEXT_DIM2, rowAlpha), screenW, screenH);
 
             if ((i + 1) % cols == 0) curY += cardH + cardGap;
