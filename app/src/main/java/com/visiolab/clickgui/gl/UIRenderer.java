@@ -199,6 +199,16 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private ModuleItem arrayListLineToggle;
     private ModuleItem arrayListColorDropdown, arrayListHeightSlider, arrayListThemeGradToggle;
     private ModuleItem.ConfigOption arrayListColorOpt, arrayListHeightOpt, arrayListThemeGradOpt;
+    // ArrayList 配置项引用
+    private ModuleItem.ConfigOption arrayBgOpt, arrayHideRenderOpt, arrayShowFpsOpt, arrayShowPingOpt, arrayShowCpsOpt, arrayScaleOpt, arrayShowChatOpt, arrayShowF3Opt;
+    // Watermark 配置项引用
+    private ModuleItem.ConfigOption wmShowVerOpt, wmShowFpsOpt, wmShowPingOpt, wmScaleOpt, wmBgOpt;
+    // Notifications 配置项引用
+    private ModuleItem.ConfigOption notifDurOpt, notifShowChatOpt, notifFontSizeOpt, notifSoundOpt;
+    // Keystrokes 配置项引用
+    private ModuleItem.ConfigOption ksShowMouseOpt, ksSizeOpt;
+    // ClickGUI 配置项引用
+    private ModuleItem.ConfigOption guiBlurOpt, guiScaleOpt;
     private float arrayListLineToggleRectX, arrayListLineToggleRectY, arrayListLineToggleW, arrayListLineToggleH;
     private float arrayListFlowSpeedSliderX, arrayListFlowSpeedSliderW;
     private boolean draggingArrayListFlowSpeed = false;
@@ -397,6 +407,12 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     // ArrayList 颜色流动偏移量：持续递增、永不重置，配合每行按位置算出的固定色相差，
     // 做出"整条渐变缓慢流动"的效果（像红->紫->蓝->白那种色带），而不是每行各自独立闪烁。
     private float flowOffset = 0f;
+    // FPS/Ping/CPS 模拟值（实际客户端会从游戏获取）
+    private int currentFps = 60;
+    private int currentPing = 15;
+    private int currentCps = 0;
+    private long lastFpsUpdate = 0;
+    private int frameCount = 0;
     // ---- 搜索框状态 ----
     private String searchQuery = "";
     private boolean searchActive = false;
@@ -719,16 +735,62 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 switch (m.name) {
                     case "ArrayList":
                         arrayListToggle = m;
-                        // 从 options 中提取新增的配置项引用
                         for (ModuleItem.ConfigOption opt : m.options) {
-                            if ("Color".equals(opt.label)) arrayListColorOpt = opt;
-                            else if ("Height".equals(opt.label)) arrayListHeightOpt = opt;
-                            else if ("Theme Gradient".equals(opt.label)) arrayListThemeGradOpt = opt;
+                            switch (opt.label) {
+                                case "Color": arrayListColorOpt = opt; break;
+                                case "Height": arrayListHeightOpt = opt; break;
+                                case "Theme Gradient": arrayListThemeGradOpt = opt; break;
+                                case "Background": arrayBgOpt = opt; break;
+                                case "Hide Render Modules": arrayHideRenderOpt = opt; break;
+                                case "Show FPS": arrayShowFpsOpt = opt; break;
+                                case "Show Ping": arrayShowPingOpt = opt; break;
+                                case "Show CPS": arrayShowCpsOpt = opt; break;
+                                case "Scale": arrayScaleOpt = opt; break;
+                                case "Show in Chat": arrayShowChatOpt = opt; break;
+                                case "Show in F3": arrayShowF3Opt = opt; break;
+                            }
                         }
                         break;
-                    case "Watermark": watermarkToggle = m; break;
-                    case "Notifications": notificationToggle = m; break;
-                    case "ClickGUI": clickGuiModule = m; break;
+                    case "Watermark":
+                        watermarkToggle = m;
+                        for (ModuleItem.ConfigOption opt : m.options) {
+                            switch (opt.label) {
+                                case "Show Version": wmShowVerOpt = opt; break;
+                                case "Show FPS": wmShowFpsOpt = opt; break;
+                                case "Show Ping": wmShowPingOpt = opt; break;
+                                case "Scale": wmScaleOpt = opt; break;
+                                case "Background": wmBgOpt = opt; break;
+                            }
+                        }
+                        break;
+                    case "Notifications":
+                        notificationToggle = m;
+                        for (ModuleItem.ConfigOption opt : m.options) {
+                            switch (opt.label) {
+                                case "Duration": notifDurOpt = opt; break;
+                                case "Show in Chat": notifShowChatOpt = opt; break;
+                                case "Font Size": notifFontSizeOpt = opt; break;
+                                case "Sound": notifSoundOpt = opt; break;
+                            }
+                        }
+                        break;
+                    case "ClickGUI":
+                        clickGuiModule = m;
+                        for (ModuleItem.ConfigOption opt : m.options) {
+                            switch (opt.label) {
+                                case "Blur Background": guiBlurOpt = opt; break;
+                                case "GUI Scale": guiScaleOpt = opt; break;
+                            }
+                        }
+                        break;
+                    case "Keystrokes":
+                        for (ModuleItem.ConfigOption opt : m.options) {
+                            switch (opt.label) {
+                                case "Show Mouse": ksShowMouseOpt = opt; break;
+                                case "Size": ksSizeOpt = opt; break;
+                            }
+                        }
+                        break;
                 }
             }
         }
@@ -833,27 +895,36 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private void drawArrayListHud() {
         if (arrayListToggle != null && !arrayListToggle.enabled) return; // 总开关关掉，整个列表不画
 
-        // 扫描所有分类，收集所有开启中的模块（不再只看单个 "Module" 分类）
+        // Show in F3：F3 调试界面时是否显示（当前无法检测 F3，默认显示）
+        // Show in Chat：聊天界面时是否显示（当前无法检测聊天，默认显示）
+
+        // 扫描所有分类，收集所有开启中的模块
         List<ModuleItem> allEnabled = new ArrayList<>();
         for (Category c : categories) {
-            if (c.name.equals("Preferences")) continue; // 偏好设置不算功能模块
+            if (c.name.equals("Preferences")) continue;
+            // Hide Render Modules：开启时隐藏 Render 分类的模块
+            boolean hideRender = arrayHideRenderOpt != null && arrayHideRenderOpt.boolValue;
+            if (hideRender && c.name.equals("Render")) continue;
             for (ModuleItem m : c.modules) {
                 if (m.enabled || m.hudAnim.get() > 0.01f) allEnabled.add(m);
             }
         }
         if (allEnabled.isEmpty()) return;
 
-        float fontSize = (11f + (arrayListFontSizeSlider != null ? arrayListFontSizeSlider.sliderValue : 0.3f) * 9f) * uiScale;
-        // 高度自定义：通过 Height 滑块调整行高倍率（0.5x~2.0x）
+        // Scale：整体缩放
+        float userScale = arrayScaleOpt != null ? (0.5f + arrayScaleOpt.sliderValue * 1.5f) : 1f;
+        float fontSize = (11f + (arrayListFontSizeSlider != null ? arrayListFontSizeSlider.sliderValue : 0.3f) * 9f) * uiScale * userScale;
         float heightScale = arrayListHeightOpt != null ? (0.5f + arrayListHeightOpt.sliderValue * 1.5f) : 1f;
-        float barH = (fontSize + 10f * uiScale) * heightScale;  // 条形高度跟随 Height 滑块
-        float rowH = barH;                        // 行高=条形高度，让条形彼此相连、不留缝隙、也不重叠
-        float marginTop = screenH / 8f;           // 顶部起始位置：屏幕顶部往下 1/8 处
+        float barH = (fontSize + 10f * uiScale * userScale) * heightScale;
+        float rowH = barH;
+        float marginTop = screenH / 8f;
         boolean showLine = arrayListLineToggle == null || arrayListLineToggle.enabled;
-        float lineW = 2.5f * uiScale;
-        float marginRight = showLine ? (3f * uiScale + lineW) : 3f * uiScale; // 竖线紧贴条形右侧，中间不留缝隙
-        float textPad = 10f * uiScale;            // 文字到条形边缘的内边距，确保不会溢出
-        boolean glassMode = arrayListGlassToggle == null || arrayListGlassToggle.enabled;
+        float lineW = 2.5f * uiScale * userScale;
+        float marginRight = showLine ? (3f * uiScale + lineW) : 3f * uiScale;
+        float textPad = 10f * uiScale * userScale;
+        // Background：配置面板的 Background 开关联动条形背景
+        boolean showBackground = arrayBgOpt == null || arrayBgOpt.boolValue;
+        boolean glassMode = showBackground && (arrayListGlassToggle == null || arrayListGlassToggle.enabled);
         boolean sortByWidth = arrayListSortToggle == null || arrayListSortToggle.enabled;
         float bgOpacity = arrayListBgOpacitySlider != null ? (0.15f + arrayListBgOpacitySlider.sliderValue * 0.55f) : 0.38f;
         float shadowSpread = (2f + (arrayListShadowSizeSlider != null ? arrayListShadowSizeSlider.sliderValue : 0.5f) * 10f) * uiScale;
@@ -980,6 +1051,54 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             float[] col = arrayListRowColor(i, sortedModules.size());
             text.draw(line, tx, ty, fontSize, new float[]{col[0], col[1], col[2], a}, screenW, screenH);
         }
+
+        // ---- Show FPS / Show Ping / Show CPS：在列表底部追加额外行 ----
+        int extraIdx = sortedModules.size();
+        if (arrayShowFpsOpt != null && arrayShowFpsOpt.boolValue) {
+            String fpsText = "FPS " + currentFps;
+            float tw = text.measure(fpsText, fontSize);
+            float rowY = marginTop + extraIdx * rowH;
+            float barW = tw + textPad * 2f;
+            float barX = screenW - marginRight - barW;
+            if (!glassMode) {
+                quad.addRect(barX, rowY, barW, barH, 0f, new float[]{0.92f, 0.93f, 0.95f, bgOpacity});
+                quad.flush(screenW, screenH);
+            }
+            float[] col = arrayListRowColor(extraIdx, extraIdx + 1);
+            text.draw(fpsText, screenW - marginRight - textPad - tw, rowY + (barH - fontSize) / 2f, fontSize,
+                    new float[]{col[0], col[1], col[2], 1f}, screenW, screenH);
+            extraIdx++;
+        }
+        if (arrayShowPingOpt != null && arrayShowPingOpt.boolValue) {
+            String pingText = "Ping " + currentPing + "ms";
+            float tw = text.measure(pingText, fontSize);
+            float rowY = marginTop + extraIdx * rowH;
+            float barW = tw + textPad * 2f;
+            float barX = screenW - marginRight - barW;
+            if (!glassMode) {
+                quad.addRect(barX, rowY, barW, barH, 0f, new float[]{0.92f, 0.93f, 0.95f, bgOpacity});
+                quad.flush(screenW, screenH);
+            }
+            float[] col = arrayListRowColor(extraIdx, extraIdx + 1);
+            text.draw(pingText, screenW - marginRight - textPad - tw, rowY + (barH - fontSize) / 2f, fontSize,
+                    new float[]{col[0], col[1], col[2], 1f}, screenW, screenH);
+            extraIdx++;
+        }
+        if (arrayShowCpsOpt != null && arrayShowCpsOpt.boolValue) {
+            String cpsText = "CPS " + currentCps;
+            float tw = text.measure(cpsText, fontSize);
+            float rowY = marginTop + extraIdx * rowH;
+            float barW = tw + textPad * 2f;
+            float barX = screenW - marginRight - barW;
+            if (!glassMode) {
+                quad.addRect(barX, rowY, barW, barH, 0f, new float[]{0.92f, 0.93f, 0.95f, bgOpacity});
+                quad.flush(screenW, screenH);
+            }
+            float[] col = arrayListRowColor(extraIdx, extraIdx + 1);
+            text.draw(cpsText, screenW - marginRight - textPad - tw, rowY + (barH - fontSize) / 2f, fontSize,
+                    new float[]{col[0], col[1], col[2], 1f}, screenW, screenH);
+            extraIdx++;
+        }
     }
 
     /** 水印："Rlin" 固定显示在左上角，跟 Home 分类里的 "Watermark" 开关联动。
@@ -1006,6 +1125,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float spacingMul = notificationSpacingSlider != null ? (0.5f + notificationSpacingSlider.sliderValue * 1.0f) : 0.8f;
         float rowSpacing = notifRectH() + 8f * uiScale * spacingMul; // 条形本身高度 + 8px 基准间隙（南方风格），"间距"滑块可调
         float holdDuration = notificationDurationSlider != null ? (1.0f + notificationDurationSlider.sliderValue * 3.0f) : TOAST_HOLD;
+        // 也从 Category 配置项获取 Duration（优先使用 Category 中的值）
+        if (notifDurOpt != null) holdDuration = 1.0f + notifDurOpt.sliderValue * 4.0f;
         for (int i = 0; i < toasts.size(); i++) {
             ToastNotice t = toasts.get(i);
             t.age += dt;
@@ -1060,7 +1181,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
 
         float holdDuration = notificationDurationSlider != null ? (1.0f + notificationDurationSlider.sliderValue * 3.0f) : TOAST_HOLD;
+        if (notifDurOpt != null) holdDuration = 1.0f + notifDurOpt.sliderValue * 4.0f;
         float fontSize = 12f * uiScale * (notificationFontSizeSlider != null ? (0.75f + notificationFontSizeSlider.sliderValue * 0.7f) : 1f);
+        // 也从 Category 配置项获取 Font Size
+        if (notifFontSizeOpt != null) fontSize = 12f * uiScale * (0.5f + notifFontSizeOpt.sliderValue * 1.0f);
 
         // ---- 底部黑色倒计时条 + 文字 ----
         for (ToastNotice t : toasts) {
@@ -1092,8 +1216,16 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float a = Math.max(0f, Math.min(1f, watermarkToggle.hudAnim.get()));
         if (a <= 0.01f) return;
 
-        String text2 = "Rlin";
-        float fontSize = (14f + (watermarkFontSizeSlider != null ? watermarkFontSizeSlider.sliderValue : 0.45f) * 20f) * uiScale;
+        String text2;
+        {
+            float wmScale = wmScaleOpt != null ? (0.5f + wmScaleOpt.sliderValue * 1.5f) : 1f;
+            StringBuilder sb = new StringBuilder("Rlin");
+            if (wmShowVerOpt == null || wmShowVerOpt.boolValue) sb.append(" b13");
+            if (wmShowFpsOpt != null && wmShowFpsOpt.boolValue) sb.append("  ").append(currentFps).append("fps");
+            if (wmShowPingOpt != null && wmShowPingOpt.boolValue) sb.append("  ").append(currentPing).append("ms");
+            text2 = sb.toString();
+        }
+        float fontSize = (14f + (watermarkFontSizeSlider != null ? watermarkFontSizeSlider.sliderValue : 0.45f) * 20f) * uiScale * (wmScaleOpt != null ? (0.5f + wmScaleOpt.sliderValue * 1.5f) : 1f);
         float tx = (watermarkXSlider != null ? watermarkXSlider.sliderValue : 0.1f) * (screenW * 0.4f);
         float ty = (watermarkYSlider != null ? watermarkYSlider.sliderValue : 0.1f) * (screenH * 0.3f);
 
@@ -1104,8 +1236,15 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
         float tw = text.measure(text2, fontSize);
 
-        // 文字周围轻微发散的阴影：复用跟ArrayList一样的紧凑模糊管线——
-        // 把文字整体画到透明背景贴图上模糊一遍，再叠加成柔光，可以在配置面板里关掉
+        // Background：开启时在文字下方画半透明背景
+        if (wmBgOpt == null || wmBgOpt.boolValue) {
+            float bgPad = 6f * uiScale;
+            quad.addRect(tx - bgPad, ty - 2f * uiScale, tw + bgPad * 2f, fontSize + 6f * uiScale, 4f * uiScale,
+                    new float[]{0f, 0f, 0f, 0.3f * a});
+            quad.flush(screenW, screenH);
+        }
+
+        // 文字周围轻微发散的阴影
         if (watermarkShadowToggle == null || watermarkShadowToggle.enabled) {
             final float sTx = tx, sTy = ty, sFontSize = fontSize;
             final String sText = text2;
@@ -1128,6 +1267,55 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                     withAlpha(colorful ? ACCENT_1 : col, a), withAlpha(colorful ? ACCENT_2 : col, a));
             quad.flush(screenW, screenH);
         }
+    }
+
+    /** Keystrokes HUD：显示 WASD + 鼠标按键状态。
+     *  Size 滑块控制大小，Show Mouse 开关控制是否显示鼠标键。 */
+    private void drawKeystrokes() {
+        // 找到 Keystrokes 模块
+        ModuleItem ksModule = null;
+        for (Category c : categories) {
+            if (!c.name.equals("Client")) continue;
+            for (ModuleItem m : c.modules) {
+                if (m.name.equals("Keystrokes")) { ksModule = m; break; }
+            }
+        }
+        if (ksModule == null || !ksModule.enabled) return;
+        float a = Math.max(0f, Math.min(1f, ksModule.hudAnim.get()));
+        if (a <= 0.01f) return;
+
+        float sizeMul = ksSizeOpt != null ? (0.5f + ksSizeOpt.sliderValue * 1.5f) : 1f;
+        boolean showMouse = ksShowMouseOpt == null || ksShowMouseOpt.boolValue;
+        float keySize = 30f * uiScale * sizeMul;
+        float gap = 3f * uiScale * sizeMul;
+        float fontSize = 12f * uiScale * sizeMul;
+
+        // 起始位置：屏幕左下角
+        float startX = 20f * uiScale;
+        float startY = screenH - keySize * 4 - gap * 3 - 20f * uiScale;
+
+        // WASD 布局
+        // W
+        drawKey(startX + keySize + gap, startY, keySize, keySize, "W", false, a, fontSize);
+        // A S D
+        drawKey(startX, startY + keySize + gap, keySize, keySize, "A", false, a, fontSize);
+        drawKey(startX + keySize + gap, startY + keySize + gap, keySize, keySize, "S", false, a, fontSize);
+        drawKey(startX + (keySize + gap) * 2f, startY + keySize + gap, keySize, keySize, "D", false, a, fontSize);
+
+        if (showMouse) {
+            // LMB RMB
+            drawKey(startX, startY + (keySize + gap) * 2f, keySize * 1.5f, keySize, "LMB", false, a, fontSize);
+            drawKey(startX + keySize * 1.5f + gap, startY + (keySize + gap) * 2f, keySize * 1.5f, keySize, "RMB", false, a, fontSize);
+        }
+    }
+
+    private void drawKey(float x, float y, float w, float h, String label, boolean pressed, float alpha, float fontSize) {
+        float[] bg = pressed ? new float[]{0.4f, 0.4f, 0.4f, 0.8f * alpha} : new float[]{0.15f, 0.15f, 0.15f, 0.5f * alpha};
+        quad.addRect(x, y, w, h, 4f * uiScale, bg);
+        quad.flush(screenW, screenH);
+        float tw = text.measure(label, fontSize);
+        text.draw(label, x + (w - tw) / 2f, y + (h - fontSize) / 2f, fontSize,
+                new float[]{1f, 1f, 1f, alpha}, screenW, screenH);
     }
 
     @Override
@@ -1159,6 +1347,16 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float globalSpeedMul = globalGradientSpeedSlider != null ? (0.3f + globalGradientSpeedSlider.sliderValue * 4f) : 1f;
         float flowSpeedMul = arrayListFlowSpeedSlider != null ? (0.3f + arrayListFlowSpeedSlider.sliderValue * 4f) : 1f;
         flowOffset += dt * 0.15f * globalSpeedMul * flowSpeedMul; // 缓慢持续流动，不重置；全局速度 × ArrayList自己的速度
+        // FPS 计数：每秒更新一次
+        frameCount++;
+        long nowMs = System.currentTimeMillis();
+        if (nowMs - lastFpsUpdate > 1000) {
+            currentFps = (int) (frameCount * 1000f / (nowMs - lastFpsUpdate));
+            frameCount = 0;
+            lastFpsUpdate = nowMs;
+            // Ping/CPS 模拟波动
+            currentPing = 10 + (int)(Math.random() * 15);
+        }
         if (guiOpen) openElapsedSec += dt;
         highlightY.update(dt);
         contentScroll.update(dt);
@@ -1179,6 +1377,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
         // 面板开关动画：从 0.85 缩放到 1.0，中心不变，带轻微回弹；openness=0 时完全不画
         float scale = 0.85f + 0.15f * easedT;
+        // GUI Scale：配置面板中的缩放滑块（0.5x ~ 2.0x）
+        float guiScaleMul = guiScaleOpt != null ? (0.5f + guiScaleOpt.sliderValue * 1.5f) : 1f;
+        scale *= guiScaleMul;
         float drawW = panelW * scale;
         float drawH = panelH * scale;
         float drawX = screenW / 2f - drawW / 2f;
@@ -1200,6 +1401,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         pageAnimProgress = Math.min(1f, pageAnimProgress + dt * 4f);
         drawArrayListHud();
         drawWatermark();
+        drawKeystrokes();
         updateToasts(dt);
         drawToasts();
 
@@ -1211,26 +1413,22 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         // }
 
         if (panelAlpha > 0.003f) {
-            // 1.5) 面板外边缘阴影：真正做高斯模糊出来的柔光，而不是分层矩形硬边；带总开关
+            // 1.5) 面板外边缘阴影：黑色、从深到浅向四周发散，范围不大、透明度低
             boolean shadowOn = shadowEnabledToggle == null || shadowEnabledToggle.enabled;
             if (shadowOn) {
-                boolean sync = shadowSyncToggle == null || shadowSyncToggle.enabled;
-                float[] shadowColor = ACCENT_1; // 白灰主题：阴影颜色跟随主题色
-                float spreadPx = (4f + (shadowSizeSlider != null ? shadowSizeSlider.sliderValue : 0.4f) * 40f) * uiScale;
-                float opacity = 0.20f + (shadowOpacitySlider != null ? shadowOpacitySlider.sliderValue : 0.5f) * 0.55f;
+                float spreadPx = 12f * uiScale; // 范围不大
+                float opacity = 0.15f; // 很浅
                 float sx = drawX - spreadPx, sy = drawY - spreadPx, sw = drawW + spreadPx * 2, sh = drawH + spreadPx * 2, sr = radius + spreadPx;
                 blur.captureAndBlurTransparent(() -> {
                     quad.addRect(sx, sy, sw, sh, sr, new float[]{1f, 1f, 1f, 1f});
                     quad.flush(screenW, screenH);
                 });
-                // ClickGUI 模块开关联动面板背景阴影：模块关闭时阴影透明度降到 0.3
-                // （ClickGUI 模块实际始终 enabled，这里主要是逻辑上的关联）
-                float clickGuiShadowMul = (clickGuiModule != null && !clickGuiModule.enabled) ? 0.3f : 1f;
-                blur.drawGlow(new float[]{shadowColor[0], shadowColor[1], shadowColor[2], opacity * panelAlpha * clickGuiShadowMul}, screenW, screenH);
+                blur.drawGlow(new float[]{0f, 0f, 0f, opacity * panelAlpha}, screenW, screenH);
             }
 
-            // 2) 背景模糊：可以整体关掉，关掉后走纯色面板兜底路径（不再截取/模糊场景）
-            boolean blurOn = blurEnabledToggle == null || blurEnabledToggle.enabled;
+            // 2) 背景模糊：从 Category 配置项获取，可以整体关掉
+            boolean blurOn = (blurEnabledToggle == null || blurEnabledToggle.enabled)
+                    && (guiBlurOpt == null || guiBlurOpt.boolValue);
             // 关闭GUI时快速跳过模糊渲染避免残余面板滞留
             boolean nearClosed = t < 0.08f;
             if (blurOn && !nearClosed) {
