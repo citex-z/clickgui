@@ -37,7 +37,7 @@ public class DynamicIslandRenderer {
     private static final float CORNER_RADIUS = 10.5f; // 原版圆角
     private static final float CONTENT_WIDTH_BASE = 50f; // 图标区基础宽度
     private static final float CONTENT_HEIGHT = 40f;  // 单条内容高度
-    private static final float DEFAULT_TEXT_PAD = 29f; // 默认状态文字总padding
+    private static final float DEFAULT_TEXT_PAD = 16f; // 默认状态左右内边距
 
     // 内容列表
     private final List<IslandContent> contents = new ArrayList<>();
