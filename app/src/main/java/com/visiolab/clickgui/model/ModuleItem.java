@@ -2,6 +2,9 @@ package com.visiolab.clickgui.model;
 
 import com.visiolab.clickgui.anim.Anim;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class ModuleItem {
 
     public final String name;
@@ -11,21 +14,19 @@ public class ModuleItem {
     public float sliderValue;   // 0..1 归一化
     public final float sliderMin, sliderMax;
     public final String sliderUnit;
-    // 有些"模块"其实只是纯数值配置(比如渐变速度)，没有真正的开关语义，
-    // 这种情况下不应该在行内显示一个开关控件——默认true，特殊场景手动关掉。
     public boolean showToggle = true;
 
-    // 每一行的展开/悬停动画（对应原版 Category 里每个 Module 卡片的 hover 状态）
+    // 额外配置项列表（下拉框、额外开关、额外滑块等）
+    public final List<ConfigOption> options = new ArrayList<>();
+
+    // 动画
     public final Anim toggleAnim = new Anim(0f, 12f);
     public final Anim hoverAnim = new Anim(0f, 14f);
-    // ArrayList HUD 专用的滑入/淡出动画：跟 toggleAnim 分开，因为 ClickGUI 面板关闭时
-    // toggleAnim 不会再更新（drawModuleCards 不执行），但 HUD 得始终独立继续动画。
     public final Anim hudAnim = new Anim(0f, 10f);
 
-    // 卡片展开/收起状态：点击 ▾ 箭头切换，内联展开设置面板
     public boolean expanded = false;
-    public final Anim expandAnim = new Anim(0f, 14f); // 0=收起, 1=展开
-    public int activeTab = 0; // 当前标签页索引
+    public final Anim expandAnim = new Anim(0f, 14f);
+    public int activeTab = 0;
 
     public ModuleItem(String name, String description, boolean enabled) {
         this(name, description, enabled, false, 0, 0, 1, "");
@@ -44,7 +45,63 @@ public class ModuleItem {
         toggleAnim.snapTo(enabled ? 1f : 0f);
     }
 
+    /** 添加一个下拉框配置项 */
+    public ModuleItem addDropdown(String label, String[] choices, int defaultIndex) {
+        options.add(new ConfigOption(label, ConfigOption.TYPE_DROPDOWN, choices, defaultIndex));
+        return this;
+    }
+
+    /** 添加一个额外开关配置项 */
+    public ModuleItem addSwitch(String label, boolean defaultValue) {
+        options.add(new ConfigOption(label, ConfigOption.TYPE_SWITCH, null, defaultValue ? 1f : 0f));
+        return this;
+    }
+
+    /** 添加一个额外滑块配置项 */
+    public ModuleItem addSlider(String label, float defaultValue, float min, float max, String unit) {
+        ConfigOption opt = new ConfigOption(label, ConfigOption.TYPE_SLIDER, null,
+                (defaultValue - min) / (max - min));
+        opt.sliderMin = min;
+        opt.sliderMax = max;
+        opt.sliderUnit = unit;
+        options.add(opt);
+        return this;
+    }
+
     public float getRealValue() {
         return sliderMin + (sliderMax - sliderMin) * sliderValue;
+    }
+
+    /** 单个配置项（下拉框/开关/滑块） */
+    public static class ConfigOption {
+        public static final int TYPE_DROPDOWN = 0;
+        public static final int TYPE_SWITCH = 1;
+        public static final int TYPE_SLIDER = 2;
+
+        public final String label;
+        public final int type;
+        public final String[] dropdownChoices; // 下拉框选项
+        public int dropdownIndex;               // 当前选中索引
+        public float sliderValue;               // 0..1 归一化（滑块用）
+        public float sliderMin, sliderMax;
+        public String sliderUnit;
+        public boolean boolValue;               // 开关用
+
+        public ConfigOption(String label, int type, String[] choices, float defaultValue) {
+            this.label = label;
+            this.type = type;
+            this.dropdownChoices = choices;
+            if (type == TYPE_DROPDOWN) {
+                this.dropdownIndex = (int) defaultValue;
+            } else if (type == TYPE_SWITCH) {
+                this.boolValue = defaultValue > 0.5f;
+            } else {
+                this.sliderValue = defaultValue;
+            }
+        }
+
+        public float getRealSliderValue() {
+            return sliderMin + (sliderMax - sliderMin) * sliderValue;
+        }
     }
 }

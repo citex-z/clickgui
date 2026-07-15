@@ -328,6 +328,11 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float[] configToggleRect = null;   // 配置页内开关热区
     private float configSliderX, configSliderW, configSliderY, configSliderH;
     private boolean draggingConfigSlider = false;
+    // 配置页额外配置项（下拉框/开关/滑块）热区：每个元素为 {float[]{x,y,w,h}, optionIndex, optionType}
+    private final List<Object[]> configOptionRects = new java.util.concurrent.CopyOnWriteArrayList<>();
+    // 配置页额外滑块拖拽状态
+    private int draggingOptionIndex = -1;
+    private float draggingOptionSliderX, draggingOptionSliderW;
     // 旧弹窗字段保留兼容（标记为废弃，不再使用）
     @Deprecated private ModuleItem expandedModule = null;
     @Deprecated private final Anim overlayOpenness = new Anim(0f, 14f);
@@ -830,17 +835,17 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         if (toasts.isEmpty()) return;
 
         float rectW = notifRectW(), rectH = notifRectH();
-        float baseX = screenW - 10f * uiScale - rectW; // 贴近右下角
-        float offDist = Math.max(screenW, screenH) * 0.35f; // 保证滑入/滑出起止点真正在屏幕外
+        float baseX = screenW - 10f * uiScale - rectW;
+        float offDist = Math.max(screenW, screenH) * 0.35f;
 
         float holdDuration = notificationDurationSlider != null ? (1.0f + notificationDurationSlider.sliderValue * 3.0f) : TOAST_HOLD;
-        // 文字：白色，14px*uiScale（"字号"滑块做轻微缩放，默认值≈14px）
         float fontSize = 14f * uiScale * (notificationFontSizeSlider != null ? (0.75f + notificationFontSizeSlider.sliderValue * 0.7f) : 1f);
-        float cornerR = 8f * uiScale;     // 圆角
-        float barW = 4f * uiScale;         // 左侧彩色竖线宽度
-        float barInset = cornerR;          // 竖线只在背景直边段绘制，避免戳出圆角
-        float textPad = 12f * uiScale;     // 文字左侧内边距（避开竖线）
-        float bgAlpha = 0.92f;             // SOUTH_MODULE_BG 半透明基准
+        float cornerR = 8f * uiScale;
+        float barW = 4f * uiScale;
+        float barInset = cornerR;
+        float textPad = 12f * uiScale;
+        // 玻璃质感：半透明背景 + 辉光阴影
+        float bgAlpha = 0.55f; // 半透明，露出底层内容产生玻璃感
 
         for (ToastNotice t : toasts) {
             float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
@@ -848,22 +853,30 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             float slide = (1f - smoothstep(rv)) * offDist;
             float dx = baseX + slide, dy = t.posY.get() + slide;
 
-            // 1) 圆角矩形背景：SOUTH_MODULE_BG (#242424) 半透明
+            float[] barColor = t.enabled ? TOAST_GREEN : TOAST_RED;
+
+            // 1) 辉光阴影：先在透明贴图上画一遍形状，模糊后叠加成柔光
+            final float sDx = dx, sDy = dy, sRv = rv;
+            blur.captureAndBlurTransparentTight(() -> {
+                quad.addRect(sDx, sDy, rectW, rectH, cornerR, new float[]{0f, 0f, 0f, 0.6f * sRv});
+            });
+            blur.drawGlow(new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
+
+            // 2) 半透明玻璃背景：深灰半透明，露出底层产生玻璃质感
             quad.addRect(dx, dy, rectW, rectH, cornerR, withAlpha(SOUTH_MODULE_BG, bgAlpha * rv));
             quad.flush(screenW, screenH);
 
-            // 2) 左侧彩色竖线：启用=绿色 #039855，禁用=红色 #D92020
-            float[] barColor = t.enabled ? TOAST_GREEN : TOAST_RED;
+            // 3) 左侧彩色竖线
             quad.addRect(dx, dy + barInset, barW, rectH - 2f * barInset, 0f, withAlpha(barColor, rv));
             quad.flush(screenW, screenH);
 
-            // 3) 文字：白色，14px*uiScale，左对齐（避开左侧竖线）
+            // 4) 文字：白色 + 黑色阴影（垂直居中：用 fontSize*0.4f 而非不随字号缩放的固定偏移）
             float tx = dx + textPad;
-            float ty = dy + rectH / 2f - fontSize / 2f - 1f * uiScale;
-            text.draw(t.text, tx + 1f * uiScale, ty + 1.2f * uiScale, fontSize, new float[]{0f, 0f, 0f, 0.45f * rv}, screenW, screenH);
+            float ty = dy + rectH / 2f - fontSize * 0.4f;
+            text.draw(t.text, tx + 1f * uiScale, ty + 1.2f * uiScale, fontSize, new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
             text.draw(t.text, tx, ty, fontSize, new float[]{1f, 1f, 1f, rv}, screenW, screenH);
 
-            // 4) 底部进度条（倒计时）：跟随竖线配色，随 holdDuration 收缩
+            // 5) 底部进度条
             float frac = Math.max(0f, Math.min(1f, 1f - (t.age - TOAST_ENTER) / holdDuration));
             float pbH = 2.5f * uiScale;
             quad.addRect(dx, dy + rectH - pbH, rectW * frac, pbH, 0f, withAlpha(barColor, 0.85f * rv));
@@ -881,7 +894,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float a = Math.max(0f, Math.min(1f, watermarkToggle.hudAnim.get()));
         if (a <= 0.01f) return;
 
-        String text2 = "SOUTHSIDE";
+        String text2 = "Rlin";
         float fontSize = (14f + (watermarkFontSizeSlider != null ? watermarkFontSizeSlider.sliderValue : 0.45f) * 20f) * uiScale;
         float tx = (watermarkXSlider != null ? watermarkXSlider.sliderValue : 0.1f) * (screenW * 0.4f);
         float ty = (watermarkYSlider != null ? watermarkYSlider.sliderValue : 0.1f) * (screenH * 0.3f);
@@ -1091,6 +1104,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         // 清空配置页热区
         configToggleRect = null;
         configSliderX = 0; configSliderW = 0; configSliderY = 0; configSliderH = 0;
+        configOptionRects.clear();
         // 清空调色板坐标（仅 Theme Color 模块会重新设置）
         hueBarX = 0; hueBarW = 0; hueBarY = 0; hueBarH = 0;
         svBoxX = 0; svBoxY = 0; svBoxW = 0; svBoxH = 0;
@@ -1113,6 +1127,48 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float tknobX = toggleX + 3f * uiScale + (toggleW - tknobD - 6f * uiScale) * tst;
         quad.addRect(tknobX, toggleY + 3f * uiScale, tknobD, tknobD, tknobD / 2f, withAlpha(KNOB_COLOR, alpha));
         curY += rowH + rowGap;
+
+        // --- 模块额外配置项列表（下拉框 / 额外开关 / 额外滑块） ---
+        for (int oi = 0; oi < m.options.size(); oi++) {
+            ModuleItem.ConfigOption opt = m.options.get(oi);
+            if (opt.type == ModuleItem.ConfigOption.TYPE_DROPDOWN) {
+                // 下拉框行：整行背景 + 右侧可点击区域（点击循环切换选项）
+                quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
+                configOptionRects.add(new Object[]{new float[]{trackX, curY, trackW, rowH}, oi, ModuleItem.ConfigOption.TYPE_DROPDOWN});
+                curY += rowH + rowGap;
+            } else if (opt.type == ModuleItem.ConfigOption.TYPE_SWITCH) {
+                // 额外开关行：与 Enabled 开关行相同样式
+                quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
+                float stToggleW = 44f * uiScale, stToggleH = 22f * uiScale;
+                float stToggleX = trackX + trackW - pad - stToggleW;
+                float stToggleY = curY + rowH / 2f - stToggleH / 2f;
+                configOptionRects.add(new Object[]{new float[]{trackX, curY, trackW, rowH}, oi, ModuleItem.ConfigOption.TYPE_SWITCH});
+                float stT = opt.boolValue ? 1f : 0f;
+                float[] stTc = mixColor(SOUTH_TOGGLE_OFF, SOUTH_TOGGLE_ON, stT);
+                quad.addRect(stToggleX, stToggleY, stToggleW, stToggleH, stToggleH / 2f, withAlpha(stTc, alpha));
+                float stKnobD = stToggleH - 6f * uiScale;
+                float stKnobX = stToggleX + 3f * uiScale + (stToggleW - stKnobD - 6f * uiScale) * stT;
+                quad.addRect(stKnobX, stToggleY + 3f * uiScale, stKnobD, stKnobD, stKnobD / 2f, withAlpha(KNOB_COLOR, alpha));
+                curY += rowH + rowGap;
+            } else if (opt.type == ModuleItem.ConfigOption.TYPE_SLIDER) {
+                // 额外滑块行：与主滑块行相同样式
+                quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
+                float osTrackH = 14f * uiScale;
+                float osTrackX = trackX + 14f * uiScale;
+                float osTrackW = trackW - 28f * uiScale;
+                float osTrackY = curY + rowH / 2f - osTrackH / 2f;
+                quad.addRect(osTrackX, osTrackY, osTrackW, osTrackH, osTrackH / 2f, withAlpha(SOUTH_SLIDER_TRACK, alpha));
+                float osFillW = osTrackW * opt.sliderValue;
+                float[][] osDiag = diagGradient(ACCENT_1, ACCENT_2, alpha);
+                quad.addRectGradient(osTrackX, osTrackY, Math.max(osTrackH, osFillW), osTrackH, osTrackH / 2f, osDiag[0], osDiag[1], osDiag[2], osDiag[3]);
+                float osKnobD = osTrackH + 10f * uiScale;
+                float osKnobX = osTrackX + osFillW - osKnobD / 2f;
+                quad.addRect(osKnobX, osTrackY + osTrackH / 2f - osKnobD / 2f, osKnobD, osKnobD, osKnobD / 2f, withAlpha(KNOB_COLOR, alpha));
+                // 热区用滑块轨道区域，并记录拖拽坐标基准
+                configOptionRects.add(new Object[]{new float[]{osTrackX, osTrackY, osTrackW, osTrackH}, oi, ModuleItem.ConfigOption.TYPE_SLIDER});
+                curY += rowH + rowGap;
+            }
+        }
 
         // --- 滑块行（仅有滑块的模块） ---
         if (m.hasSlider) {
@@ -1171,8 +1227,43 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float curY = startY;
 
         // Enabled 行
-        text.draw(t("启用", "Enabled"), contentX + 14f * uiScale, curY + rowH / 2f - 7f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+        text.draw(t("启用", "Enabled"), contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         curY += rowH + rowGap;
+
+        // 模块额外配置项文字
+        for (int oi = 0; oi < m.options.size(); oi++) {
+            ModuleItem.ConfigOption opt = m.options.get(oi);
+            if (opt.type == ModuleItem.ConfigOption.TYPE_DROPDOWN) {
+                // label 左侧
+                text.draw(opt.label, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
+                        14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+                // 当前选中项 + 下拉箭头 ▼ 右侧
+                String curChoice = (opt.dropdownChoices != null && opt.dropdownIndex >= 0
+                        && opt.dropdownIndex < opt.dropdownChoices.length) ? opt.dropdownChoices[opt.dropdownIndex] : "";
+                String dropText = curChoice + " \u25BC";
+                float dropSize = 13f * uiScale;
+                float dropW = text.measure(dropText, dropSize);
+                text.draw(dropText, contentX + contentW - 14f * uiScale - dropW,
+                        curY + rowH / 2f - dropSize * 0.4f, dropSize, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
+                curY += rowH + rowGap;
+            } else if (opt.type == ModuleItem.ConfigOption.TYPE_SWITCH) {
+                // 开关：值由图形层显示，这里只画 label
+                text.draw(opt.label, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
+                        14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+                curY += rowH + rowGap;
+            } else if (opt.type == ModuleItem.ConfigOption.TYPE_SLIDER) {
+                // label 左侧 + 当前数值右侧
+                text.draw(opt.label, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
+                        14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+                String unit = opt.sliderUnit != null ? opt.sliderUnit : "";
+                String valStr = String.format("%.1f%s", opt.getRealSliderValue(), unit);
+                float valSize = 13f * uiScale;
+                float valW = text.measure(valStr, valSize);
+                text.draw(valStr, contentX + contentW - 14f * uiScale - valW,
+                        curY + rowH / 2f - valSize * 0.4f, valSize, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
+                curY += rowH + rowGap;
+            }
+        }
 
         // 滑块行
         if (m.hasSlider) {
@@ -1556,23 +1647,23 @@ private void drawFloatingBall() {
         if (activeConfigModule != null) {
             // 配置页：显示面包屑导航 "← 分类名 > 模块名"，左侧返回箭头对应 configBackRect 热区
             String breadcrumb = "\u2190 " + curCat.name + " > " + activeConfigModule.name;
-            text.draw(breadcrumb, x + sbW + 14f * uiScale, y + hdrH / 2f - 6f * uiScale,
+            text.draw(breadcrumb, x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.4f,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         } else {
-            text.draw(t("南方客户端", "SOUTHSIDE") + " b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 6f * uiScale,
+            text.draw(t("Rlin", "Rlin") + " b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.4f,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
-            text.draw("\u2190 \u2192 " + curCat.name, x + sbW + 80f * uiScale, y + hdrH / 2f - 5f * uiScale,
+            text.draw("\u2190 \u2192 " + curCat.name, x + sbW + 80f * uiScale, y + hdrH / 2f - 11f * uiScale * 0.4f,
                     11f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         }
         if (searchBoxRect != null) {
             String searchText = searchActive ? searchQuery : t("\u2315 搜索...", "\u2315 search...");
             text.draw(searchText, searchBoxRect[0] + 12f * uiScale,
-                    searchBoxRect[1] + searchBoxRect[3] / 2f - 4f * uiScale,
+                    searchBoxRect[1] + searchBoxRect[3] / 2f - 10f * uiScale * 0.4f,
                     10f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         }
         if (closeBtnRect != null) {
             text.draw("\u00D7", closeBtnRect[0] + closeBtnRect[2] / 2f - 5f * uiScale,
-                    closeBtnRect[1] + closeBtnRect[3] / 2f - 7f * uiScale,
+                    closeBtnRect[1] + closeBtnRect[3] / 2f - 18f * uiScale * 0.4f,
                     18f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         }
 
@@ -1609,20 +1700,20 @@ private void drawFloatingBall() {
             float ry = curY;
             boolean sel = i == currentCategoryIndex;
             float[] col = withAlpha(sel ? SOUTH_TEXT_WHITE : SOUTH_TEXT_DIM2, alpha);
-            text.draw(c.icon, x + btnPadX + 8f * uiScale, ry + rowH / 2f - 7f * uiScale, 13f * uiScale, col, screenW, screenH);
-            text.draw(c.name, x + btnPadX + 30f * uiScale, ry + rowH / 2f - 6f * uiScale, 13f * uiScale, col, screenW, screenH);
+            text.draw(c.icon, x + btnPadX + 8f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.4f, 13f * uiScale, col, screenW, screenH);
+            text.draw(c.name, x + btnPadX + 30f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.4f, 13f * uiScale, col, screenW, screenH);
             curY += rowH + 4f * uiScale * (h / panelH);
         }
 
         // 侧栏底部按钮文字
         if (editHudRect != null) {
             text.draw(t("编辑HUD", "Edit HUD"), editHudRect[0] + 12f * uiScale,
-                    editHudRect[1] + editHudRect[3] / 2f - 5f * uiScale,
+                    editHudRect[1] + editHudRect[3] / 2f - 12f * uiScale * 0.4f,
                     12f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         }
         if (closeSideRect != null) {
             text.draw(t("关闭", "Close"), closeSideRect[0] + 12f * uiScale,
-                    closeSideRect[1] + closeSideRect[3] / 2f - 5f * uiScale,
+                    closeSideRect[1] + closeSideRect[3] / 2f - 12f * uiScale * 0.4f,
                     12f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         }
 
@@ -1805,10 +1896,39 @@ private void drawFloatingBall() {
                         return;
                     }
                 }
+                // 检查配置项列表（下拉框 / 额外开关 / 额外滑块）
+                for (int oi = 0; oi < configOptionRects.size(); oi++) {
+                    Object[] entry = configOptionRects.get(oi);
+                    float[] rect = (float[]) entry[0];
+                    if (inside(ex, ey, rect)) {
+                        int optIdx = (int) entry[1];
+                        int optType = (int) entry[2];
+                        ModuleItem.ConfigOption opt = activeConfigModule.options.get(optIdx);
+                        if (optType == ModuleItem.ConfigOption.TYPE_DROPDOWN) {
+                            int len = opt.dropdownChoices != null ? opt.dropdownChoices.length : 0;
+                            if (len > 0) opt.dropdownIndex = (opt.dropdownIndex + 1) % len;
+                        } else if (optType == ModuleItem.ConfigOption.TYPE_SWITCH) {
+                            opt.boolValue = !opt.boolValue;
+                        } else if (optType == ModuleItem.ConfigOption.TYPE_SLIDER) {
+                            draggingOptionIndex = optIdx;
+                            draggingOptionSliderX = rect[0];
+                            draggingOptionSliderW = rect[2];
+                            float t = (ex - rect[0]) / rect[2];
+                            opt.sliderValue = Math.max(0f, Math.min(1f, t));
+                        }
+                        return;
+                    }
+                }
             }
             if (action == MotionEvent.ACTION_MOVE && draggingConfigSlider) {
                 float t = (ex - configSliderX) / configSliderW;
                 activeConfigModule.sliderValue = Math.max(0f, Math.min(1f, t));
+                return;
+            }
+            if (action == MotionEvent.ACTION_MOVE && draggingOptionIndex >= 0) {
+                ModuleItem.ConfigOption opt = activeConfigModule.options.get(draggingOptionIndex);
+                float t = (ex - draggingOptionSliderX) / draggingOptionSliderW;
+                opt.sliderValue = Math.max(0f, Math.min(1f, t));
                 return;
             }
             if (action == MotionEvent.ACTION_MOVE && draggingHue) {
@@ -1823,6 +1943,7 @@ private void drawFloatingBall() {
                 draggingConfigSlider = false;
                 draggingHue = false;
                 draggingSV = false;
+                draggingOptionIndex = -1;
             }
 
             // 在配置页模式下，侧栏分类点击仍然生效（切换分类后返回卡片视图）
