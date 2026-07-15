@@ -26,12 +26,26 @@ public class Category {
 
         // ===== MOD CONFIG =====
         Category client = new Category("Client", "\u2302", "MOD CONFIG");
-        client.add(new ModuleItem("ArrayList", "Display enabled modules HUD", true));
-        client.add(new ModuleItem("ClickGUI", "Click GUI settings", true));
-        client.add(new ModuleItem("Watermark", "Client watermark HUD", true));
-        client.add(new ModuleItem("Notifications", "Toast notifications", true));
-        client.add(new ModuleItem("Keystrokes", "Display WASD + mouse keys", false));
-        client.add(new ModuleItem("Radar", "Entity radar HUD", false));
+        client.add(new ModuleItem("ArrayList", "Display enabled modules HUD", true)
+                .addSwitch("Background", true)
+                .addDropdown("Color", new String[]{"Custom", "Rainbow", "LightRainbow", "Astolfo", "Valentine"}, 1)
+                .addSwitch("Hide Render Modules", true)
+                .addSlider("Custom Speed", 10, 5, 20, ""));
+        client.add(new ModuleItem("ClickGUI", "Click GUI settings", true)
+                .addSwitch("Blur Background", true)
+                .addSlider("GUI Scale", 1, 0.5f, 2.0f, "x"));
+        client.add(new ModuleItem("Watermark", "Client watermark HUD", true)
+                .addSwitch("Show Version", true)
+                .addSwitch("Show FPS", false));
+        client.add(new ModuleItem("Notifications", "Toast notifications", true)
+                .addSlider("Duration", 2, 1, 5, "s")
+                .addSwitch("Show in Chat", true));
+        client.add(new ModuleItem("Keystrokes", "Display WASD + mouse keys", false)
+                .addSwitch("Show Mouse", true)
+                .addSlider("Size", 1, 0.5f, 2.0f, "x"));
+        client.add(new ModuleItem("Radar", "Entity radar HUD", false)
+                .addDropdown("Shape", new String[]{"Circle", "Square"}, 0)
+                .addSlider("Range", 50, 10, 200, "blocks"));
         client.add(new ModuleItem("HUD Editor", "Edit HUD positions", false));
         client.add(new ModuleItem("Cape", "Custom client cape", false));
         list.add(client);
@@ -135,6 +149,16 @@ public class Category {
         render.add(new ModuleItem("Zoom", "Zoom view", false,
                 true, 0.3f, 1, 10, "x")
                 .addSwitch("Smooth", true));
+        // HUD 模块（参考南方客户端）
+        render.add(new ModuleItem("PotionEffects", "Display active potion effects", false));
+        render.add(new ModuleItem("TargetHUD", "Target info display", false));
+        render.add(new ModuleItem("ArmorHUD", "Display armor durability", false)
+                .addSwitch("Show Durability", true));
+        render.add(new ModuleItem("CPS", "Clicks per second counter", false));
+        render.add(new ModuleItem("FPS", "FPS counter HUD", false));
+        render.add(new ModuleItem("Coordinates", "Player coordinates HUD", false)
+                .addSwitch("Show Direction", true));
+        render.add(new ModuleItem("ReachDisplay", "Attack reach display", false));
         list.add(render);
 
         Category world = new Category("World", "\u25EF", "MOD CONFIG");

@@ -46,19 +46,19 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private static final float[] KNOB_COLOR = {1f, 1f, 1f, 1f}; // 拖钮/滑块圆点固定用白色，不跟随主题切换（否则浅色主题下会变黑看不清）
     // ---- 南方客户端真实颜色 (from source: Colors.java + SouthsideDarkStyle.java) ----
     private static final float[] HDR_BG = {0.094f, 0.086f, 0.090f, 1f};           // #181818 标题栏 (SouthsideDarkStyle topBar)
-    private static final float[] SOUTH_SIDEBAR_BG = {0.082f, 0.082f, 0.090f, 0.945f}; // #151617 95% (Colors.GRAY_800_95)
-    private static final float[] SOUTH_PANEL_BG = {0.082f, 0.082f, 0.090f, 1f};    // #151617 (Colors.GRAY_800)
-    private static final float[] SOUTH_CARD_BORDER = {0.133f, 0.137f, 0.145f, 1f}; // #222326 (Colors.GRAY_700)
-    private static final float[] SOUTH_CARD_BORDER_SEL = {0.078f, 0.322f, 0.800f, 1f}; // #1452CC (Colors.PRIMARY_600)
-    private static final float[] SOUTH_SEARCH_BG = {0.133f, 0.137f, 0.145f, 1f};   // #222326 search bg
-    private static final float[] SOUTH_TRACK_OFF = {0.180f, 0.180f, 0.180f, 1f};  // #2E2E2E (SouthsideDarkStyle hover)
-    private static final float[] SOUTH_TAB_OFF = {0.286f, 0.310f, 0.361f, 1f};     // #494F5C (Colors.GRAY_300)
-    private static final float[] SOUTH_SECTION_LBL = {0.286f, 0.310f, 0.361f, 1f}; // #494F5C (Colors.GRAY_300)
-    private static final float[] SOUTH_SLIDER_TRACK = {0.133f, 0.137f, 0.145f, 1f}; // #222326
-    private static final float[] SOUTH_MODULE_BG = {0.141f, 0.141f, 0.141f, 1f};  // #242424 (SouthsideDarkStyle moduleBg)
-    private static final float[] SOUTH_CARD_BG = {0.094f, 0.094f, 0.094f, 1f};     // #181818 card bg
-    private static final float[] SOUTH_TOGGLE_ON = {0.078f, 0.322f, 0.800f, 1f};  // #1452CC (PRIMARY_600)
-    private static final float[] SOUTH_TOGGLE_OFF = {0.180f, 0.180f, 0.180f, 1f};  // #2E2E2E
+    private static final float[] SOUTH_SIDEBAR_BG = {0.082f, 0.082f, 0.090f, 0.945f}; // #151617 95%
+    private static final float[] SOUTH_PANEL_BG = {0.082f, 0.082f, 0.090f, 1f};    // #151617
+    private static final float[] SOUTH_CARD_BORDER = {0.20f, 0.20f, 0.20f, 1f};    // #333333
+    private static final float[] SOUTH_CARD_BORDER_SEL = {0.85f, 0.85f, 0.85f, 1f}; // #D9D9D9 白灰选中
+    private static final float[] SOUTH_SEARCH_BG = {0.16f, 0.16f, 0.16f, 1f};      // #292929
+    private static final float[] SOUTH_TRACK_OFF = {0.18f, 0.18f, 0.18f, 1f};      // #2E2E2E
+    private static final float[] SOUTH_TAB_OFF = {0.35f, 0.35f, 0.35f, 1f};        // #595959
+    private static final float[] SOUTH_SECTION_LBL = {0.35f, 0.35f, 0.35f, 1f};     // #595959
+    private static final float[] SOUTH_SLIDER_TRACK = {0.16f, 0.16f, 0.16f, 1f};    // #292929
+    private static final float[] SOUTH_MODULE_BG = {0.14f, 0.14f, 0.14f, 1f};       // #242424
+    private static final float[] SOUTH_CARD_BG = {0.094f, 0.094f, 0.094f, 1f};     // #181818
+    private static final float[] SOUTH_TOGGLE_ON = {0.85f, 0.85f, 0.85f, 1f};     // #D9D9D9 白灰（替代蓝色）
+    private static final float[] SOUTH_TOGGLE_OFF = {0.18f, 0.18f, 0.18f, 1f};      // #2E2E2E
     private static final float[] SOUTH_TEXT_WHITE = {1f, 1f, 1f, 0.8f};             // WHITE_80
     private static final float[] SOUTH_TEXT_DIM2 = {1f, 1f, 1f, 0.6f};             // WHITE_60
     private static final float[] SOUTH_TEXT_DIM3 = {1f, 1f, 1f, 0.5f};             // WHITE_50
@@ -67,10 +67,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private static final float[] TOAST_RED   = {0.851f, 0.125f, 0.125f, 1f};        // #D92020 禁用
     private ModuleItem darkThemeToggle; // 指向 Setting 分类里的 "Dark Theme" 开关，驱动主题切换
 
-    // ---- 主题色预设（多节点流动渐变）----
-    // 真实南方客户端强调色: #1452CC (Colors.PRIMARY_600)
-    private float[] ACCENT_1 = {0.078f, 0.322f, 0.800f, 1f}; // #1452CC
-    private float[] ACCENT_2 = {0.078f, 0.322f, 0.800f, 1f}; // 同色
+    // ---- 主题色预设（白/黑/灰系，不与南方蓝色完全相同）----
+    private float[] ACCENT_1 = {0.85f, 0.85f, 0.85f, 1f}; // #D9D9D9 白灰
+    private float[] ACCENT_2 = {0.65f, 0.65f, 0.65f, 1f}; // #A6A6A6 中灰
     private int selectedThemeIndex = 0;          // 当前选中的主题索引
     private float[] themeThemeRects;              // 运行时主题按钮命中区域
     private float customHue = 0.61f, customSat = 0.82f, customVal = 0.80f; // #1452CC
@@ -829,8 +828,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
     }
 
-    /** 通知提示（南方客户端风格）：圆角矩形背景 + 左侧彩色竖线(启用=绿/禁用=红) + 白色文字 + 底部进度条。
-     *  从屏幕右侧滑入、贴近右下角；多条垂直堆叠，间距 8px；显示约 2 秒后淡出滑出。 */
+    /** 通知提示（南方客户端风格）：100%透明背景 + 外围深色柔光阴影 + 左侧图标(✓/✗) + 两行文字 + 底部蓝色进度条。
+     *  不画任何背景矩形，仅通过 blur 系统在通知形状外围生成一圈深色阴影让通知从背景中"浮起"。
+     *  从屏幕右侧滑入、贴近右下角；多条垂直堆叠；显示约 2 秒后淡出滑出。 */
     private void drawToasts() {
         if (toasts.isEmpty()) return;
 
@@ -839,13 +839,17 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float offDist = Math.max(screenW, screenH) * 0.35f;
 
         float holdDuration = notificationDurationSlider != null ? (1.0f + notificationDurationSlider.sliderValue * 3.0f) : TOAST_HOLD;
-        float fontSize = 14f * uiScale * (notificationFontSizeSlider != null ? (0.75f + notificationFontSizeSlider.sliderValue * 0.7f) : 1f);
+        float titleSize = 14f * uiScale;
+        float msgSize = 12f * uiScale;
         float cornerR = 8f * uiScale;
-        float barW = 4f * uiScale;
-        float barInset = cornerR;
-        float textPad = 12f * uiScale;
-        // 玻璃质感：半透明背景 + 辉光阴影
-        float bgAlpha = 0.55f; // 半透明，露出底层内容产生玻璃感
+        float iconSize = 20f * uiScale;
+        float padX = 14f * uiScale;
+        float padY = 10f * uiScale;
+        float lineGap = 3f * uiScale;
+        float iconTextGap = 10f * uiScale;
+        // 重新计算高度：两行文字 + 内边距
+        float contentH = titleSize + lineGap + msgSize;
+        rectH = contentH + padY * 2;
 
         for (ToastNotice t : toasts) {
             float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
@@ -855,31 +859,49 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
             float[] barColor = t.enabled ? TOAST_GREEN : TOAST_RED;
 
-            // 1) 辉光阴影：先在透明贴图上画一遍形状，模糊后叠加成柔光
+            // 1) 外围深色阴影：在透明贴图上画形状，模糊后叠加成柔光阴影
+            // 不画背景矩形，只通过 blur 系统在外围生成阴影
             final float sDx = dx, sDy = dy, sRv = rv;
             blur.captureAndBlurTransparentTight(() -> {
-                quad.addRect(sDx, sDy, rectW, rectH, cornerR, new float[]{0f, 0f, 0f, 0.6f * sRv});
+                quad.addRect(sDx, sDy, rectW, rectH, cornerR, new float[]{0f, 0f, 0f, 0.7f * sRv});
             });
-            blur.drawGlow(new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
+            blur.drawGlow(new float[]{0f, 0f, 0f, 0.6f * rv}, screenW, screenH);
 
-            // 2) 半透明玻璃背景：深灰半透明，露出底层产生玻璃质感
-            quad.addRect(dx, dy, rectW, rectH, cornerR, withAlpha(SOUTH_MODULE_BG, bgAlpha * rv));
-            quad.flush(screenW, screenH);
+            // 不画背景矩形！保持100%透明
 
-            // 3) 左侧彩色竖线
-            quad.addRect(dx, dy + barInset, barW, rectH - 2f * barInset, 0f, withAlpha(barColor, rv));
-            quad.flush(screenW, screenH);
+            // 2) 左侧图标：✓（启用）或 ✗（禁用）
+            float iconX = dx + padX;
+            float iconY = dy + padY + (contentH - iconSize) / 2f;
+            String iconStr = t.enabled ? "\u2713" : "\u2717";  // ✓ 或 ✗
+            // 图标阴影
+            text.draw(iconStr, iconX + 1f * uiScale, iconY + 1.2f * uiScale, iconSize,
+                    new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
+            text.draw(iconStr, iconX, iconY, iconSize,
+                    new float[]{1f, 1f, 1f, rv}, screenW, screenH);
 
-            // 4) 文字：白色 + 黑色阴影（垂直居中：用 fontSize*0.4f 而非不随字号缩放的固定偏移）
-            float tx = dx + textPad;
-            float ty = dy + rectH / 2f - fontSize * 0.4f;
-            text.draw(t.text, tx + 1f * uiScale, ty + 1.2f * uiScale, fontSize, new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
-            text.draw(t.text, tx, ty, fontSize, new float[]{1f, 1f, 1f, rv}, screenW, screenH);
+            // 3) 右侧两行文字
+            float textX = iconX + iconSize + iconTextGap;
+            float titleY = dy + padY;
 
-            // 5) 底部进度条
+            // 标题行：固定文字 "Module"（参照南方）
+            text.draw(t("模块", "Module"), textX + 1f * uiScale, titleY + 1.2f * uiScale, titleSize,
+                    new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
+            text.draw(t("模块", "Module"), textX, titleY, titleSize,
+                    new float[]{1f, 1f, 1f, rv}, screenW, screenH);
+
+            // 内容行：模块名 + 启用/禁用
+            float msgY = titleY + titleSize + lineGap;
+            text.draw(t.text, textX + 1f * uiScale, msgY + 1.2f * uiScale, msgSize,
+                    new float[]{0f, 0f, 0f, 0.4f * rv}, screenW, screenH);
+            // 浅灰色文字
+            text.draw(t.text, textX, msgY, msgSize,
+                    new float[]{0.7f, 0.7f, 0.7f, rv}, screenW, screenH);
+
+            // 4) 底部进度条（蓝色，随时间收缩）
             float frac = Math.max(0f, Math.min(1f, 1f - (t.age - TOAST_ENTER) / holdDuration));
-            float pbH = 2.5f * uiScale;
-            quad.addRect(dx, dy + rectH - pbH, rectW * frac, pbH, 0f, withAlpha(barColor, 0.85f * rv));
+            float pbH = 2f * uiScale;
+            quad.addRect(dx, dy + rectH - pbH, rectW * frac, pbH, 0f,
+                    withAlpha(ACCENT_1, 0.85f * rv));
             quad.flush(screenW, screenH);
         }
     }
@@ -1153,7 +1175,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             } else if (opt.type == ModuleItem.ConfigOption.TYPE_SLIDER) {
                 // 额外滑块行：与主滑块行相同样式
                 quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
-                float osTrackH = 14f * uiScale;
+                float osTrackH = 5f * uiScale;
                 float osTrackX = trackX + 14f * uiScale;
                 float osTrackW = trackW - 28f * uiScale;
                 float osTrackY = curY + rowH / 2f - osTrackH / 2f;
@@ -1161,7 +1183,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 float osFillW = osTrackW * opt.sliderValue;
                 float[][] osDiag = diagGradient(ACCENT_1, ACCENT_2, alpha);
                 quad.addRectGradient(osTrackX, osTrackY, Math.max(osTrackH, osFillW), osTrackH, osTrackH / 2f, osDiag[0], osDiag[1], osDiag[2], osDiag[3]);
-                float osKnobD = osTrackH + 10f * uiScale;
+                float osKnobD = 12f * uiScale;
                 float osKnobX = osTrackX + osFillW - osKnobD / 2f;
                 quad.addRect(osKnobX, osTrackY + osTrackH / 2f - osKnobD / 2f, osKnobD, osKnobD, osKnobD / 2f, withAlpha(KNOB_COLOR, alpha));
                 // 热区用滑块轨道区域，并记录拖拽坐标基准
@@ -1173,7 +1195,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         // --- 滑块行（仅有滑块的模块） ---
         if (m.hasSlider) {
             quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
-            float sTrackH = 14f * uiScale;
+            float sTrackH = 5f * uiScale;
             float sTrackX = trackX + 14f * uiScale;
             float sTrackW = trackW - 28f * uiScale;
             float sTrackY = curY + rowH / 2f - sTrackH / 2f;
@@ -1181,7 +1203,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             float fillW = sTrackW * m.sliderValue;
             float[][] diag = diagGradient(ACCENT_1, ACCENT_2, alpha);
             quad.addRectGradient(sTrackX, sTrackY, Math.max(sTrackH, fillW), sTrackH, sTrackH / 2f, diag[0], diag[1], diag[2], diag[3]);
-            float knobD = sTrackH + 10f * uiScale;
+            float knobD = 12f * uiScale;
             float knobX = sTrackX + fillW - knobD / 2f;
             quad.addRect(knobX, sTrackY + sTrackH / 2f - knobD / 2f, knobD, knobD, knobD / 2f, withAlpha(KNOB_COLOR, alpha));
             configSliderX = sTrackX; configSliderW = sTrackW;
