@@ -134,6 +134,9 @@ public class DynamicIslandRenderer {
         float a = Math.max(0f, Math.min(1f, islandModule.hudAnim.get()));
         if (a <= 0.01f) return;
 
+        int sw = (int) screenW;
+        int sh = (int) screenH;
+
         // FPS 计数
         frameCount++;
         long nowMs = System.currentTimeMillis();
@@ -205,13 +208,13 @@ public class DynamicIslandRenderer {
         // 1. 背景模糊
         blur.captureAndBlurTransparent(() -> {
             quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{1f, 1f, 1f, 1f});
-            quad.flush(screenW, screenH);
+            quad.flush(sw, sh);
         });
-        blur.drawGlow(new float[]{0f, 0f, 0f, 0.3f * a}, screenW, screenH);
+        blur.drawGlow(new float[]{0f, 0f, 0f, 0.3f * a}, sw, sh);
 
         // 2. 黑色半透明背景
         quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 0.55f * a});
-        quad.flush(screenW, screenH);
+        quad.flush(sw, sh);
 
         // 3. 裁剪区域
         GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
@@ -297,11 +300,11 @@ public class DynamicIslandRenderer {
 
                 // 标题文字
                 text.draw(tc.title, islandX + 38f * s, contentY + 8f * s, 14f * s,
-                        new float[]{1f, 1f, 1f, a * animAlpha}, screenW, screenH);
+                        new float[]{1f, 1f, 1f, a * animAlpha}, sw, sh);
 
                 // 描述文字
                 text.draw(tc.description, islandX + 38f * s, contentY + 23f * s, 12f * s,
-                        new float[]{0.8f, 0.8f, 0.8f, a * animAlpha}, screenW, screenH);
+                        new float[]{0.8f, 0.8f, 0.8f, a * animAlpha}, sw, sh);
 
                 contentY += ic.height;
             }
@@ -324,16 +327,16 @@ public class DynamicIslandRenderer {
 
             // 客户端名（白色粗体）
             text.draw(nameStr, startX, textY, fontSize,
-                    new float[]{1f, 1f, 1f, a}, screenW, screenH);
+                    new float[]{1f, 1f, 1f, a}, sw, sh);
             // FPS/Ping（灰色）
             if (def.length() > 0) {
                 text.draw(def, startX + nameW, textY + 1f * s, defSize,
-                        new float[]{0.7f, 0.7f, 0.7f, a}, screenW, screenH);
+                        new float[]{0.7f, 0.7f, 0.7f, a}, sw, sh);
             }
         }
 
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        quad.flush(screenW, screenH);
+        quad.flush(sw, sh);
     }
 
     /** 指数平滑（参考 AnimationUtil.smooth） */
@@ -372,7 +375,7 @@ public class DynamicIslandRenderer {
         String description;
         final String moduleName;
         boolean enabled;
-        final long time;
+        long time;
         final EaseOutExpoAnim animation;
         final MSTimer timer;
 
