@@ -107,7 +107,7 @@ public class DynamicIslandRenderer {
             }
         }
         timedContents.add(new TimedContent(ContentType.MODULE, "Module Toggled",
-                moduleName + (enabled ? " has been Enabled" : " has been Disabled"),
+                moduleName + (enabled ? " has been §2Enabled!" : " has been §4Disabled!"),
                 moduleName, enabled, 2000)); // 原版固定 2000ms
     }
 
@@ -155,10 +155,10 @@ public class DynamicIslandRenderer {
         }
     }
 
-    /** 根据进度返回颜色（紫色调） */
+    /** 根据进度返回颜色（INFO 蓝色） */
     private float[] getProgressColor(float progress) {
-        // 紫色 #A855F7 ≈ rgb(168, 85, 247)
-        return new float[]{168f / 255f, 85f / 255f, 247f / 255f, 1f};
+        // INFO 蓝色 Color(48, 117, 147)
+        return new float[]{48f / 255f, 117f / 255f, 147f / 255f, 1f};
     }
 
     private long getDurationMs() {
@@ -237,7 +237,9 @@ public class DynamicIslandRenderer {
             float titleW = text.measure(tc.title, 14f * s);
             float descW = text.measure(tc.description, 12f * s);
             float contentW = (CONTENT_WIDTH_BASE + Math.max(titleW, descW)) * s;
-            float contentH = CONTENT_HEIGHT * s;
+            // 计算内容尺寸
+            // PROGRESS 类型需要额外高度给进度条
+            float contentH = (tc.type == ContentType.PROGRESS ? 50f : CONTENT_HEIGHT) * s;
             contents.add(new IslandContent(tc, contentW, contentH));
         }
 
@@ -479,24 +481,40 @@ public class DynamicIslandRenderer {
                         break;
                     }
                     case PROGRESS: {
-                        // 紫色圆形图标
-                        float[] pc = tc.iconColor != null ? tc.iconColor : new float[]{168f/255f, 85f/255f, 247f/255f, 1f};
+                        // INFO 蓝色圆形图标背景
+                        // Color(48, 117, 147, 200)
+                        float pb_r = 48f / 255f, pb_g = 117f / 255f, pb_b = 147f / 255f;
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
-                                new float[]{pc[0], pc[1], pc[2], (200f/255f) * contentAlpha});
-                        // 紫色进度条
+                                new float[]{pb_r, pb_g, pb_b, (200f / 255f) * contentAlpha});
+                        // 3D 立方体图标（等距视角白色线框）
+                        float cx = iconX + iconSize / 2f;
+                        float cy = iconY + iconSize / 2f;
+                        float hs = iconSize * 0.28f; // 半尺寸
+                        // 立方体三个可见面（等距投影）
+                        // 顶面（菱形）
+                        quad.addRect(cx - hs * 0.5f, cy - hs, hs, hs * 0.5f, 0f,
+                                new float[]{1f, 1f, 1f, contentAlpha * 0.9f});
+                        // 左面
+                        quad.addRect(cx - hs * 0.5f, cy - hs * 0.5f, hs * 0.5f, hs, 0f,
+                                new float[]{1f, 1f, 1f, contentAlpha * 0.7f});
+                        // 右面
+                        quad.addRect(cx, cy - hs * 0.5f, hs * 0.5f, hs, 0f,
+                                new float[]{1f, 1f, 1f, contentAlpha * 0.8f});
+
+                        // 进度条：蓝色填充
                         float barX = baseX + 38f * s;
                         float barY = baseY + 26f * s;
                         float barW = ic.width - 38f * s - 8f * s;
-                        float barH = 5f * s;
-                        float barR = 2.5f * s;
+                        float barH = 4f * s;
+                        float barR = 2f * s;
                         // 背景
                         quad.addRect(barX, barY, barW, barH, barR,
                                 new float[]{0.2f, 0.2f, 0.2f, contentAlpha});
-                        // 进度
+                        // 填充
                         float fillW = barW * tc.progress;
                         if (fillW > 0) {
                             quad.addRect(barX, barY, fillW, barH, barR,
-                                    new float[]{pc[0], pc[1], pc[2], contentAlpha});
+                                    new float[]{pb_r, pb_g, pb_b, contentAlpha});
                         }
                         break;
                     }
@@ -510,7 +528,7 @@ public class DynamicIslandRenderer {
                 // 原版用 MC 颜色代码: §2=DarkGreen(0,170,0) §4=DarkRed(170,0,0)
                 if (tc.type == ContentType.MODULE) {
                     String prefix = tc.moduleName + " has been ";
-                    String status = tc.enabled ? "Enabled" : "Disabled";
+                    String status = tc.enabled ? "Enabled!" : "Disabled!";
                     // MC §2 = rgb(0,170,0), §4 = rgb(170,0,0)
                     float[] statusColor = tc.enabled
                             ? new float[]{0f, 170f / 255f, 0f, contentAlpha}      // §2 Dark Green
@@ -520,6 +538,10 @@ public class DynamicIslandRenderer {
                             new float[]{0.85f, 0.85f, 0.85f, contentAlpha}, sw, sh);
                     text.draw(status, baseX + 38f * s + prefixW, baseY + 24f * s, 12f * s,
                             statusColor, sw, sh);
+                } else if (tc.type == ContentType.PROGRESS) {
+                    // PROGRESS: 标题在第一行，描述在第二行（包含进度信息）
+                    text.draw(tc.description, baseX + 38f * s, baseY + 24f * s, 12f * s,
+                            new float[]{0.7f, 0.7f, 0.7f, contentAlpha}, sw, sh);
                 } else {
                     text.draw(tc.description, baseX + 38f * s, baseY + 24f * s, 12f * s,
                             new float[]{0.85f, 0.85f, 0.85f, contentAlpha}, sw, sh);

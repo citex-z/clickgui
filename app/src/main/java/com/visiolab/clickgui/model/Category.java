@@ -207,6 +207,10 @@ public class Category {
                 .addSlider("Range", 50, 10, 200, "blocks"));
         client.add(new ModuleItem("HUD Editor", "Edit HUD positions", false));
         client.add(new ModuleItem("Cape", "Custom client cape", false));
+        client.add(new ModuleItem("Config", "Save and load module configurations", true)
+                .addButton("Save Config")
+                .addButton("Load Config")
+        );
         list.add(client);
 
         Category combat = new Category("Combat", "\u2694", "MOD CONFIG");

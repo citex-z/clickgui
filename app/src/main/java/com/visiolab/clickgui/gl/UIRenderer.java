@@ -310,6 +310,58 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             dynamicIsland.addSuccess("Config Loaded", "Module settings loaded");
         }
     }
+
+    /** 保存所有模块配置到 SharedPreferences */
+    private void saveModuleConfig() {
+        try {
+            android.content.SharedPreferences prefs = context.getSharedPreferences("soar_config", android.content.Context.MODE_PRIVATE);
+            android.content.SharedPreferences.Editor editor = prefs.edit();
+            java.util.List<Category> cats = categories;
+            for (Category c : cats) {
+                for (ModuleItem m : c.modules) {
+                    editor.putBoolean("mod_" + m.name + "_enabled", m.enabled);
+                    editor.putFloat("mod_" + m.name + "_sliderValue", m.sliderValue);
+                    for (ModuleItem.ConfigOption opt : m.options) {
+                        if (opt.type == ModuleItem.ConfigOption.TYPE_SWITCH) {
+                            editor.putBoolean("opt_" + m.name + "_" + opt.label, opt.boolValue);
+                        } else if (opt.type == ModuleItem.ConfigOption.TYPE_SLIDER) {
+                            editor.putFloat("opt_" + m.name + "_" + opt.label, opt.sliderValue);
+                        } else if (opt.type == ModuleItem.ConfigOption.TYPE_DROPDOWN) {
+                            editor.putInt("opt_" + m.name + "_" + opt.label, opt.dropdownIndex);
+                        }
+                    }
+                }
+            }
+            editor.apply();
+        } catch (Exception e) {
+            // ignore
+        }
+    }
+
+    /** 从 SharedPreferences 加载所有模块配置 */
+    private void loadModuleConfig() {
+        try {
+            android.content.SharedPreferences prefs = context.getSharedPreferences("soar_config", android.content.Context.MODE_PRIVATE);
+            java.util.List<Category> cats = categories;
+            for (Category c : cats) {
+                for (ModuleItem m : c.modules) {
+                    m.enabled = prefs.getBoolean("mod_" + m.name + "_enabled", m.enabled);
+                    m.sliderValue = prefs.getFloat("mod_" + m.name + "_sliderValue", m.sliderValue);
+                    for (ModuleItem.ConfigOption opt : m.options) {
+                        if (opt.type == ModuleItem.ConfigOption.TYPE_SWITCH) {
+                            opt.boolValue = prefs.getBoolean("opt_" + m.name + "_" + opt.label, opt.boolValue);
+                        } else if (opt.type == ModuleItem.ConfigOption.TYPE_SLIDER) {
+                            opt.sliderValue = prefs.getFloat("opt_" + m.name + "_" + opt.label, opt.sliderValue);
+                        } else if (opt.type == ModuleItem.ConfigOption.TYPE_DROPDOWN) {
+                            opt.dropdownIndex = prefs.getInt("opt_" + m.name + "_" + opt.label, opt.dropdownIndex);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+    }
     private ModuleItem watermarkSyncToggle, watermarkUnderlineToggle;
     private ModuleItem watermarkShadowToggle;
     private float watermarkShadowToggleRectX, watermarkShadowToggleRectY, watermarkShadowToggleW, watermarkShadowToggleH;
@@ -2596,9 +2648,9 @@ private void drawFloatingBall() {
                     // Scaffold 搭路：开关时显示进度条提示
                     if (activeConfigModule.name.equals("Scaffold")) {
                         if (activeConfigModule.enabled) {
-                            dynamicIsland.addProgress("Scaffold", "Placing blocks...", 0.3f);
+                            dynamicIsland.addProgress("Scaffold Toggled", "Placing blocks...", 0.3f);
                         } else {
-                            dynamicIsland.removeProgress("Scaffold");
+                            dynamicIsland.removeProgress("Scaffold Toggled");
                         }
                     }
                     return;
@@ -2657,9 +2709,15 @@ private void drawFloatingBall() {
                             float t = (ex - rect[0]) / rect[2];
                             opt.sliderValue = Math.max(0f, Math.min(1f, t));
                         } else if (optType == ModuleItem.ConfigOption.TYPE_BUTTON) {
-                            // 按钮点击：打开快捷键编辑器
+                            // 按钮点击
                             if ("Edit Hotkeys...".equals(opt.label)) {
                                 hotkeyEditorOpen = true;
+                            } else if ("Save Config".equals(opt.label)) {
+                                saveModuleConfig();
+                                onConfigSaved();
+                            } else if ("Load Config".equals(opt.label)) {
+                                loadModuleConfig();
+                                onConfigLoaded();
                             }
                         }
                         return;
@@ -2804,6 +2862,7 @@ private void drawFloatingBall() {
                 // 搜索文本输入：GLSurfaceView 不便接入 InputMethodManager，
                 // 暂不处理键盘输入，搜索框仅作视觉元素；searchQuery 可通过代码设置。
                 // 2) 卡片交互：DOWN时记录候选，UP时检查是否滑动过
+                // 注意：不 return，让滚动初始化代码也能执行
                 for (int idx = 0; idx < moduleHitRects.size(); idx++) {
                     Object[] hit = moduleHitRects.get(idx);
                     float[] r = (float[]) hit[0];
@@ -2813,14 +2872,12 @@ private void drawFloatingBall() {
                     if (!inside(ex, ey, r)) continue;
 
                     if ("TOGGLE".equals(type)) {
-                        // 不在DOWN时触发，只记录候选，在UP时判断
                         pendingToggleModule = m;
-                        return;
+                        break; // 找到就跳出，不 return
                     }
                     if ("CARD".equals(type)) {
-                        // 不在DOWN时触发，只记录候选，在UP时判断
                         pendingCardModule = m;
-                        return;
+                        break;
                     }
                 }
                 // 4) 分类点击
@@ -2897,9 +2954,9 @@ private void drawFloatingBall() {
                         // Scaffold 搭路：开关时显示进度条提示
                         if (tm.name.equals("Scaffold")) {
                             if (tm.enabled) {
-                                dynamicIsland.addProgress("Scaffold", "Placing blocks...", 0.3f);
+                                dynamicIsland.addProgress("Scaffold Toggled", "Placing blocks...", 0.3f);
                             } else {
-                                dynamicIsland.removeProgress("Scaffold");
+                                dynamicIsland.removeProgress("Scaffold Toggled");
                             }
                         }
                         break;
