@@ -1531,10 +1531,29 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float decorH = 3f * uiScale;
         quad.addRect(trackX, startY + groupContentH - decorH, trackW, decorH, 0f, withAlpha(ACCENT_1, alpha * 0.3f));
 
-        // --- "Enabled" 开关行（不再单独画背景，已包含在大圆角矩形内） ---
+        // --- "Enabled" 开关行 + Assign Hotkey 按钮（同一行） ---
         float toggleW = 44f * uiScale, toggleH = 22f * uiScale;
         float toggleX = trackX + trackW - pad - toggleW;
         float toggleY = curY + rowH / 2f - toggleH / 2f;
+        // Assign Hotkey 小按钮：放在 toggle 左侧
+        float hkBtnH2 = 22f * uiScale;
+        float hkBtnGap = 8f * uiScale;
+        float hkBtnW2 = 100f * uiScale;
+        float hkBtnX2 = toggleX - pad - hkBtnW2 - hkBtnGap;
+        float hkBtnY2 = curY + rowH / 2f - hkBtnH2 / 2f;
+        // 检查是否已有快捷键
+        boolean hasHotkey = com.visiolab.clickgui.hotkey.HotkeyManager.getInstance().hasHotkeyForModule(m.name);
+        float[] hkBgColor = hasHotkey
+                ? withAlpha(ACCENT_1, alpha * 0.3f)
+                : withAlpha(SOUTH_MODULE_BG, alpha);
+        quad.addRect(hkBtnX2, hkBtnY2, hkBtnW2, hkBtnH2, 6f * uiScale, hkBgColor);
+        String hkLabel2 = hasHotkey ? "Hotkey: ON" : "Hotkey";
+        float hkFontSize2 = 11f * uiScale;
+        float hkTextW2 = text.measure(hkLabel2, hkFontSize2);
+        float hkTextX2 = hkBtnX2 + (hkBtnW2 - hkTextW2) / 2f;
+        float hkTextY2 = hkBtnY2 + (hkBtnH2 - hkFontSize2) / 2f - 1f * uiScale;
+        text.draw(hkLabel2, hkTextX2, hkTextY2, hkFontSize2, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+        assignHotkeyRect = new float[]{hkBtnX2, hkBtnY2, hkBtnW2, hkBtnH2};
         configToggleRect = new float[]{toggleX, toggleY, toggleW, toggleH};
         m.toggleAnim.setTarget(m.enabled ? 1f : 0f);
         m.toggleAnim.update(frameDt);
@@ -1648,24 +1667,6 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
         // --- 描述区（已包含在大圆角矩形内，不再单独画背景） ---
         curY += descH + rowGap;
-
-        // --- Assign Hotkey 按钮（所有模块都有） ---
-        float hkBtnH = 36f * uiScale;
-        float hkBtnX = trackX + pad;
-        float hkBtnW = trackW - pad * 2f;
-        float hkBtnY = curY;
-        float hkCornerR = 8f * uiScale;
-        quad.addRect(hkBtnX, hkBtnY, hkBtnW, hkBtnH, hkCornerR, withAlpha(SOUTH_MODULE_BG, alpha));
-        // 文字居中
-        String hkLabel = "Assign Hotkey";
-        float hkFontSize = 13f * uiScale;
-        float hkTextW = text.measure(hkLabel, hkFontSize);
-        float hkTextX = hkBtnX + (hkBtnW - hkTextW) / 2f;
-        float hkTextY = hkBtnY + (hkBtnH - hkFontSize) / 2f - 1f * uiScale;
-        text.draw(hkLabel, hkTextX, hkTextY, hkFontSize, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
-        // 热区
-        assignHotkeyRect = new float[]{hkBtnX, hkBtnY, hkBtnW, hkBtnH};
-        curY += hkBtnH + rowGap;
 
         // --- 调色板（仅 Preferences 分类下的 Theme 模块） ---
         if (m.name.equals("Theme") || m.name.equals("Theme Color")) {
@@ -2680,13 +2681,24 @@ private void drawFloatingBall() {
                 // 检查 Assign Hotkey 按钮
                 if (assignHotkeyRect != null && inside(ex, ey, assignHotkeyRect)) {
                     if (activeConfigModule != null) {
-                        com.visiolab.clickgui.hotkey.HotkeyItem hk = new com.visiolab.clickgui.hotkey.HotkeyItem(
-                                activeConfigModule.name, activeConfigModule.name);
-                        hk.x = screenW * 0.5f - 22f * uiScale;
-                        hk.y = screenH * 0.7f;
-                        com.visiolab.clickgui.hotkey.HotkeyManager.getInstance().addHotkey(hk);
-                        if (dynamicIsland != null) {
-                            dynamicIsland.addSuccess("Hotkey Added", activeConfigModule.name + " hotkey created");
+                        com.visiolab.clickgui.hotkey.HotkeyManager hkMgr = com.visiolab.clickgui.hotkey.HotkeyManager.getInstance();
+                        if (hkMgr.hasHotkeyForModule(activeConfigModule.name)) {
+                            // 已有快捷键，移除它（切换）
+                            hkMgr.getHotkeys().removeIf(h -> h.boundModuleName.equals(activeConfigModule.name));
+                            hkMgr.save();
+                            if (dynamicIsland != null) {
+                                dynamicIsland.addInfo("Hotkey Removed", activeConfigModule.name + " hotkey deleted");
+                            }
+                        } else {
+                            // 创建新快捷键
+                            com.visiolab.clickgui.hotkey.HotkeyItem hk = new com.visiolab.clickgui.hotkey.HotkeyItem(
+                                    activeConfigModule.name, activeConfigModule.name);
+                            hk.x = screenW * 0.5f - 22f * uiScale;
+                            hk.y = screenH * 0.7f;
+                            hkMgr.addHotkey(hk);
+                            if (dynamicIsland != null) {
+                                dynamicIsland.addSuccess("Hotkey Added", activeConfigModule.name + " hotkey created");
+                            }
                         }
                     }
                     return;

@@ -51,6 +51,14 @@ public class HotkeyManager {
         return hotkeys;
     }
 
+    /** 检查某模块是否已有快捷键 */
+    public boolean hasHotkeyForModule(String moduleName) {
+        for (HotkeyItem h : hotkeys) {
+            if (h.boundModuleName.equals(moduleName)) return true;
+        }
+        return false;
+    }
+
     public void addHotkey(HotkeyItem item) {
         hotkeys.add(item);
         save();
