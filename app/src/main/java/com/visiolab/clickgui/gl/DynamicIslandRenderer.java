@@ -63,7 +63,8 @@ public class DynamicIslandRenderer {
         MODULE,
         SUCCESS,
         WARNING,
-        INFO
+        INFO,
+        PROGRESS
     }
 
     public DynamicIslandRenderer(QuadBatch quad, TextRenderer text, BlurPipeline blur, BlurPipeline.SceneDrawer worldSceneDrawer) {
@@ -123,6 +124,41 @@ public class DynamicIslandRenderer {
     /** 添加信息提示 */
     public void addInfo(String title, String description) {
         timedContents.add(new TimedContent(ContentType.INFO, title, description, null, true, getDurationMs()));
+    }
+
+    /** 添加进度条内容（如 Scaffold 搭路进度） */
+    public void addProgress(String title, String description, float progress) {
+        // 如果已有同标题的进度内容，更新进度
+        for (TimedContent tc : timedContents) {
+            if (tc.type == ContentType.PROGRESS && tc.title.equals(title)) {
+                tc.description = description;
+                tc.progress = progress;
+                // 更新颜色
+                tc.iconColor = getProgressColor(progress);
+                return;
+            }
+        }
+        TimedContent tc = new TimedContent(ContentType.PROGRESS, title, description, null, true, 99999999);
+        tc.progress = progress;
+        tc.iconColor = getProgressColor(progress);
+        timedContents.add(tc);
+    }
+
+    /** 移除进度条内容 */
+    public void removeProgress(String title) {
+        for (int i = timedContents.size() - 1; i >= 0; i--) {
+            TimedContent tc = timedContents.get(i);
+            if (tc.type == ContentType.PROGRESS && tc.title.equals(title)) {
+                timedContents.remove(i);
+                return;
+            }
+        }
+    }
+
+    /** 根据进度返回颜色（紫色调） */
+    private float[] getProgressColor(float progress) {
+        // 紫色 #A855F7 ≈ rgb(168, 85, 247)
+        return new float[]{168f / 255f, 85f / 255f, 247f / 255f, 1f};
     }
 
     private long getDurationMs() {
@@ -190,6 +226,10 @@ public class DynamicIslandRenderer {
                     if (elapsed >= tc.time - 200) {
                         tc.animation.setDirection(Direction.BACKWARDS);
                     }
+                    break;
+                case PROGRESS:
+                    // 持续显示，不自动退场
+                    tc.animation.setDirection(Direction.FORWARDS);
                     break;
             }
 
@@ -438,6 +478,28 @@ public class DynamicIslandRenderer {
                         }
                         break;
                     }
+                    case PROGRESS: {
+                        // 紫色圆形图标
+                        float[] pc = tc.iconColor != null ? tc.iconColor : new float[]{168f/255f, 85f/255f, 247f/255f, 1f};
+                        quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
+                                new float[]{pc[0], pc[1], pc[2], (200f/255f) * contentAlpha});
+                        // 紫色进度条
+                        float barX = baseX + 38f * s;
+                        float barY = baseY + 26f * s;
+                        float barW = ic.width - 38f * s - 8f * s;
+                        float barH = 5f * s;
+                        float barR = 2.5f * s;
+                        // 背景
+                        quad.addRect(barX, barY, barW, barH, barR,
+                                new float[]{0.2f, 0.2f, 0.2f, contentAlpha});
+                        // 进度
+                        float fillW = barW * tc.progress;
+                        if (fillW > 0) {
+                            quad.addRect(barX, barY, fillW, barH, barR,
+                                    new float[]{pc[0], pc[1], pc[2], contentAlpha});
+                        }
+                        break;
+                    }
                 }
 
                 // ---- 标题文字（原版 38, 9, bold 20）----
@@ -522,6 +584,8 @@ public class DynamicIslandRenderer {
         long time;
         final EaseOutExpoAnim animation;
         final MSTimer timer;
+        float progress = 0f;        // PROGRESS 类型专用
+        float[] iconColor = null;   // PROGRESS 类型专用
 
         TimedContent(ContentType type, String title, String description, String moduleName, boolean enabled, long timeMs) {
             this.type = type;

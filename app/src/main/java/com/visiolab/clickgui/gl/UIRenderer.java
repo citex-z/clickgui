@@ -431,6 +431,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     // 滑动误触修正：记录按下坐标，MOVE事件中如果垂直移动超过阈值标记为滑动，UP时跳过EXPAND点击
     private float touchDownX = -1, touchDownY = -1;
     private boolean touchMoved = false;
+    private ModuleItem pendingToggleModule = null; // DOWN时记录，UP时触发
+    private ModuleItem pendingCardModule = null;   // DOWN时记录，UP时触发
     // 配置页滑动误触修正：ACTION_DOWN 记录起点，ACTION_UP 时若移动距离超过阈值则视为滑动，不触发点击
     private float downX = -1f, downY = -1f;
     private long downTime = 0L;
@@ -2591,6 +2593,14 @@ private void drawFloatingBall() {
                     com.visiolab.nativebridge.ModuleHook.onToggle(activeConfigModule);
                     if (dynamicIsland != null) dynamicIsland.addModuleToggle(activeConfigModule.name, activeConfigModule.enabled);
                     checkModuleConflicts();
+                    // Scaffold 搭路：开关时显示进度条提示
+                    if (activeConfigModule.name.equals("Scaffold")) {
+                        if (activeConfigModule.enabled) {
+                            dynamicIsland.addProgress("Scaffold", "Placing blocks...", 0.3f);
+                        } else {
+                            dynamicIsland.removeProgress("Scaffold");
+                        }
+                    }
                     return;
                 }
                 // 检查滑块拖拽（M3 风格：热区已扩大到 48px 高，直接使用 configSlider 坐标）
@@ -2793,7 +2803,7 @@ private void drawFloatingBall() {
                 }
                 // 搜索文本输入：GLSurfaceView 不便接入 InputMethodManager，
                 // 暂不处理键盘输入，搜索框仅作视觉元素；searchQuery 可通过代码设置。
-                // 2) 卡片交互：点击开关栏切换模块，点击卡片其他区域暂不处理
+                // 2) 卡片交互：DOWN时记录候选，UP时检查是否滑动过
                 for (int idx = 0; idx < moduleHitRects.size(); idx++) {
                     Object[] hit = moduleHitRects.get(idx);
                     float[] r = (float[]) hit[0];
@@ -2803,17 +2813,13 @@ private void drawFloatingBall() {
                     if (!inside(ex, ey, r)) continue;
 
                     if ("TOGGLE".equals(type)) {
-                        // 点击开关栏：切换模块开关
-                        m.enabled = !m.enabled;
-                        spawnModuleToast(m.name, m.enabled);
-                        com.visiolab.nativebridge.ModuleHook.onToggle(m);
-                        if (dynamicIsland != null) dynamicIsland.addModuleToggle(m.name, m.enabled);
-                        checkModuleConflicts();
+                        // 不在DOWN时触发，只记录候选，在UP时判断
+                        pendingToggleModule = m;
                         return;
                     }
                     if ("CARD".equals(type)) {
-                        // 点击图标区：打开模块配置面板（与真实南方一致）
-                        toggleConfigPanelFor(m);
+                        // 不在DOWN时触发，只记录候选，在UP时判断
+                        pendingCardModule = m;
                         return;
                     }
                 }
@@ -2876,6 +2882,39 @@ private void drawFloatingBall() {
                 draggingHue = false;
                 draggingSV = false;
                 dragStartY = -1;
+                // 卡片点击：只有没有滑动过才触发
+                if (!touchMoved) {
+                    if (pendingToggleModule != null) {
+                        ModuleItem tm = pendingToggleModule;
+                        pendingToggleModule = null;
+                        pendingCardModule = null;
+                        touchMoved = false;
+                        tm.enabled = !tm.enabled;
+                        spawnModuleToast(tm.name, tm.enabled);
+                        com.visiolab.nativebridge.ModuleHook.onToggle(tm);
+                        if (dynamicIsland != null) dynamicIsland.addModuleToggle(tm.name, tm.enabled);
+                        checkModuleConflicts();
+                        // Scaffold 搭路：开关时显示进度条提示
+                        if (tm.name.equals("Scaffold")) {
+                            if (tm.enabled) {
+                                dynamicIsland.addProgress("Scaffold", "Placing blocks...", 0.3f);
+                            } else {
+                                dynamicIsland.removeProgress("Scaffold");
+                            }
+                        }
+                        break;
+                    }
+                    if (pendingCardModule != null) {
+                        ModuleItem cm = pendingCardModule;
+                        pendingToggleModule = null;
+                        pendingCardModule = null;
+                        touchMoved = false;
+                        toggleConfigPanelFor(cm);
+                        break;
+                    }
+                }
+                pendingToggleModule = null;
+                pendingCardModule = null;
                 touchMoved = false;
                 longPressCandidate = null;
                 longPressFired = false;
@@ -2894,6 +2933,8 @@ private void drawFloatingBall() {
                 draggingCardSlider = false;
                 sliderDragModule = null;
                 cardSliderRect = null;
+                pendingToggleModule = null;
+                pendingCardModule = null;
                 break;
         }
     }
