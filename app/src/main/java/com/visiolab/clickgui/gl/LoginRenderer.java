@@ -333,14 +333,6 @@ public class LoginRenderer {
         float pressT = loginBtnPress.get();
         float pressOffset = pressT * 2f;
 
-        // 按钮下方柔和投影（morph 后期才显现，给按钮"浮起"的层次感）
-        if (morphEased > 0.3f) {
-            float shadowAlpha = (morphEased - 0.3f) / 0.7f * 0.22f;
-            float shadowY = morphBarY + morphBarH + 2f + pressOffset;
-            quad.addRect(morphBarX + 2f, shadowY, morphBarW, morphBarH * 0.5f, morphBarR * 0.5f,
-                    new float[]{DARK_GRAY_DARK[0], DARK_GRAY_DARK[1], DARK_GRAY_DARK[2], shadowAlpha});
-        }
-
         // 按钮主体：顶部高光 -> 底部深色渐变，按下时整体下沉 2px
         quad.addRectGradient(morphBarX, morphBarY + pressOffset, morphBarW, morphBarH, morphBarR,
                 DARK_GRAY_LIGHT, DARK_GRAY_LIGHT, DARK_GRAY_DARK, DARK_GRAY_DARK);
@@ -462,6 +454,7 @@ public class LoginRenderer {
             }
             // 点击登录按钮（启动淡出动画）
             if (loginBtnRect != null && inside(ex, ey, loginBtnRect)) {
+                activeField = -1; // 立即取消聚焦，防止 IME 继续发送文本
                 loginBtnPress.snapTo(1f);
                 loginBtnPress.setTarget(0f);
                 // 随便填都能登录，启动淡出
@@ -523,6 +516,7 @@ public class LoginRenderer {
      *  比逐字符 append/delete 更稳健，能正确处理 IME 组词、粘贴、整段删除等情况。 */
     public void setActiveFieldText(String text) {
         if (animTime < T_TRANSITION_END) return;
+        if (loginDone) return; // 登录已提交，不再接受输入，避免淡出期间 TextWatcher 回调导致崩溃
         String s = text == null ? "" : text;
         if (activeField == 0) {
             username.setLength(0);

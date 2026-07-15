@@ -197,6 +197,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private ModuleItem arrayListShadowXSlider, arrayListShadowYSlider;
     private ModuleItem arrayListFlowSpeedSlider;
     private ModuleItem arrayListLineToggle;
+    private ModuleItem arrayListColorDropdown, arrayListHeightSlider, arrayListThemeGradToggle;
+    private ModuleItem.ConfigOption arrayListColorOpt, arrayListHeightOpt, arrayListThemeGradOpt;
     private float arrayListLineToggleRectX, arrayListLineToggleRectY, arrayListLineToggleW, arrayListLineToggleH;
     private float arrayListFlowSpeedSliderX, arrayListFlowSpeedSliderW;
     private boolean draggingArrayListFlowSpeed = false;
@@ -715,7 +717,15 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             if (!c.name.equals("Client")) continue;
             for (ModuleItem m : c.modules) {
                 switch (m.name) {
-                    case "ArrayList": arrayListToggle = m; break;
+                    case "ArrayList":
+                        arrayListToggle = m;
+                        // 从 options 中提取新增的配置项引用
+                        for (ModuleItem.ConfigOption opt : m.options) {
+                            if ("Color".equals(opt.label)) arrayListColorOpt = opt;
+                            else if ("Height".equals(opt.label)) arrayListHeightOpt = opt;
+                            else if ("Theme Gradient".equals(opt.label)) arrayListThemeGradOpt = opt;
+                        }
+                        break;
                     case "Watermark": watermarkToggle = m; break;
                     case "Notifications": notificationToggle = m; break;
                     case "ClickGUI": clickGuiModule = m; break;
@@ -733,25 +743,91 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
     }
 
-    /** ArrayList 每一行的颜色——不管是单色模式还是彩色主题模式，都必须是动态流动的，
-     *  用 flowOffset（持续递增、永不重置）驱动，而不是按位置写死的静态渐变。
-     *  默认（arrayListSyncToggle 关）：亮度在"顶部亮度"和"底部亮度"之间缓慢流动的单色渐变。
-     *  开启 arrayListSyncToggle 后：换成跟随主题强调色的彩色流动渐变（可选的花哨风格）。 */
+    /** ArrayList 每一行的颜色——参考南方客户端 ArrayListHud 的 6 种主题模式实现。
+     *  Color 下拉框选择主题：0=Custom, 1=Rainbow, 2=LightRainbow, 3=Astolfo, 4=Weird, 5=Valentine
+     *  Theme Gradient 开关：开启时用 ACCENT 主题色替代 Custom 模式的双色 */
     private float[] arrayListRowColor(int i, int count) {
-        boolean colorful = arrayListSyncToggle != null && arrayListSyncToggle.enabled;
         float t = count <= 1 ? 0f : i / (float) (count - 1);
         float phase = t + flowOffset;
-        phase = phase - (float) Math.floor(phase); // 取模到 0..1，持续滚动
+        phase = phase - (float) Math.floor(phase); // 取模到 0..1
 
-        if (colorful) {
-            return themeFlowColor(phase, i);
+        // 优先检查 Category 中新增的 Color 下拉框
+        int colorMode = 1; // 默认 Rainbow
+        if (arrayListColorOpt != null) colorMode = arrayListColorOpt.dropdownIndex;
+
+        // Theme Gradient 开关：用主题色替代 Custom 模式
+        boolean useThemeGradient = arrayListThemeGradOpt != null && arrayListThemeGradOpt.boolValue;
+        // 兼容旧的 Sync 开关
+        boolean colorful = (arrayListSyncToggle != null && arrayListSyncToggle.enabled) || useThemeGradient;
+
+        // 计算偏移量：时间分量 + Y坐标分量，形成斜向流动（参考南方客户端）
+        float customSpeed = 1f;
+        if (arrayListFlowSpeedSlider != null) customSpeed = 0.3f + arrayListFlowSpeedSlider.sliderValue * 4f;
+        float timeOffset = (float) (Math.abs((System.currentTimeMillis() / 100D * customSpeed) / 100D) + i / 50D);
+        // 对 timeOffset 做往返折返
+        float offset = timeOffset;
+        if (offset > 1f) {
+            float left = offset % 1f;
+            long off = (long) offset;
+            offset = off % 2 == 0 ? left : 1f - left;
         }
-        // 单色渐变：两个滑块分别控制顶部/底部的亮度（灰度），用同一个流动相位驱动
-        float topLight = arrayListColor1Slider != null ? (0.75f + arrayListColor1Slider.sliderValue * 0.25f) : 0.95f;
-        float botLight = arrayListColor2Slider != null ? (0.45f + arrayListColor2Slider.sliderValue * 0.35f) : 0.62f;
-        float mixAmt2 = 0.5f + 0.5f * (float) Math.sin(phase * Math.PI * 2.0);
-        float light = topLight + (botLight - topLight) * mixAmt2;
-        return new float[]{light, light, light * 1.02f, 1f}; // 极轻微偏冷调，跟纯灰区分开
+
+        switch (colorMode) {
+            case 0: { // Custom
+                if (useThemeGradient) {
+                    // 主题色渐变：ACCENT_1 → ACCENT_2
+                    return gradientColor(ACCENT_1, ACCENT_2, offset);
+                }
+                // 单色灰度渐变（保留原有逻辑）
+                float topLight = arrayListColor1Slider != null ? (0.75f + arrayListColor1Slider.sliderValue * 0.25f) : 0.95f;
+                float botLight = arrayListColor2Slider != null ? (0.45f + arrayListColor2Slider.sliderValue * 0.35f) : 0.62f;
+                float mixAmt2 = 0.5f + 0.5f * (float) Math.sin(phase * Math.PI * 2.0);
+                float light = topLight + (botLight - topLight) * mixAmt2;
+                return new float[]{light, light, light * 1.02f, 1f};
+            }
+            case 1: // Rainbow (饱和度 0.85)
+                return hsvToRgb(((System.currentTimeMillis() / 10f * customSpeed + i * 30) % 6000f) / 6000f, 0.85f, 1f);
+            case 2: // LightRainbow (饱和度 0.55)
+                return hsvToRgb(((System.currentTimeMillis() / 10f * customSpeed + i * 30) % 6000f) / 6000f, 0.55f, 1f);
+            case 3: // Astolfo: 粉(255,60,234) → 蓝(27,179,255)
+                return gradientColor(new float[]{1f, 0.235f, 0.918f, 1f}, new float[]{0.106f, 0.702f, 1f, 1f}, offset);
+            case 4: // Weird: 浅蓝(128,171,255) → 紫(160,72,255)
+                return gradientColor(new float[]{0.502f, 0.671f, 1f, 1f}, new float[]{0.627f, 0.282f, 1f, 1f}, offset);
+            case 5: // Valentine: 粉(255,129,202) → 红(255,15,0)
+                return gradientColor(new float[]{1f, 0.506f, 0.792f, 1f}, new float[]{1f, 0.059f, 0f, 1f}, offset);
+            default:
+                return new float[]{1f, 1f, 1f, 1f};
+        }
+    }
+
+    /** RGB 线性渐变插值（参考南方客户端 getGradientOffset） */
+    private float[] gradientColor(float[] c1, float[] c2, float offset) {
+        float inv = 1f - offset;
+        return new float[]{
+            c1[0] * inv + c2[0] * offset,
+            c1[1] * inv + c2[1] * offset,
+            c1[2] * inv + c2[2] * offset,
+            1f
+        };
+    }
+
+    /** HSB → RGB */
+    private float[] hsvToRgb(float h, float s, float v) {
+        float r, g, b;
+        int i = (int) (h * 6);
+        float f = h * 6 - i;
+        float p = v * (1 - s);
+        float q = v * (1 - f * s);
+        float t2 = v * (1 - (1 - f) * s);
+        switch (i % 6) {
+            case 0: r = v; g = t2; b = p; break;
+            case 1: r = q; g = v; b = p; break;
+            case 2: r = p; g = v; b = t2; break;
+            case 3: r = p; g = q; b = v; break;
+            case 4: r = t2; g = p; b = v; break;
+            default: r = v; g = p; b = q; break;
+        }
+        return new float[]{r, g, b, 1f};
     }
 
     private void drawArrayListHud() {
@@ -768,7 +844,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         if (allEnabled.isEmpty()) return;
 
         float fontSize = (11f + (arrayListFontSizeSlider != null ? arrayListFontSizeSlider.sliderValue : 0.3f) * 9f) * uiScale;
-        float barH = fontSize + 10f * uiScale;  // 条形本身就是一整行，稍微高一点，容得下文字上下留白
+        // 高度自定义：通过 Height 滑块调整行高倍率（0.5x~2.0x）
+        float heightScale = arrayListHeightOpt != null ? (0.5f + arrayListHeightOpt.sliderValue * 1.5f) : 1f;
+        float barH = (fontSize + 10f * uiScale) * heightScale;  // 条形高度跟随 Height 滑块
         float rowH = barH;                        // 行高=条形高度，让条形彼此相连、不留缝隙、也不重叠
         float marginTop = screenH / 8f;           // 顶部起始位置：屏幕顶部往下 1/8 处
         boolean showLine = arrayListLineToggle == null || arrayListLineToggle.enabled;
@@ -1883,8 +1961,8 @@ private void drawFloatingBall() {
             float ry = curY;
             boolean sel = i == currentCategoryIndex;
             float[] col = withAlpha(sel ? SOUTH_TEXT_WHITE : SOUTH_TEXT_DIM2, alpha);
-            text.draw(c.icon, x + btnPadX + 8f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.5f, 13f * uiScale, col, screenW, screenH);
-            text.draw(Category.localizedCategory(c.name, langZh), x + btnPadX + 30f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.5f, 13f * uiScale, col, screenW, screenH);
+            // 取消图标符号，只显示分类名称
+            text.draw(Category.localizedCategory(c.name, langZh), x + btnPadX + 8f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.5f, 13f * uiScale, col, screenW, screenH);
             curY += rowH + 4f * uiScale * (h / panelH);
         }
 
@@ -2171,22 +2249,22 @@ private void drawFloatingBall() {
                 // 滑动误触检查：移动距离超过20px视为滑动，不触发后续点击（如侧栏分类切换）
                 float dx = ex - downX, dy = ey - downY;
                 if (dx * dx + dy * dy > 400f) return;
-            }
 
-            // 在配置页模式下，侧栏分类点击仍然生效（切换分类后返回卡片视图）
-            for (int i = 0; i < categoryHitRects.size(); i++) {
-                if (inside(ex, ey, categoryHitRects.get(i))) {
-                    if (currentCategoryIndex != i) {
-                        // 触发分类翻页动画：新分类从侧面滑入
-                        pageAnimProgress = 0f;
-                        pageAnimDirection = (i > currentCategoryIndex) ? 1 : -1;
-                        currentCategoryIndex = i;
-                        activeConfigModule = null; // 切换分类时返回卡片视图
-                        configPageAnim.snapTo(0f); // 重置配置页动画，避免卡片透明
-                        contentScroll.snapTo(0);
-                        configScrollOffset = 0f;
+                // 在配置页模式下，侧栏分类点击仅在 ACTION_UP 且非滑动时生效
+                for (int i = 0; i < categoryHitRects.size(); i++) {
+                    if (inside(ex, ey, categoryHitRects.get(i))) {
+                        if (currentCategoryIndex != i) {
+                            // 触发分类翻页动画：新分类从侧面滑入
+                            pageAnimProgress = 0f;
+                            pageAnimDirection = (i > currentCategoryIndex) ? 1 : -1;
+                            currentCategoryIndex = i;
+                            activeConfigModule = null; // 切换分类时返回卡片视图
+                            configPageAnim.snapTo(0f); // 重置配置页动画，避免卡片透明
+                            contentScroll.snapTo(0);
+                            configScrollOffset = 0f;
+                        }
+                        return;
                     }
-                    return;
                 }
             }
 
