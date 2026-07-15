@@ -1310,7 +1310,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
         // 快捷键编辑器：最高层
         if (hotkeyEditorOpen) {
-            drawHotkeyEditor(guiOpenAnim.get());
+            drawHotkeyEditor(openness.get());
         }
 
         // 长按展开已由卡片箭头点击替代，不再需要
@@ -1513,7 +1513,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 float btnY = curY;
                 quad.addRect(btnX, btnY, btnW, btnH, 8f * uiScale,
                         withAlpha(SOUTH_MODULE_BG, alpha));
-                quad.flush(sw, sh);
+                quad.flush(screenW, screenH);
                 // 注册热区
                 configOptionRects.add(new Object[]{new float[]{btnX, btnY, btnW, btnH}, oi, ModuleItem.ConfigOption.TYPE_BUTTON});
                 curY += rowH + rowGap;
