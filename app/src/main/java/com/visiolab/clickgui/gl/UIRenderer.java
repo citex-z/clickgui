@@ -62,6 +62,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private static final float[] SOUTH_TEXT_WHITE = {1f, 1f, 1f, 0.8f};             // WHITE_80
     private static final float[] SOUTH_TEXT_DIM2 = {1f, 1f, 1f, 0.6f};             // WHITE_60
     private static final float[] SOUTH_TEXT_DIM3 = {1f, 1f, 1f, 0.5f};             // WHITE_50
+    // 通知左侧彩色竖线：启用=绿色 #039855，禁用=红色 #D92020（南方客户端风格）
+    private static final float[] TOAST_GREEN = {0.012f, 0.596f, 0.333f, 1f};        // #039855 启用
+    private static final float[] TOAST_RED   = {0.851f, 0.125f, 0.125f, 1f};        // #D92020 禁用
     private ModuleItem darkThemeToggle; // 指向 Setting 分类里的 "Dark Theme" 开关，驱动主题切换
 
     // ---- 主题色预设（多节点流动渐变）----
@@ -213,27 +216,43 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private boolean draggingShadowHue = false, draggingShadowSize = false, draggingShadowOpacity = false;
     private ModuleItem blurEnabledToggle;
     private ModuleItem watermarkToggle;
+    // Client 分类里的 "ClickGUI" 模块，用来把面板背景阴影透明度跟它关联（每帧刷新引用）
+    private ModuleItem clickGuiModule;
     // 开关功能提示：镂空玻璃长条 + 底部黑色倒计时条，右下角平滑滑入/滑出，多条堆叠
     private final List<ToastNotice> toasts = new java.util.concurrent.CopyOnWriteArrayList<>();
     private static final float TOAST_ENTER = 0.32f, TOAST_HOLD = 2.0f, TOAST_EXIT = 0.32f;
 
     private class ToastNotice {
         final String text;
+        final boolean enabled; // 启用=绿色竖线，禁用=红色竖线（普通文本提示默认按"启用"配色）
         float age = 0f;
         boolean exiting = false;
         final Anim posY;
         final Anim reveal = new Anim(0f, 4.5f); // 速度放慢一些，滑出的时候才不会显得太突兀
-        ToastNotice(String text, float startY) {
+        ToastNotice(String text, float startY, boolean enabled) {
             this.text = text;
+            this.enabled = enabled;
             this.posY = new Anim(startY, 9f);
             this.reveal.setTarget(1f);
         }
     }
 
+    // 用来把 spawnModuleToast 的启用状态传给 spawnToast（spawnToast 只接收文本，
+    // 但 drawToasts 需要知道启用/禁用才能画对应颜色的左侧竖线）
+    private boolean pendingToastEnabled = true;
+
     private void spawnToast(String text) {
         if (notificationToggle != null && !notificationToggle.enabled) return; // 总开关关掉就不生成
         float slotY0 = screenH - 46f * uiScale; // 贴近屏幕底部
-        toasts.add(new ToastNotice(text, slotY0));
+        toasts.add(new ToastNotice(text, slotY0, pendingToastEnabled));
+        pendingToastEnabled = true; // 复位：普通文本提示默认按"启用"配色
+    }
+
+    /** 模块开关提示：显示 "某某某模块已启用/已禁用"，不再出现 "ON"/"OFF" */
+    private void spawnModuleToast(String moduleName, boolean enabled) {
+        String text = moduleName + (enabled ? " 已启用" : " 已禁用");
+        pendingToastEnabled = enabled;
+        spawnToast(text);
     }
     private ModuleItem watermarkSyncToggle, watermarkUnderlineToggle;
     private ModuleItem watermarkShadowToggle;
@@ -539,6 +558,25 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         return Anim.backEaseOut(t);
     }
 
+    /** 每帧从 Client 分类刷新 HUD 相关模块引用。
+     *  原来这些引用只在 onSurfaceCreated 里按旧的 "Setting"/"Home" 分类名查找一次，
+     *  分类名对不上时引用一直是 null，用户在配置页切换开关后 HUD 也不会响应。
+     *  现在改为每帧按 Client 分类重新查找，保证开关状态实时生效。
+     *  注意：保留原有变量声明与 onSurfaceCreated 里的初始化代码，这里只是每帧覆盖刷新。 */
+    private void refreshHudModuleRefs() {
+        for (Category c : categories) {
+            if (!c.name.equals("Client")) continue;
+            for (ModuleItem m : c.modules) {
+                switch (m.name) {
+                    case "ArrayList": arrayListToggle = m; break;
+                    case "Watermark": watermarkToggle = m; break;
+                    case "Notifications": notificationToggle = m; break;
+                    case "ClickGUI": clickGuiModule = m; break;
+                }
+            }
+        }
+    }
+
     private void updateHudAnimations(float dt) {
         for (Category c : categories) {
             for (ModuleItem m : c.modules) {
@@ -740,7 +778,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private void updateToasts(float dt) {
         float slotY0 = screenH - 46f * uiScale;
         float spacingMul = notificationSpacingSlider != null ? (0.5f + notificationSpacingSlider.sliderValue * 1.0f) : 0.8f;
-        float rowSpacing = notifRectH() + 10f * uiScale * spacingMul; // 条形本身高度 + 可调的额外间隙，保证有明显的缝隙
+        float rowSpacing = notifRectH() + 8f * uiScale * spacingMul; // 条形本身高度 + 8px 基准间隙（南方风格），"间距"滑块可调
         float holdDuration = notificationDurationSlider != null ? (1.0f + notificationDurationSlider.sliderValue * 3.0f) : TOAST_HOLD;
         for (int i = 0; i < toasts.size(); i++) {
             ToastNotice t = toasts.get(i);
@@ -760,10 +798,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
     }
 
-    /** 开关提示：长条镂空玻璃 + 四周发散阴影(跟ArrayList镂空玻璃同款技法) + 底部黑色倒计时条。
-     *  真正从屏幕外滑入到贴近右下角的位置；滑出时从"当前所在的位置"继续往屏幕外滑，
-     *  而不是缩回角落再消失——两种情况用的是同一个"离目标位置的对角偏移量"，
-     *  偏移量本身现在够大，能保证起点/终点确实在屏幕外面。 */
+    /** 通知提示（南方客户端风格）：圆角矩形背景 + 左侧彩色竖线(启用=绿/禁用=红) + 白色文字 + 底部进度条。
+     *  从屏幕右侧滑入、贴近右下角；多条垂直堆叠，间距 8px；显示约 2 秒后淡出滑出。 */
     private void drawToasts() {
         if (toasts.isEmpty()) return;
 
@@ -771,52 +807,41 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float baseX = screenW - 10f * uiScale - rectW; // 贴近右下角
         float offDist = Math.max(screenW, screenH) * 0.35f; // 保证滑入/滑出起止点真正在屏幕外
 
-        // ---- 阴影：所有提示的形状整体画进透明贴图模糊一遍，效果跟ArrayList的阴影是同一套 ----
-        final float fRectW = rectW, fRectH = rectH, fBaseX = baseX, fOffDist = offDist;
-        blur.captureAndBlurTransparent(() -> {
-            for (ToastNotice t : toasts) {
-                float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
-                if (rv <= 0.01f) continue;
-                float slide = (1f - smoothstep(rv)) * fOffDist;
-                float dx = fBaseX + slide, dy = t.posY.get() + slide;
-                quad.addRect(dx, dy, fRectW, fRectH, 10f * uiScale, new float[]{1f, 1f, 1f, rv});
-            }
-            quad.flush(screenW, screenH);
-        });
-        blur.drawGlow(new float[]{0f, 0f, 0f, 0.6f}, screenW, screenH);
-
-        // ---- 镂空玻璃本体：scissor裁剪只在提示范围内重画一遍干净背景，擦掉阴影露出真实场景 ----
-        for (ToastNotice t : toasts) {
-            float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
-            if (rv <= 0.01f) continue;
-            float slide = (1f - smoothstep(rv)) * offDist;
-            float dx = baseX + slide, dy = t.posY.get() + slide;
-            GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
-            GLES20.glScissor((int) dx, (int) (screenH - (dy + rectH)), (int) rectW, (int) rectH);
-            drawWorldScene();
-            GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        }
-
         float holdDuration = notificationDurationSlider != null ? (1.0f + notificationDurationSlider.sliderValue * 3.0f) : TOAST_HOLD;
-        float fontSize = 12f * uiScale * (notificationFontSizeSlider != null ? (0.75f + notificationFontSizeSlider.sliderValue * 0.7f) : 1f);
+        // 文字：白色，14px*uiScale（"字号"滑块做轻微缩放，默认值≈14px）
+        float fontSize = 14f * uiScale * (notificationFontSizeSlider != null ? (0.75f + notificationFontSizeSlider.sliderValue * 0.7f) : 1f);
+        float cornerR = 8f * uiScale;     // 圆角
+        float barW = 4f * uiScale;         // 左侧彩色竖线宽度
+        float barInset = cornerR;          // 竖线只在背景直边段绘制，避免戳出圆角
+        float textPad = 12f * uiScale;     // 文字左侧内边距（避开竖线）
+        float bgAlpha = 0.92f;             // SOUTH_MODULE_BG 半透明基准
 
-        // ---- 底部黑色倒计时条 + 纯英文文字 ----
         for (ToastNotice t : toasts) {
             float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
             if (rv <= 0.01f) continue;
             float slide = (1f - smoothstep(rv)) * offDist;
             float dx = baseX + slide, dy = t.posY.get() + slide;
 
-            float frac = Math.max(0f, Math.min(1f, 1f - (t.age - TOAST_ENTER) / holdDuration));
-            float barH = 2.5f * uiScale;
-            quad.addRect(dx, dy + rectH - barH, rectW * frac, barH, 1.2f * uiScale, new float[]{0f, 0f, 0f, 0.85f * rv});
+            // 1) 圆角矩形背景：SOUTH_MODULE_BG (#242424) 半透明
+            quad.addRect(dx, dy, rectW, rectH, cornerR, withAlpha(SOUTH_MODULE_BG, bgAlpha * rv));
             quad.flush(screenW, screenH);
 
-            float tw = text.measure(t.text, fontSize);
-            float tx = dx + rectW / 2f - tw / 2f;
-            float ty = dy + rectH / 2f - fontSize / 2f - 2f * uiScale;
-            text.draw(t.text, tx + 1f * uiScale, ty + 1.2f * uiScale, fontSize, new float[]{0f, 0f, 0f, 0.5f * rv}, screenW, screenH);
+            // 2) 左侧彩色竖线：启用=绿色 #039855，禁用=红色 #D92020
+            float[] barColor = t.enabled ? TOAST_GREEN : TOAST_RED;
+            quad.addRect(dx, dy + barInset, barW, rectH - 2f * barInset, 0f, withAlpha(barColor, rv));
+            quad.flush(screenW, screenH);
+
+            // 3) 文字：白色，14px*uiScale，左对齐（避开左侧竖线）
+            float tx = dx + textPad;
+            float ty = dy + rectH / 2f - fontSize / 2f - 1f * uiScale;
+            text.draw(t.text, tx + 1f * uiScale, ty + 1.2f * uiScale, fontSize, new float[]{0f, 0f, 0f, 0.45f * rv}, screenW, screenH);
             text.draw(t.text, tx, ty, fontSize, new float[]{1f, 1f, 1f, rv}, screenW, screenH);
+
+            // 4) 底部进度条（倒计时）：跟随竖线配色，随 holdDuration 收缩
+            float frac = Math.max(0f, Math.min(1f, 1f - (t.age - TOAST_ENTER) / holdDuration));
+            float pbH = 2.5f * uiScale;
+            quad.addRect(dx, dy + rectH - pbH, rectW * frac, pbH, 0f, withAlpha(barColor, 0.85f * rv));
+            quad.flush(screenW, screenH);
         }
     }
 
@@ -924,6 +949,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         drawWorldScene();
 
         // 1.2) ArrayList HUD：跟ClickGUI面板是否打开完全无关，游戏里随时都该显示
+        refreshHudModuleRefs();
         updateHudAnimations(dt);
         drawArrayListHud();
         drawWatermark();
@@ -950,7 +976,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                     quad.addRect(sx, sy, sw, sh, sr, new float[]{1f, 1f, 1f, 1f});
                     quad.flush(screenW, screenH);
                 });
-                blur.drawGlow(new float[]{shadowColor[0], shadowColor[1], shadowColor[2], opacity * panelAlpha}, screenW, screenH);
+                // ClickGUI 模块开关联动面板背景阴影：模块关闭时阴影透明度降到 0.3
+                // （ClickGUI 模块实际始终 enabled，这里主要是逻辑上的关联）
+                float clickGuiShadowMul = (clickGuiModule != null && !clickGuiModule.enabled) ? 0.3f : 1f;
+                blur.drawGlow(new float[]{shadowColor[0], shadowColor[1], shadowColor[2], opacity * panelAlpha * clickGuiShadowMul}, screenW, screenH);
             }
 
             // 2) 背景模糊：可以整体关掉，关掉后走纯色面板兜底路径（不再截取/模糊场景）
@@ -1678,7 +1707,7 @@ private void drawFloatingBall() {
                 // 检查 Enabled 开关
                 if (configToggleRect != null && inside(ex, ey, configToggleRect)) {
                     activeConfigModule.enabled = !activeConfigModule.enabled;
-                    spawnToast(activeConfigModule.name + (activeConfigModule.enabled ? " ON" : " OFF"));
+                    spawnModuleToast(activeConfigModule.name, activeConfigModule.enabled);
                     return;
                 }
                 // 检查滑块拖拽
@@ -1827,7 +1856,7 @@ private void drawFloatingBall() {
                     if ("TOGGLE".equals(type)) {
                         // 点击开关栏：切换模块开关
                         m.enabled = !m.enabled;
-                        spawnToast(m.name + (m.enabled ? " ON" : " OFF"));
+                        spawnModuleToast(m.name, m.enabled);
                         return;
                     }
                     if ("CARD".equals(type)) {
