@@ -21,13 +21,13 @@ import javax.microedition.khronos.opengles.GL10;
  */
 public class UIRenderer implements GLSurfaceView.Renderer {
 
-    // ---- 主题色：深色 / 浅色两套，"Dark Theme" 开关实际生效切换 ----
-    private static final float[] DARK_PANEL_BG = {0.96f, 0.96f, 0.96f, 0.92f}; // 白色面板
-    private static final float[] DARK_SIDEBAR_BG = {0.07f, 0.07f, 0.09f, 0.95f};
-    private static final float[] DARK_CARD_BG = {0.16f, 0.16f, 0.19f, 0.9f};
-    private static final float[] DARK_TEXT_MAIN = {1f, 1f, 1f, 1f};
-    private static final float[] DARK_TEXT_DIM = {0.7f, 0.7f, 0.75f, 1f};
-    private static final float[] DARK_TRACK_OFF = {0.3f, 0.3f, 0.34f, 1f};
+    // ---- 主题色：MD3 深色风格（非纯黑）----
+    private static final float[] DARK_PANEL_BG = {0.11f, 0.105f, 0.12f, 0.96f};     // #1C1B1F MD3 Surface
+    private static final float[] DARK_SIDEBAR_BG = {0.085f, 0.08f, 0.095f, 0.98f};  // #161519 MD3 Surface Variant
+    private static final float[] DARK_CARD_BG = {0.14f, 0.135f, 0.155f, 0.95f};    // #242329 MD3 Surface Container
+    private static final float[] DARK_TEXT_MAIN = {0.95f, 0.95f, 0.95f, 1f};       // #F2F2F2 MD3 On Surface
+    private static final float[] DARK_TEXT_DIM = {0.68f, 0.68f, 0.70f, 1f};        // #AEAEAE MD3 On Surface Variant
+    private static final float[] DARK_TRACK_OFF = {0.22f, 0.22f, 0.25f, 1f};      // #383840 MD3 Surface Container High
 
     private static final float[] LIGHT_PANEL_BG = {0.96f, 0.96f, 0.96f, 0.92f}; // 白色面板
     private static final float[] LIGHT_SIDEBAR_BG = {0.99f, 0.99f, 1.0f, 0.95f};
@@ -44,24 +44,24 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float[] TRACK_OFF = DARK_TRACK_OFF;
     private static final float[] WORLD_BG = {0.12f, 0.12f, 0.14f, 1f};
     private static final float[] KNOB_COLOR = {1f, 1f, 1f, 1f}; // 白色拖钮/滑块圆点
-    // ---- 南方客户端真实颜色 (from source: Colors.java + SouthsideDarkStyle.java) ----
-    private static final float[] HDR_BG = {0.96f, 0.96f, 0.96f, 1f};               // #F5F5F5 标题栏（舒适白）
-    private static final float[] SOUTH_SIDEBAR_BG = {0.92f, 0.92f, 0.92f, 0.95f};  // #EBEBEB 侧栏
-    private static final float[] SOUTH_PANEL_BG = {0.96f, 0.96f, 0.96f, 1f};       // #F5F5F5 面板背景（舒适白）
-    private static final float[] SOUTH_CARD_BORDER = {0.80f, 0.80f, 0.80f, 1f};    // #CCCCCC 卡片边框
+    // ---- 南方客户端风格色（适配MD3深色背景）----
+    private static final float[] HDR_BG = {0.13f, 0.125f, 0.14f, 1f};               // MD3 Surface Container
+    private static final float[] SOUTH_SIDEBAR_BG = {0.085f, 0.08f, 0.095f, 0.98f};  // MD3 Surface Variant
+    private static final float[] SOUTH_PANEL_BG = {0.11f, 0.105f, 0.12f, 1f};       // MD3 Surface
+    private static final float[] SOUTH_CARD_BORDER = {0.22f, 0.22f, 0.25f, 1f};      // MD3 Outline
     private static final float[] SOUTH_CARD_BORDER_SEL = {0.50f, 0.50f, 0.50f, 1f}; // #808080 灰色选中
-    private static final float[] SOUTH_SEARCH_BG = {0.88f, 0.88f, 0.88f, 1f};      // #E0E0E0 搜索框
-    private static final float[] SOUTH_TRACK_OFF = {0.85f, 0.85f, 0.85f, 1f};      // #D9D9D9
-    private static final float[] SOUTH_TAB_OFF = {0.60f, 0.60f, 0.60f, 1f};         // #999999
-    private static final float[] SOUTH_SECTION_LBL = {0.45f, 0.45f, 0.45f, 1f};     // #737373
-    private static final float[] SOUTH_SLIDER_TRACK = {0.85f, 0.85f, 0.85f, 1f};    // #D9D9D9
-    private static final float[] SOUTH_MODULE_BG = {0.90f, 0.90f, 0.90f, 1f};       // #E6E6E6 配置行背景
-    private static final float[] SOUTH_CARD_BG = {0.92f, 0.92f, 0.92f, 1f};         // #EBEBEB 卡片背景
+    private static final float[] SOUTH_SEARCH_BG = {0.16f, 0.155f, 0.17f, 1f};       // MD3 Surface Container High
+    private static final float[] SOUTH_TRACK_OFF = {0.22f, 0.22f, 0.25f, 1f};       // MD3 Surface Container High
+    private static final float[] SOUTH_TAB_OFF = {0.50f, 0.50f, 0.50f, 1f};          // #808080
+    private static final float[] SOUTH_SECTION_LBL = {0.55f, 0.55f, 0.57f, 1f};     // #8C8C8C
+    private static final float[] SOUTH_SLIDER_TRACK = {0.22f, 0.22f, 0.25f, 1f};     // MD3 Surface Container High
+    private static final float[] SOUTH_MODULE_BG = {0.14f, 0.135f, 0.155f, 1f};      // MD3 Surface Container
+    private static final float[] SOUTH_CARD_BG = {0.13f, 0.125f, 0.14f, 1f};        // MD3 Surface Container
     private static final float[] SOUTH_TOGGLE_ON = {0.50f, 0.50f, 0.50f, 1f};        // #808080 灰色开启
-    private static final float[] SOUTH_TOGGLE_OFF = {0.80f, 0.80f, 0.80f, 1f};       // #CCCCCC
-    private static final float[] SOUTH_TEXT_WHITE = {0.08f, 0.08f, 0.08f, 0.87f};    // #141414 87% 黑色文字
-    private static final float[] SOUTH_TEXT_DIM2 = {0.08f, 0.08f, 0.08f, 0.60f};    // #141414 60% 次要文字
-    private static final float[] SOUTH_TEXT_DIM3 = {0.08f, 0.08f, 0.08f, 0.38f};    // #141414 38% 更暗
+    private static final float[] SOUTH_TOGGLE_OFF = {0.30f, 0.30f, 0.33f, 1f};      // MD3 Surface Container Highest
+    private static final float[] SOUTH_TEXT_WHITE = {0.95f, 0.95f, 0.95f, 0.95f};    // MD3 On Surface
+    private static final float[] SOUTH_TEXT_DIM2 = {0.95f, 0.95f, 0.95f, 0.65f};     // MD3 On Surface 65%
+    private static final float[] SOUTH_TEXT_DIM3 = {0.95f, 0.95f, 0.95f, 0.40f};     // MD3 On Surface 40%
     // 通知左侧彩色竖线：启用=绿色 #039855，禁用=红色 #D92020（南方客户端风格）
     private static final float[] TOAST_GREEN = {0.012f, 0.596f, 0.333f, 1f};        // #039855 启用
     private static final float[] TOAST_RED   = {0.851f, 0.125f, 0.125f, 1f};        // #D92020 禁用
@@ -739,12 +739,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                             switch (opt.label) {
                                 case "Color": arrayListColorOpt = opt; break;
                                 case "Height": arrayListHeightOpt = opt; break;
-                                case "Theme Gradient": arrayListThemeGradOpt = opt; break;
                                 case "Background": arrayBgOpt = opt; break;
                                 case "Hide Render Modules": arrayHideRenderOpt = opt; break;
-                                case "Show FPS": arrayShowFpsOpt = opt; break;
-                                case "Show Ping": arrayShowPingOpt = opt; break;
-                                case "Show CPS": arrayShowCpsOpt = opt; break;
                                 case "Scale": arrayScaleOpt = opt; break;
                                 case "Show in Chat": arrayShowChatOpt = opt; break;
                                 case "Show in F3": arrayShowF3Opt = opt; break;
@@ -813,14 +809,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float phase = t + flowOffset;
         phase = phase - (float) Math.floor(phase); // 取模到 0..1
 
-        // 优先检查 Category 中新增的 Color 下拉框
-        int colorMode = 1; // 默认 Rainbow
+        // 从配置面板获取 Color 下拉框索引
+        int colorMode = 0; // 默认 Rainbow
         if (arrayListColorOpt != null) colorMode = arrayListColorOpt.dropdownIndex;
-
-        // Theme Gradient 开关：用主题色替代 Custom 模式
-        boolean useThemeGradient = arrayListThemeGradOpt != null && arrayListThemeGradOpt.boolValue;
-        // 兼容旧的 Sync 开关
-        boolean colorful = (arrayListSyncToggle != null && arrayListSyncToggle.enabled) || useThemeGradient;
 
         // 计算偏移量：时间分量 + Y坐标分量，形成斜向流动（参考南方客户端）
         float customSpeed = 1f;
@@ -835,27 +826,15 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
 
         switch (colorMode) {
-            case 0: { // Custom
-                if (useThemeGradient) {
-                    // 主题色渐变：ACCENT_1 → ACCENT_2
-                    return gradientColor(ACCENT_1, ACCENT_2, offset);
-                }
-                // 单色灰度渐变（保留原有逻辑）
-                float topLight = arrayListColor1Slider != null ? (0.75f + arrayListColor1Slider.sliderValue * 0.25f) : 0.95f;
-                float botLight = arrayListColor2Slider != null ? (0.45f + arrayListColor2Slider.sliderValue * 0.35f) : 0.62f;
-                float mixAmt2 = 0.5f + 0.5f * (float) Math.sin(phase * Math.PI * 2.0);
-                float light = topLight + (botLight - topLight) * mixAmt2;
-                return new float[]{light, light, light * 1.02f, 1f};
-            }
-            case 1: // Rainbow (饱和度 0.85)
+            case 0: // Rainbow (饱和度 0.85)
                 return hsvToRgb(((System.currentTimeMillis() / 10f * customSpeed + i * 30) % 6000f) / 6000f, 0.85f, 1f);
-            case 2: // LightRainbow (饱和度 0.55)
+            case 1: // LightRainbow (饱和度 0.55)
                 return hsvToRgb(((System.currentTimeMillis() / 10f * customSpeed + i * 30) % 6000f) / 6000f, 0.55f, 1f);
-            case 3: // Astolfo: 粉(255,60,234) → 蓝(27,179,255)
+            case 2: // Astolfo: 粉(255,60,234) → 蓝(27,179,255)
                 return gradientColor(new float[]{1f, 0.235f, 0.918f, 1f}, new float[]{0.106f, 0.702f, 1f, 1f}, offset);
-            case 4: // Weird: 浅蓝(128,171,255) → 紫(160,72,255)
+            case 3: // Weird: 浅蓝(128,171,255) → 紫(160,72,255)
                 return gradientColor(new float[]{0.502f, 0.671f, 1f, 1f}, new float[]{0.627f, 0.282f, 1f, 1f}, offset);
-            case 5: // Valentine: 粉(255,129,202) → 红(255,15,0)
+            case 4: // Valentine: 粉(255,129,202) → 红(255,15,0)
                 return gradientColor(new float[]{1f, 0.506f, 0.792f, 1f}, new float[]{1f, 0.059f, 0f, 1f}, offset);
             default:
                 return new float[]{1f, 1f, 1f, 1f};
@@ -1351,11 +1330,12 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         configPageAnim.update(dt);
         // 分类翻页动画推进（约0.25秒完成）
         pageAnimProgress = Math.min(1f, pageAnimProgress + dt * 4f);
+        // 通知提示在ArrayList下层（先画=底层，后画=顶层）
+        updateToasts(dt);
+        drawToasts();
         drawArrayListHud();
         drawWatermark();
         drawKeystrokes();
-        updateToasts(dt);
-        drawToasts();
 
         // 长按展开已由卡片箭头点击替代，不再需要
         // if (longPressCandidate != null && !longPressFired
@@ -1378,16 +1358,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 blur.drawGlow(new float[]{0f, 0f, 0f, opacity * panelAlpha}, screenW, screenH);
             }
 
-            // 2) 背景模糊：从 Category 配置项获取，可以整体关掉
-            boolean blurOn = (blurEnabledToggle == null || blurEnabledToggle.enabled)
-                    && (guiBlurOpt == null || guiBlurOpt.boolValue);
-            // 关闭GUI时快速跳过模糊渲染避免残余面板滞留
-            boolean nearClosed = t < 0.08f;
-            if (blurOn && !nearClosed) {
-                blur.captureAndBlur(this::drawWorldScene);
-                float[] glassTint = {PANEL_BG[0], PANEL_BG[1], PANEL_BG[2], 0.55f * panelAlpha};
-                blur.drawGlassPanel(drawX, drawY, drawW, drawH, radius, glassTint, panelAlpha, screenW, screenH);
-            } else {
+            // 2) 面板背景：MD3 深色风格（非纯黑），不使用模糊效果
+            {
                 quad.addRect(drawX, drawY, drawW, drawH, radius, withAlpha(PANEL_BG, panelAlpha));
                 quad.flush(screenW, screenH);
             }
@@ -2308,14 +2280,17 @@ private void drawFloatingBall() {
                 if (configToggleRect != null && inside(ex, ey, configToggleRect)) {
                     activeConfigModule.enabled = !activeConfigModule.enabled;
                     spawnModuleToast(activeConfigModule.name, activeConfigModule.enabled);
+                    com.visiolab.nativebridge.ModuleHook.onToggle(activeConfigModule);
                     return;
                 }
-                // 检查滑块拖拽（扩大触摸区域：上下各+20px，右侧+30px，便于触控）
-                if (configSliderW > 0 && ex >= configSliderX - 10f && ex <= configSliderX + configSliderW + 30f &&
-                    ey >= configSliderY - 20f && ey <= configSliderY + configSliderH + 20f) {
+                // 检查滑块拖拽（大幅扩大触摸区域：上下各+30px，左右各+15px，便于手指触控）
+                if (configSliderW > 0 && ex >= configSliderX - 15f && ex <= configSliderX + configSliderW + 15f &&
+                    ey >= configSliderY - 30f && ey <= configSliderY + configSliderH + 30f) {
                     draggingConfigSlider = true;
                     float t = (ex - configSliderX) / configSliderW;
-                    activeConfigModule.sliderValue = Math.max(0f, Math.min(1f, t));
+                    t = Math.max(0f, Math.min(1f, t));
+                    sliderTargetValue = t;
+                    activeConfigModule.sliderValue = t;
                     return;
                 }
                 // 调色板交互（仅 Theme Color 模块配置页内）
@@ -2368,17 +2343,17 @@ private void drawFloatingBall() {
             }
             if (action == MotionEvent.ACTION_MOVE && draggingConfigSlider) {
                 float t = (ex - configSliderX) / configSliderW;
-                sliderTargetValue = Math.max(0f, Math.min(1f, t));
-                // 阻尼：滑块值缓动到目标值，而非直接跳变
-                activeConfigModule.sliderValue += (sliderTargetValue - activeConfigModule.sliderValue) * 0.4f;
+                t = Math.max(0f, Math.min(1f, t));
+                sliderTargetValue = t;
+                activeConfigModule.sliderValue = t; // 直接跟随手指，无阻尼（更跟手）
                 return;
             }
             if (action == MotionEvent.ACTION_MOVE && draggingOptionIndex >= 0) {
                 ModuleItem.ConfigOption opt = activeConfigModule.options.get(draggingOptionIndex);
                 float t = (ex - draggingOptionSliderX) / draggingOptionSliderW;
-                optSliderTargetValue = Math.max(0f, Math.min(1f, t));
-                // 阻尼：额外滑块值缓动到目标值
-                opt.sliderValue += (optSliderTargetValue - opt.sliderValue) * 0.4f;
+                t = Math.max(0f, Math.min(1f, t));
+                optSliderTargetValue = t;
+                opt.sliderValue = t; // 直接跟随手指，无阻尼
                 return;
             }
             if (action == MotionEvent.ACTION_MOVE && draggingHue) {
@@ -2516,6 +2491,7 @@ private void drawFloatingBall() {
                         // 点击开关栏：切换模块开关
                         m.enabled = !m.enabled;
                         spawnModuleToast(m.name, m.enabled);
+                        com.visiolab.nativebridge.ModuleHook.onToggle(m);
                         return;
                     }
                     if ("CARD".equals(type)) {
