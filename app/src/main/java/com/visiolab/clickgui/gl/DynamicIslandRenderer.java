@@ -154,24 +154,29 @@ public class DynamicIslandRenderer {
         float scale = scaleOpt != null ? (0.7f + scaleOpt.sliderValue * 0.8f) : 1f;
         float s = uiScale * scale;
 
-        // ---- 处理 timedContents（原版逻辑）----
-        // 1. 遍历，过期的直接移除，未过期的加入 contents
+        // ---- 处理 timedContents（原版逻辑 + 退场淡出）----
+        // 原版：timer 到期即移除
+        // 改进：timer 到期后给 300ms 退场动画时间，让文字和图标淡出
         contents.clear();
-        // 同时检查 timedContents 是否为空（原版用 timedContents.isEmpty() 判断默认状态）
         boolean timedEmpty = true;
         for (int i = timedContents.size() - 1; i >= 0; i--) {
             TimedContent tc = timedContents.get(i);
-            if (tc.timer.hasTimePassed(tc.time)) {
-                // 原版：timer 到期即移除
+            long elapsed = tc.timer.getTime();
+
+            // 退场动画时长
+            int exitDuration = 300;
+            long totalLife = tc.time + exitDuration;
+
+            if (elapsed > totalLife) {
+                // 退场动画也结束了，真正移除
                 timedContents.remove(i);
                 continue;
             }
             timedEmpty = false;
 
-            // 更新动画方向（原版逻辑）
+            // 更新动画方向
             switch (tc.type) {
                 case MODULE:
-                    // MODULE 动画跟随模块实际开关状态
                     if (tc.enabled) {
                         tc.animation.setDirection(Direction.FORWARDS);
                     } else {
@@ -182,7 +187,7 @@ public class DynamicIslandRenderer {
                 case WARNING:
                 case INFO:
                     // 在 time-200 时开始退场动画
-                    if (tc.timer.hasTimePassed(tc.time - 200)) {
+                    if (elapsed >= tc.time - 200) {
                         tc.animation.setDirection(Direction.BACKWARDS);
                     }
                     break;
@@ -206,8 +211,9 @@ public class DynamicIslandRenderer {
             if (showPingOpt != null && showPingOpt.boolValue) defaultText.append(" | ").append(currentPing).append("ms");
             float nameW = text.measure(nameStr, 14f * s);
             float defW = defaultText.length() > 0 ? text.measure(defaultText.toString(), 12f * s) : 0f;
-            targetWidth = (nameW + defW + DEFAULT_TEXT_PAD) * s;
-            targetHeight = (12f + 8f) * s; // 原版: FontManager.axiforma20.getHeight() + 8
+            // 不再双重缩放：文字已经是 *s 后的值，padding 只加一次
+            targetWidth = nameW + defW + DEFAULT_TEXT_PAD * s;
+            targetHeight = 20f * s; // 默认药丸高度
         } else {
             // 有内容：取最大宽度 + 总高度（不加额外 padding，原版直接用 getMaxWidth/getTotalHeight）
             float maxW = 0f;
@@ -280,15 +286,16 @@ public class DynamicIslandRenderer {
             float nameW = text.measure(nameStr, fontSize);
             float defW = def.length() > 0 ? text.measure(def, defSize) : 0f;
 
-            // 居中
-            float totalW = nameW + defW + 8f * s; // 小间距
+            // 居中：文字总宽度居中，垂直也居中
+            float totalW = nameW + defW;
             float startX = islandX + (islandW - totalW) / 2f;
-            float textY = islandY + (islandH - fontSize) / 2f + 1f * s;
+            // 垂直居中：文字基线在中间偏下一点
+            float textY = islandY + (islandH - fontSize) / 2f - 1f * s;
 
             text.draw(nameStr, startX, textY, fontSize,
                     new float[]{1f, 1f, 1f, a}, sw, sh);
             if (def.length() > 0) {
-                text.draw(def, startX + nameW, textY + 1f * s, defSize,
+                text.draw(def, startX + nameW, textY, defSize,
                         new float[]{0.7f, 0.7f, 0.7f, a}, sw, sh);
             }
         } else {
@@ -299,6 +306,15 @@ public class DynamicIslandRenderer {
                 TimedContent tc = ic.timedContent;
                 double anim = tc.animation.getOutput();
                 float animF = (float) anim;
+
+                // 退场淡出：timer 到期后 300ms 内 alpha 从 1→0
+                long elapsed = tc.timer.getTime();
+                float fadeAlpha = 1f;
+                if (elapsed > tc.time) {
+                    float exitProgress = (elapsed - tc.time) / 300f;
+                    fadeAlpha = Math.max(0f, 1f - exitProgress);
+                }
+                float contentAlpha = a * fadeAlpha;
 
                 // 内部坐标基准（相当于原版的 translate 偏移）
                 float baseX = islandX;
@@ -321,7 +337,7 @@ public class DynamicIslandRenderer {
                         float trackH = 14f * s;
                         float trackR = 6.5f * s;
                         quad.addRect(trackX, trackY, trackW, trackH, trackR,
-                                new float[]{0.25f, 0.25f, 0.25f, a}); // DARK_GRAY
+                                new float[]{0.25f, 0.25f, 0.25f, contentAlpha}); // DARK_GRAY
 
                         // 内圈颜色：从 gray(128,128,128) → blue(48,117,147)
                         // 原版: Color((int)(128-80*a), (int)(128-11*a), (int)(128+19*a), 255)
@@ -335,7 +351,7 @@ public class DynamicIslandRenderer {
                         float innerH = 12f * s;
                         float innerR = 6f * s;
                         quad.addRect(innerX, innerY, innerW, innerH, innerR,
-                                new float[]{r, g, b, a});
+                                new float[]{r, g, b, contentAlpha});
 
                         // 开关旋钮：(8 + 12*animation, 15, 10, 10, 4.5, DARK_GRAY)
                         float knobX = baseX + (8f + 12f * animF) * s;
@@ -343,14 +359,14 @@ public class DynamicIslandRenderer {
                         float knobSize = 10f * s;
                         float knobR = 4.5f * s;
                         quad.addRect(knobX, knobY, knobSize, knobSize, knobR,
-                                new float[]{0.25f, 0.25f, 0.25f, a});
+                                new float[]{0.25f, 0.25f, 0.25f, contentAlpha});
                         break;
                     }
                     case SUCCESS: {
                         // 绿色圆形 + 白色对号动画
                         // Color(95, 143, 80, 200)
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
-                                new float[]{95f / 255f, 143f / 255f, 80f / 255f, (200f / 255f) * a});
+                                new float[]{95f / 255f, 143f / 255f, 80f / 255f, (200f / 255f) * contentAlpha});
                         // 对号动画：两条线段组成 √ 形状
                         // 原版用 stencil 裁剪，这里用渐进绘制简化
                         // 第一段（短）：从左下到中下
@@ -367,7 +383,7 @@ public class DynamicIslandRenderer {
                             float angle = (float) Math.atan2(dy, dx);
                             // 用小矩形模拟线段
                             quad.addRect(x1, y1 - 1f * s, len, 2.5f * s, 0f,
-                                    new float[]{1f, 1f, 1f, a});
+                                    new float[]{1f, 1f, 1f, contentAlpha});
                         }
                         // 第二段（长）：从中下到右上
                         if (animF > 0.5f) {
@@ -380,7 +396,7 @@ public class DynamicIslandRenderer {
                             float dy = y2 - y1;
                             float len = (float) Math.sqrt(dx * dx + dy * dy) * p2;
                             quad.addRect(x1, y1 - 1f * s, len, 2.5f * s, 0f,
-                                    new float[]{1f, 1f, 1f, a});
+                                    new float[]{1f, 1f, 1f, contentAlpha});
                         }
                         break;
                     }
@@ -388,18 +404,18 @@ public class DynamicIslandRenderer {
                         // 红色圆形 + 白色感叹号动画
                         // Color(143, 80, 80, 200)
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
-                                new float[]{143f / 255f, 80f / 255f, 80f / 255f, (200f / 255f) * a});
+                                new float[]{143f / 255f, 80f / 255f, 80f / 255f, (200f / 255f) * contentAlpha});
                         // 感叹号竖线（从上往下生长）
                         float barH = 12f * s * animF;
                         if (barH > 0) {
                             quad.addRect(iconX + 11f * s, iconY + 3f * s, 2f * s, barH, 1f * s,
-                                    new float[]{1f, 1f, 1f, a});
+                                    new float[]{1f, 1f, 1f, contentAlpha});
                         }
                         // 感叹号底部圆点（动画完成后出现）
                         if (animF > 0.7f) {
                             float dotA = (animF - 0.7f) / 0.3f;
                             quad.addRect(iconX + 10.5f * s, iconY + 17f * s, 3f * s, 3f * s, 1.5f * s,
-                                    new float[]{1f, 1f, 1f, a * dotA});
+                                    new float[]{1f, 1f, 1f, contentAlpha * dotA});
                         }
                         break;
                     }
@@ -407,18 +423,18 @@ public class DynamicIslandRenderer {
                         // 蓝色圆形 + 白色十字/加号动画
                         // Color(48, 117, 147, 200)
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
-                                new float[]{48f / 255f, 117f / 255f, 147f / 255f, (200f / 255f) * a});
+                                new float[]{48f / 255f, 117f / 255f, 147f / 255f, (200f / 255f) * contentAlpha});
                         // 竖线（从中心向上下扩展）
                         float vBarH = 14f * s * animF;
                         if (vBarH > 0) {
                             quad.addRect(iconX + 11f * s, iconY + 5f * s, 2f * s, vBarH, 1f * s,
-                                    new float[]{1f, 1f, 1f, a});
+                                    new float[]{1f, 1f, 1f, contentAlpha});
                         }
                         // 横线（从中心向左右扩展）
                         float hBarW = 14f * s * animF;
                         if (hBarW > 0) {
                             quad.addRect(iconX + 5f * s, iconY + 11f * s, hBarW, 2f * s, 1f * s,
-                                    new float[]{1f, 1f, 1f, a});
+                                    new float[]{1f, 1f, 1f, contentAlpha});
                         }
                         break;
                     }
@@ -426,7 +442,7 @@ public class DynamicIslandRenderer {
 
                 // ---- 标题文字（原版 38, 9, bold 20）----
                 text.draw(tc.title, baseX + 38f * s, baseY + 9f * s, 14f * s,
-                        new float[]{1f, 1f, 1f, a}, sw, sh);
+                        new float[]{1f, 1f, 1f, contentAlpha}, sw, sh);
 
                 // ---- 描述文字（原版 38, 24, regular 18）----
                 // 视频中 "Enabled" 是绿色, "Disabled" 是红色
@@ -435,16 +451,16 @@ public class DynamicIslandRenderer {
                     String prefix = tc.moduleName + " has been ";
                     String status = tc.enabled ? "Enabled" : "Disabled";
                     float[] statusColor = tc.enabled
-                            ? new float[]{0.37f, 0.56f, 0.31f, a}  // 绿色
-                            : new float[]{0.56f, 0.31f, 0.31f, a};  // 红色
+                            ? new float[]{0.37f, 0.56f, 0.31f, contentAlpha}  // 绿色
+                            : new float[]{0.56f, 0.31f, 0.31f, contentAlpha};  // 红色
                     float prefixW = text.measure(prefix, 12f * s);
                     text.draw(prefix, baseX + 38f * s, baseY + 24f * s, 12f * s,
-                            new float[]{0.85f, 0.85f, 0.85f, a}, sw, sh);
+                            new float[]{0.85f, 0.85f, 0.85f, contentAlpha}, sw, sh);
                     text.draw(status, baseX + 38f * s + prefixW, baseY + 24f * s, 12f * s,
                             statusColor, sw, sh);
                 } else {
                     text.draw(tc.description, baseX + 38f * s, baseY + 24f * s, 12f * s,
-                            new float[]{0.85f, 0.85f, 0.85f, a}, sw, sh);
+                            new float[]{0.85f, 0.85f, 0.85f, contentAlpha}, sw, sh);
                 }
 
                 contentY += ic.height;
