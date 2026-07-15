@@ -72,7 +72,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float[] ACCENT_2 = {0.65f, 0.65f, 0.65f, 1f}; // #A6A6A6 中灰
     private int selectedThemeIndex = 0;          // 当前选中的主题索引
     private float[] themeThemeRects;              // 运行时主题按钮命中区域
-    private float customHue = 0.61f, customSat = 0.82f, customVal = 0.80f; // #1452CC
+    private float customHue = 0f, customSat = 0f, customVal = 0.85f; // #D9D9D9 白灰
     private int selectedSwatchIndex = -1;
     private float hueBarX, hueBarW, hueBarY, hueBarH;
     private float svBoxX, svBoxY, svBoxW, svBoxH;
@@ -964,6 +964,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float drawH = panelH * scale;
         float drawX = screenW / 2f - drawW / 2f;
         float drawY = screenH / 2f - drawH / 2f;
+        // 保护：确保面板宽度不会超出屏幕导致右侧被截断（右侧圆角/底部裁剪）
+        drawW = Math.min(drawW, screenW - drawX - 4f * uiScale);
 
         // 1) 背景"世界"正常画到屏幕上（可见部分）
         drawWorldScene();
@@ -992,7 +994,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             boolean shadowOn = shadowEnabledToggle == null || shadowEnabledToggle.enabled;
             if (shadowOn) {
                 boolean sync = shadowSyncToggle == null || shadowSyncToggle.enabled;
-                float[] shadowColor = sync ? ACCENT_1 : hsv2rgb(shadowHueSlider != null ? shadowHueSlider.sliderValue : 0f, 0.6f, 0.55f);
+                float[] shadowColor = ACCENT_1; // 白灰主题：阴影颜色跟随主题色
                 float spreadPx = (4f + (shadowSizeSlider != null ? shadowSizeSlider.sliderValue : 0.4f) * 40f) * uiScale;
                 float opacity = 0.20f + (shadowOpacitySlider != null ? shadowOpacitySlider.sliderValue : 0.5f) * 0.55f;
                 float sx = drawX - spreadPx, sy = drawY - spreadPx, sw = drawW + spreadPx * 2, sh = drawH + spreadPx * 2, sr = radius + spreadPx;
@@ -1113,9 +1115,12 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         for (int oi = 0; oi < m.options.size(); oi++) {
             ModuleItem.ConfigOption opt = m.options.get(oi);
             if (opt.type == ModuleItem.ConfigOption.TYPE_DROPDOWN) {
-                // 下拉框行：整行背景 + 右侧可点击区域（点击循环切换选项）
+                // 下拉框行：整行背景 + 右侧下拉区域（仅占约40%宽度，标签左对齐，点击循环切换选项）
                 quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
-                configOptionRects.add(new Object[]{new float[]{trackX, curY, trackW, rowH}, oi, ModuleItem.ConfigOption.TYPE_DROPDOWN});
+                float dropAreaW = contentW * 0.4f;
+                float dropAreaX = trackX + trackW - pad - dropAreaW;
+                quad.addRect(dropAreaX, curY + 8f * uiScale, dropAreaW, rowH - 16f * uiScale, 6f * uiScale, withAlpha(SOUTH_SEARCH_BG, alpha));
+                configOptionRects.add(new Object[]{new float[]{dropAreaX, curY + 8f * uiScale, dropAreaW, rowH - 16f * uiScale}, oi, ModuleItem.ConfigOption.TYPE_DROPDOWN});
                 curY += rowH + rowGap;
             } else if (opt.type == ModuleItem.ConfigOption.TYPE_SWITCH) {
                 // 额外开关行：与 Enabled 开关行相同样式
@@ -1132,11 +1137,11 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 quad.addRect(stKnobX, stToggleY + 3f * uiScale, stKnobD, stKnobD, stKnobD / 2f, withAlpha(KNOB_COLOR, alpha));
                 curY += rowH + rowGap;
             } else if (opt.type == ModuleItem.ConfigOption.TYPE_SLIDER) {
-                // 额外滑块行：与主滑块行相同样式
+                // 额外滑块行：滑块轨道只占右侧约55%宽度，左侧留标签文字
                 quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
                 float osTrackH = 5f * uiScale;
-                float osTrackX = trackX + 14f * uiScale;
-                float osTrackW = trackW - 28f * uiScale;
+                float osTrackW = contentW * 0.55f;
+                float osTrackX = trackX + trackW - pad - osTrackW;
                 float osTrackY = curY + rowH / 2f - osTrackH / 2f;
                 quad.addRect(osTrackX, osTrackY, osTrackW, osTrackH, osTrackH / 2f, withAlpha(SOUTH_SLIDER_TRACK, alpha));
                 float osFillW = osTrackW * opt.sliderValue;
@@ -1155,8 +1160,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         if (m.hasSlider) {
             quad.addRect(trackX, curY, trackW, rowH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
             float sTrackH = 5f * uiScale;
-            float sTrackX = trackX + 14f * uiScale;
-            float sTrackW = trackW - 28f * uiScale;
+            float sTrackW = contentW * 0.55f;
+            float sTrackX = trackX + trackW - pad - sTrackW;
             float sTrackY = curY + rowH / 2f - sTrackH / 2f;
             quad.addRect(sTrackX, sTrackY, sTrackW, sTrackH, sTrackH / 2f, withAlpha(SOUTH_SLIDER_TRACK, alpha));
             float fillW = sTrackW * m.sliderValue;
@@ -1280,18 +1285,18 @@ private void drawFloatingBall() {
     // 外层大球与内层小球颜色相同：深色主题用白色，浅色主题用黑色
     float[] pureColor = isDark ? new float[]{1f, 1f, 1f, 1f} : new float[]{0f, 0f, 0f, 1f};
 
-    // ---- 三层嵌套样式（无图标）----
-    // 固定渐变：深紫色 → 浅紫色
-    float[] DEEP_PURPLE = {0.40f, 0.15f, 0.60f, 1f};
-    float[] LIGHT_PURPLE = {0.70f, 0.40f, 0.85f, 1f};
+    // ---- 三层嵌套样式（白灰黑扁平化）----
+    // 外层纯色 + 中层灰色渐变 + 内层纯色
+    float[] DARK_GRAY = {0.25f, 0.25f, 0.25f, 1f};
+    float[] LIGHT_GRAY = {0.55f, 0.55f, 0.55f, 1f};
 
     // 1) 外层：纯色大球（黑/白根据主题）
     quad.addRect(ballX - r, ballY - r, r * 2, r * 2, r, pureColor);
     quad.flush(screenW, screenH);
 
-    // 2) 中层：固定深紫→浅紫渐变球（比外层略小，留出外圈纯色环）
+    // 2) 中层：深灰→浅灰渐变球（白灰黑主题）
     float midR = r * 0.78f;
-    float[][] midDiag = diagGradient(DEEP_PURPLE, LIGHT_PURPLE, 1f);
+    float[][] midDiag = diagGradient(DARK_GRAY, LIGHT_GRAY, 1f);
     quad.addRectGradient(ballX - midR, ballY - midR, midR * 2, midR * 2, midR,
             midDiag[0], midDiag[1], midDiag[2], midDiag[3]);
     quad.flush(screenW, screenH);
@@ -1484,6 +1489,8 @@ private void drawFloatingBall() {
         float hdrH = 72f * uiScale * (h / panelH);
         float titleH = 30f * uiScale * (h / panelH);
         float startY = y + hdrH + titleH - contentScroll.get();
+        // 卡片下移：避免与标题栏文字重叠，增加顶部内边距
+        startY += 20f * uiScale * (h / panelH);
 
         Category cat = categories.get(currentCategoryIndex);
         float cardGap = 16f * uiScale * (h / panelH);
@@ -1723,6 +1730,8 @@ private void drawFloatingBall() {
         float hdrH = 72f * uiScale * (h / panelH);
         float titleH = 30f * uiScale * (h / panelH);
         float startY = y + hdrH + titleH - contentScroll.get();
+        // 与 drawModuleCards 保持同步下移，避免文字与卡片错位
+        startY += 20f * uiScale * (h / panelH);
 
         Category cat = categories.get(currentCategoryIndex);
         float cardGap = 16f * uiScale * (h / panelH);
