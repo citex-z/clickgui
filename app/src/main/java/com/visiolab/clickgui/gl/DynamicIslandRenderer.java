@@ -45,7 +45,10 @@ public class DynamicIslandRenderer {
 
     // 模块引用
     private ModuleItem islandModule;
-    private ModuleItem.ConfigOption showFpsOpt, showPingOpt, durationOpt, scaleOpt;
+    private ModuleItem.ConfigOption showFpsOpt, showPingOpt, durationOpt, scaleOpt, blurBgOpt;
+
+    // 世界场景绘制回调（用于背景模糊）
+    private BlurPipeline.SceneDrawer worldSceneDrawer;
 
     // FPS/Ping 模拟值
     private int currentFps = 60;
@@ -65,10 +68,11 @@ public class DynamicIslandRenderer {
         INFO
     }
 
-    public DynamicIslandRenderer(QuadBatch quad, TextRenderer text, BlurPipeline blur) {
+    public DynamicIslandRenderer(QuadBatch quad, TextRenderer text, BlurPipeline blur, BlurPipeline.SceneDrawer worldSceneDrawer) {
         this.quad = quad;
         this.text = text;
         this.blur = blur;
+        this.worldSceneDrawer = worldSceneDrawer;
     }
 
     /** 从 categories 中查找 DynamicIsland 模块并提取配置项引用 */
@@ -84,6 +88,7 @@ public class DynamicIslandRenderer {
                             case "Show Ping": showPingOpt = opt; break;
                             case "Duration": durationOpt = opt; break;
                             case "Scale": scaleOpt = opt; break;
+                            case "Blur Background": blurBgOpt = opt; break;
                         }
                     }
                     break;
@@ -199,23 +204,40 @@ public class DynamicIslandRenderer {
         targetX = (screenW - currentWidth) / 2f;
         renderX = smoothAnim(renderX, targetX, 0.5f, dt);
 
-        // ---- 渲染 ----
+        // ---- 渲染（1:1 还原原版三层结构）----
+        // 原版: addBlur(black rect) → addBloom(black rect) → drawRoundedRect(black, alpha=130)
         float islandX = renderX;
         float islandY = ISLAND_Y * s;
         float islandW = currentWidth;
         float islandH = currentHeight;
         float cornerR = CORNER_RADIUS * s;
 
-        // 1. 边缘模糊 (bloom)：捕获岛屿形状 → 模糊 → 叠加混合绘制出柔和光晕
+        // 1. 背景模糊（可选）：捕获世界场景 → 模糊 → 毛玻璃面板裁剪
+        boolean blurBg = blurBgOpt != null && blurBgOpt.boolValue;
+        if (blurBg) {
+            blur.captureAndBlur(worldSceneDrawer);
+            blur.drawGlassPanel(islandX, islandY, islandW, islandH, cornerR,
+                    new float[]{0.02f, 0.02f, 0.02f, 0.5f}, a, sw, sh);
+        }
+
+        // 2. 边缘模糊 (bloom)：捕获黑色形状 → 模糊 → alpha混合绘制柔和暗光晕
+        //    用 drawGlow (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) 而非 drawGlowColor (GL_ONE,GL_ONE)
+        //    因为黑色 RGB=0 在叠加混合下不可见，必须用 alpha 混合
         blur.captureAndBlurTransparent(() -> {
-            quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 0.8f});
+            quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 1f});
             quad.flush(sw, sh);
         });
-        // drawGlowColor 使用叠加混合(GL_ONE,GL_ONE)，将模糊后的黑色形状作为柔和光晕叠加到边缘
-        blur.drawGlowColor(0.5f, sw, sh);
+        // 第一层：较大范围的暗光晕（原版 addBlur）
+        blur.drawGlow(new float[]{0f, 0f, 0f, 0.5f * a}, sw, sh);
+        // 第二层：更紧凑的暗光晕（原版 addBloom，用 captureAndBlurTransparentTight 做更强扩散）
+        blur.captureAndBlurTransparentTight(() -> {
+            quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 1f});
+            quad.flush(sw, sh);
+        });
+        blur.drawGlow(new float[]{0f, 0f, 0f, 0.3f * a}, sw, sh);
 
-        // 2. 黑色半透明背景
-        quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 0.75f * a});
+        // 3. 黑色半透明背景（原版 new Color(0,0,0,130) ≈ 0.51 alpha）
+        quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 0.51f * a});
         quad.flush(sw, sh);
 
         // 3. 裁剪区域

@@ -1261,7 +1261,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         // 1.2) ArrayList HUD：跟ClickGUI面板是否打开完全无关，游戏里随时都该显示
         refreshHudModuleRefs();
         if (dynamicIsland == null) {
-            dynamicIsland = new DynamicIslandRenderer(quad, text, blur);
+            dynamicIsland = new DynamicIslandRenderer(quad, text, blur, this::drawWorldScene);
         }
         dynamicIsland.refreshModuleRefs(categories);
         updateHudAnimations(dt);
