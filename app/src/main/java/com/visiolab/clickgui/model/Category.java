@@ -195,7 +195,7 @@ public class Category {
         client.add(new ModuleItem("DynamicIsland", "Apple-style dynamic island HUD", true)
                 .addSwitch("Show FPS", true)
                 .addSwitch("Show Ping", true)
-                .addSlider("Duration", 2, 1, 5, "s")
+                .addSlider("Duration", 3, 2, 8, "s")
                 .addSlider("Scale", 1, 0.7f, 1.5f, "x")
         );
         client.add(new ModuleItem("Radar", "Entity radar HUD", false)

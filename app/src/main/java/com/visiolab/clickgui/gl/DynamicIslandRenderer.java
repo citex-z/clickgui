@@ -125,7 +125,8 @@ public class DynamicIslandRenderer {
     }
 
     private long getDurationMs() {
-        return durationOpt != null ? (long) (1000 + durationOpt.sliderValue * 4000) : 2000;
+        // Duration slider: 2-8s, 归一化值映射到 2000-8000ms
+        return durationOpt != null ? (long) (2000 + durationOpt.sliderValue * 6000) : 3000;
     }
 
     /** 每帧更新和渲染 */
@@ -190,13 +191,13 @@ public class DynamicIslandRenderer {
             targetHeight = DEFAULT_HEIGHT * s;
         }
 
-        // 平滑过渡
-        currentWidth = smoothAnim(currentWidth, targetWidth, 0.2f, dt);
-        currentHeight = smoothAnim(currentHeight, targetHeight, 0.2f, dt);
+        // 平滑过渡（速度 0.5，约 0.2 秒内完成大部分变化）
+        currentWidth = smoothAnim(currentWidth, targetWidth, 0.5f, dt);
+        currentHeight = smoothAnim(currentHeight, targetHeight, 0.5f, dt);
 
         // 位置居中
         targetX = (screenW - currentWidth) / 2f;
-        renderX = smoothAnim(renderX, targetX, 0.2f, dt);
+        renderX = smoothAnim(renderX, targetX, 0.5f, dt);
 
         // ---- 渲染 ----
         float islandX = renderX;
@@ -339,18 +340,12 @@ public class DynamicIslandRenderer {
         quad.flush(sw, sh);
     }
 
-    /** 指数平滑（参考 AnimationUtil.smooth） */
+    /** 指数平滑（参考 AnimationUtil.smooth）— 帧率无关，速度更快 */
     private float smoothAnim(float current, float target, float speed, float dt) {
-        float diff = Math.abs(target - current) * speed;
-        float smoothing = Math.max(diff * (dt * 60f / 16f), 0.15f);
-        if (current > target) {
-            current = Math.max(current - smoothing, target);
-        } else if (current < target) {
-            current = Math.min(current + smoothing, target);
-        } else {
-            current = target;
-        }
-        return current;
+        // 帧率无关的指数平滑：speed 越大越快
+        // 每秒收敛比例 = 1 - e^(-speed * 10)，speed=0.5 时约 99..3%/秒
+        float factor = 1f - (float) Math.exp(-speed * 10f * dt);
+        return current + (target - current) * Math.max(factor, 0.1f); // 最小每帧 10%
     }
 
     // ---- 内部类 ----
