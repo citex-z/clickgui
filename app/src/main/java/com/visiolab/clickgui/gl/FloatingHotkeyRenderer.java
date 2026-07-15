@@ -21,9 +21,10 @@ public class FloatingHotkeyRenderer {
     private final TextRenderer text;
 
     // 尺寸常量
-    private static final float BTN_SIZE = 44f;
-    private static final float BTN_RADIUS = 12f;
-    private static final float DRAG_THRESHOLD = 8f; // 移动超过这个距离才算拖动
+    private static final float BTN_HEIGHT = 28f;      // 按钮高度
+    private static final float BTN_PADDING = 14f;      // 文字左右内边距
+    private static final float BTN_RADIUS = 14f;       // 圆角（药丸形）
+    private static final float DRAG_THRESHOLD = 8f;    // 移动超过这个距离才算拖动
 
     // 拖动状态
     private HotkeyItem draggingItem = null;
@@ -79,51 +80,51 @@ public class FloatingHotkeyRenderer {
 
         for (HotkeyItem hk : mgr.getHotkeys()) {
             float s = uiScale;
-            float size = BTN_SIZE * s;
+            float fontSize = 12f * s;
+            float padW = BTN_PADDING * s;
+            float btnH = BTN_HEIGHT * s;
+            float btnR = BTN_RADIUS * s;
+
+            // 文字：小写
+            String displayText = hk.displayText.toLowerCase();
+            float textW = text.measure(displayText, fontSize);
+            float btnW = textW + padW * 2f;
 
             // 按压缩放动画
             float targetPress = (hk.pressed || hk.dragging) ? 1f : 0f;
             hk.pressAnim += (targetPress - hk.pressAnim) * Math.min(1f, dt * 12f);
-            float scale = 1f - hk.pressAnim * 0.08f; // 按下缩小8%
-            float drawSize = size * scale;
-            float offsetX = (size - drawSize) / 2f;
-            float offsetX2 = (size - drawSize) / 2f;
+            float scale = 1f - hk.pressAnim * 0.06f;
+            float drawW = btnW * scale;
+            float drawH = btnH * scale;
+            float offsetX = (btnW - drawW) / 2f;
+            float offsetY = (btnH - drawH) / 2f;
 
             float x = hk.x + offsetX;
-            float y = hk.y + offsetX2;
+            float y = hk.y + offsetY;
 
             // 查找绑定模块的开关状态
             boolean moduleEnabled = isModuleEnabled(hk.boundModuleName);
 
-            // 拖动时放大阴影
+            // 拖动时阴影
             if (hk.dragging) {
                 float shadowAlpha = 0.3f * alpha;
-                quad.addRect(x - 4f * s, y + 2f * s, drawSize + 8f * s, drawSize + 4f * s, BTN_RADIUS * s,
+                quad.addRect(x - 3f * s, y + 2f * s, drawW + 6f * s, drawH + 3f * s, btnR,
                         new float[]{0f, 0f, 0f, shadowAlpha});
             }
 
+            // 背景：深灰药丸形（开启时主题色高亮）
             if (moduleEnabled) {
-                // 开启状态：绿色背景（统一风格）
-                quad.addRect(x, y, drawSize, drawSize, BTN_RADIUS * s,
-                        new float[]{0.30f, 0.56f, 0.33f, 0.92f * alpha});
+                quad.addRect(x, y, drawW, drawH, btnR,
+                        new float[]{0.15f, 0.42f, 0.58f, 0.92f * alpha}); // 主题蓝
             } else {
-                // 关闭状态：白灰背景（统一风格）
-                quad.addRect(x, y, drawSize, drawSize, BTN_RADIUS * s,
-                        new float[]{0.92f, 0.92f, 0.92f, 0.88f * alpha});
+                quad.addRect(x, y, drawW, drawH, btnR,
+                        new float[]{0.16f, 0.16f, 0.16f, 0.88f * alpha}); // 深灰
             }
 
-            // 文字
-            float fontSize = 11f * s;
-            // 缩短文字如果太长
-            String displayText = hk.displayText;
-            if (displayText.length() > 6) displayText = displayText.substring(0, 5) + "..";
-            float textW = text.measure(displayText, fontSize);
-            float textX = x + (drawSize - textW) / 2f;
-            float textY = y + (drawSize - fontSize) / 2f + 1f * s;
-
-            float[] textColor = moduleEnabled
-                    ? new float[]{1f, 1f, 1f, alpha}
-                    : new float[]{0.2f, 0.2f, 0.2f, alpha};
+            // 文字居中
+            float textX = x + (drawW - textW) / 2f;
+            float textY = y + (drawH - fontSize) / 2f - 1f * s;
+            float[] textColor = new float[]{1f, 1f, 1f, alpha}; // 始终白色
             text.draw(displayText, textX, textY, fontSize, textColor, sw, sh);
         }
 
@@ -166,19 +167,22 @@ public class FloatingHotkeyRenderer {
         float ey = event.getY();
         int action = event.getActionMasked();
         float s = uiScale;
-        float size = BTN_SIZE * s;
+        float btnH = BTN_HEIGHT * s;
+        float fontSize = 12f * s;
+        float padW = BTN_PADDING * s;
 
         switch (action) {
             case MotionEvent.ACTION_DOWN: {
-                // 从后往前检查（上层优先）
                 for (int i = mgr.getHotkeys().size() - 1; i >= 0; i--) {
                     HotkeyItem hk = mgr.getHotkeys().get(i);
-                    if (ex >= hk.x && ex <= hk.x + size && ey >= hk.y && ey <= hk.y + size) {
+                    String displayText = hk.displayText.toLowerCase();
+                    float textW = text.measure(displayText, fontSize);
+                    float btnW = textW + padW * 2f;
+                    if (ex >= hk.x && ex <= hk.x + btnW && ey >= hk.y && ey <= hk.y + btnH) {
                         draggingItem = hk;
                         hk.pressed = true;
                         touchStartX = ex;
                         touchStartY = ey;
-                        // 记录手指相对按钮的偏移
                         dragOffsetX = ex - hk.x;
                         dragOffsetY = ey - hk.y;
                         pressStartTime = System.currentTimeMillis();
@@ -197,12 +201,14 @@ public class FloatingHotkeyRenderer {
                         draggingItem.dragging = true;
                     }
                     if (isDragging) {
-                        // 直接设置位置 = 手指位置 - 偏移
                         float newX = ex - dragOffsetX;
                         float newY = ey - dragOffsetY;
                         // 限制在屏幕范围内
-                        newX = Math.max(0, Math.min(newX, screenW - size));
-                        newY = Math.max(0, Math.min(newY, screenH - size));
+                        String displayText = draggingItem.displayText.toLowerCase();
+                        float textW = text.measure(displayText, fontSize);
+                        float btnW = textW + padW * 2f;
+                        newX = Math.max(0, Math.min(newX, screenW - btnW));
+                        newY = Math.max(0, Math.min(newY, screenH - btnH));
                         draggingItem.x = newX;
                         draggingItem.y = newY;
                     }
@@ -214,15 +220,12 @@ public class FloatingHotkeyRenderer {
             case MotionEvent.ACTION_CANCEL: {
                 if (draggingItem != null) {
                     if (isDragging) {
-                        // 拖动结束，保存位置
                         mgr.save();
                         draggingItem.dragging = false;
                     } else {
-                        // 点击：切换模块开关
                         ModuleItem m = findModule(draggingItem.boundModuleName);
                         if (m != null) {
                             m.enabled = !m.enabled;
-                            // 通知外部（UIRenderer 会监听）
                             onHotkeyToggled(m);
                         }
                     }
