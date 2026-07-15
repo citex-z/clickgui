@@ -198,9 +198,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private ModuleItem arrayListFlowSpeedSlider;
     private ModuleItem arrayListLineToggle;
     private ModuleItem arrayListColorDropdown, arrayListHeightSlider, arrayListThemeGradToggle;
-    private ModuleItem.ConfigOption arrayListColorOpt, arrayListHeightOpt, arrayListThemeGradOpt;
+    private ModuleItem.ConfigOption arrayListHeightOpt;
     // ArrayList 配置项引用
-    private ModuleItem.ConfigOption arrayBgOpt, arrayHideRenderOpt, arrayShowFpsOpt, arrayShowPingOpt, arrayShowCpsOpt, arrayScaleOpt, arrayShowChatOpt, arrayShowF3Opt;
+    private ModuleItem.ConfigOption arrayBgOpt, arrayHideRenderOpt, arrayScaleOpt, arrayShowChatOpt, arrayShowF3Opt;
     // Watermark 配置项引用
     private ModuleItem.ConfigOption wmShowVerOpt, wmShowFpsOpt, wmShowPingOpt, wmScaleOpt, wmBgOpt;
     // Notifications 配置项引用
@@ -729,7 +729,6 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                         arrayListToggle = m;
                         for (ModuleItem.ConfigOption opt : m.options) {
                             switch (opt.label) {
-                                case "Color": arrayListColorOpt = opt; break;
                                 case "Height": arrayListHeightOpt = opt; break;
                                 case "Background": arrayBgOpt = opt; break;
                                 case "Hide Render Modules": arrayHideRenderOpt = opt; break;
@@ -793,74 +792,18 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
     }
 
-    /** ArrayList 每一行的颜色——参考南方客户端 ArrayListHud 的 6 种主题模式实现。
-     *  Color 下拉框选择主题：0=Custom, 1=Rainbow, 2=LightRainbow, 3=Astolfo, 4=Weird, 5=Valentine
-     *  Theme Gradient 开关：开启时用 ACCENT 主题色替代 Custom 模式的双色 */
+    /** ArrayList 每一行的颜色——经典灰白渐变，亮度在顶部和底部之间缓慢流动。 */
     private float[] arrayListRowColor(int i, int count) {
         float t = count <= 1 ? 0f : i / (float) (count - 1);
         float phase = t + flowOffset;
-        phase = phase - (float) Math.floor(phase); // 取模到 0..1
+        phase = phase - (float) Math.floor(phase); // 取模到 0..1，持续滚动
 
-        // 从配置面板获取 Color 下拉框索引
-        int colorMode = 0; // 默认 Rainbow
-        if (arrayListColorOpt != null) colorMode = arrayListColorOpt.dropdownIndex;
-
-        // 计算偏移量：时间分量 + Y坐标分量，形成斜向流动（参考南方客户端）
-        float customSpeed = 1f;
-        if (arrayListFlowSpeedSlider != null) customSpeed = 0.3f + arrayListFlowSpeedSlider.sliderValue * 4f;
-        float timeOffset = (float) (Math.abs((System.currentTimeMillis() / 100D * customSpeed) / 100D) + i / 50D);
-        // 对 timeOffset 做往返折返
-        float offset = timeOffset;
-        if (offset > 1f) {
-            float left = offset % 1f;
-            long off = (long) offset;
-            offset = off % 2 == 0 ? left : 1f - left;
-        }
-
-        switch (colorMode) {
-            case 0: // Rainbow (饱和度 0.85)
-                return hsvToRgb(((System.currentTimeMillis() / 10f * customSpeed + i * 30) % 6000f) / 6000f, 0.85f, 1f);
-            case 1: // LightRainbow (饱和度 0.55)
-                return hsvToRgb(((System.currentTimeMillis() / 10f * customSpeed + i * 30) % 6000f) / 6000f, 0.55f, 1f);
-            case 2: // Astolfo: 粉(255,60,234) → 蓝(27,179,255)
-                return gradientColor(new float[]{1f, 0.235f, 0.918f, 1f}, new float[]{0.106f, 0.702f, 1f, 1f}, offset);
-            case 3: // Weird: 浅蓝(128,171,255) → 紫(160,72,255)
-                return gradientColor(new float[]{0.502f, 0.671f, 1f, 1f}, new float[]{0.627f, 0.282f, 1f, 1f}, offset);
-            case 4: // Valentine: 粉(255,129,202) → 红(255,15,0)
-                return gradientColor(new float[]{1f, 0.506f, 0.792f, 1f}, new float[]{1f, 0.059f, 0f, 1f}, offset);
-            default:
-                return new float[]{1f, 1f, 1f, 1f};
-        }
-    }
-
-    /** RGB 线性渐变插值（参考南方客户端 getGradientOffset） */
-    private float[] gradientColor(float[] c1, float[] c2, float offset) {
-        float inv = 1f - offset;
-        return new float[]{
-            c1[0] * inv + c2[0] * offset,
-            c1[1] * inv + c2[1] * offset,
-            c1[2] * inv + c2[2] * offset,
-            1f
-        };
-    }
-
-    /** HSB → RGB */
-    private float[] hsvToRgb(float h, float s, float v) {
-        float r, g, b;
-        int i = (int) (h * 6);
-        float f = h * 6 - i;
-        float p = v * (1 - s);
-        float q = v * (1 - f * s);
-        float t2 = v * (1 - (1 - f) * s);
-        switch (i % 6) {
-            case 0: r = v; g = t2; b = p; break;
-            case 1: r = q; g = v; b = p; break;
-            case 2: r = p; g = v; b = t2; break;
-            case 3: r = p; g = q; b = v; break;
-            case 4: r = t2; g = p; b = v; break;
-            default: r = v; g = p; b = q; break;
-        }
-        return new float[]{r, g, b, 1f};
+        // 经典灰白渐变：亮度在"顶部亮度"和"底部亮度"之间缓慢流动
+        float topLight = 0.95f;
+        float botLight = 0.62f;
+        float mixAmt = 0.5f + 0.5f * (float) Math.sin(phase * Math.PI * 2.0);
+        float light = topLight + (botLight - topLight) * mixAmt;
+        return new float[]{light, light, light * 1.02f, 1f}; // 极轻微偏冷调
     }
 
     private void drawArrayListHud() {
@@ -1495,39 +1438,60 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 quad.addRect(stKnobX, stToggleY + 3f * uiScale, stKnobD, stKnobD, stKnobD / 2f, withAlpha(KNOB_COLOR, alpha));
                 curY += rowH + rowGap;
             } else if (opt.type == ModuleItem.ConfigOption.TYPE_SLIDER) {
-                // 额外滑块行：滑块轨道只占右侧约55%宽度，左侧留标签文字
-                float osTrackH = 5f * uiScale;
-                float osTrackW = contentW * 0.55f;
-                float osTrackX = trackX + trackW - pad - osTrackW;
-                float osTrackY = curY + rowH / 2f - osTrackH / 2f;
-                quad.addRect(osTrackX, osTrackY, osTrackW, osTrackH, osTrackH / 2f, withAlpha(SOUTH_SLIDER_TRACK, alpha));
-                float osFillW = osTrackW * opt.sliderValue;
-                float[][] osDiag = diagGradient(ACCENT_1, ACCENT_2, alpha);
-                quad.addRectGradient(osTrackX, osTrackY, Math.max(osTrackH, osFillW), osTrackH, osTrackH / 2f, osDiag[0], osDiag[1], osDiag[2], osDiag[3]);
-                float osKnobD = 12f * uiScale;
-                float osKnobX = osTrackX + osFillW - osKnobD / 2f;
-                quad.addRect(osKnobX, osTrackY + osTrackH / 2f - osKnobD / 2f, osKnobD, osKnobD, osKnobD / 2f, withAlpha(KNOB_COLOR, alpha));
-                // 热区用滑块轨道区域
-                configOptionRects.add(new Object[]{new float[]{osTrackX, osTrackY, osTrackW, osTrackH}, oi, ModuleItem.ConfigOption.TYPE_SLIDER});
+                // M3 风格滑块：细轨道 + 大圆形拇指，拇指拖拽时放大
+                float m3TrackH = 6f * uiScale;
+                float m3TrackW = contentW * 0.55f;
+                float m3TrackX = trackX + trackW - pad - m3TrackW;
+                float m3TrackY = curY + rowH / 2f - m3TrackH / 2f;
+                // 未填充轨道（inactive track）
+                quad.addRect(m3TrackX, m3TrackY, m3TrackW, m3TrackH, m3TrackH / 2f, withAlpha(SOUTH_SLIDER_TRACK, alpha));
+                // 已填充轨道（active track）
+                float m3FillW = m3TrackW * opt.sliderValue;
+                float[][] m3Diag = diagGradient(ACCENT_1, ACCENT_2, alpha);
+                quad.addRectGradient(m3TrackX, m3TrackY, Math.max(m3TrackH, m3FillW), m3TrackH, m3TrackH / 2f, m3Diag[0], m3Diag[1], m3Diag[2], m3Diag[3]);
+                // 拇指：正常 18px，拖拽中 26px（M3 风格按压放大）
+                boolean isDraggingThisOpt = (draggingOptionIndex == oi);
+                float m3KnobD = (isDraggingThisOpt ? 26f : 18f) * uiScale;
+                float m3KnobX = m3TrackX + m3FillW - m3KnobD / 2f;
+                float m3KnobY = m3TrackY + m3TrackH / 2f - m3KnobD / 2f;
+                // 拇指阴影（M3 风格：按压时有轻微阴影）
+                if (isDraggingThisOpt) {
+                    float shAlpha = 0.15f * alpha;
+                    quad.addRect(m3KnobX - 2f * uiScale, m3KnobY + 2f * uiScale, m3KnobD + 4f * uiScale, m3KnobD + 2f * uiScale, m3KnobD / 2f, new float[]{0f, 0f, 0f, shAlpha});
+                }
+                quad.addRect(m3KnobX, m3KnobY, m3KnobD, m3KnobD, m3KnobD / 2f, withAlpha(KNOB_COLOR, alpha));
+                // 热区：触摸区域扩大到整行高度（48px），方便手指触控
+                float m3TouchH = 48f * uiScale;
+                float m3TouchY = curY + rowH / 2f - m3TouchH / 2f;
+                configOptionRects.add(new Object[]{new float[]{m3TrackX, m3TouchY, m3TrackW, m3TouchH}, oi, ModuleItem.ConfigOption.TYPE_SLIDER});
                 curY += rowH + rowGap;
             }
         }
 
-        // --- 滑块行（仅有滑块的模块） ---
+        // --- 滑块行（仅有滑块的模块）M3 风格 ---
         if (m.hasSlider) {
-            float sTrackH = 5f * uiScale;
+            float sTrackH = 6f * uiScale;
             float sTrackW = contentW * 0.55f;
             float sTrackX = trackX + trackW - pad - sTrackW;
             float sTrackY = curY + rowH / 2f - sTrackH / 2f;
+            // 未填充轨道
             quad.addRect(sTrackX, sTrackY, sTrackW, sTrackH, sTrackH / 2f, withAlpha(SOUTH_SLIDER_TRACK, alpha));
+            // 已填充轨道
             float fillW = sTrackW * m.sliderValue;
             float[][] diag = diagGradient(ACCENT_1, ACCENT_2, alpha);
             quad.addRectGradient(sTrackX, sTrackY, Math.max(sTrackH, fillW), sTrackH, sTrackH / 2f, diag[0], diag[1], diag[2], diag[3]);
-            float knobD = 12f * uiScale;
+            // 拇指：正常 18px，拖拽中 26px
+            float knobD = (draggingConfigSlider ? 26f : 18f) * uiScale;
             float knobX = sTrackX + fillW - knobD / 2f;
-            quad.addRect(knobX, sTrackY + sTrackH / 2f - knobD / 2f, knobD, knobD, knobD / 2f, withAlpha(KNOB_COLOR, alpha));
+            float knobY = sTrackY + sTrackH / 2f - knobD / 2f;
+            // 拇指阴影
+            if (draggingConfigSlider) {
+                quad.addRect(knobX - 2f * uiScale, knobY + 2f * uiScale, knobD + 4f * uiScale, knobD + 2f * uiScale, knobD / 2f, new float[]{0f, 0f, 0f, 0.15f * alpha});
+            }
+            quad.addRect(knobX, knobY, knobD, knobD, knobD / 2f, withAlpha(KNOB_COLOR, alpha));
+            // 热区坐标：用于 ACTION_DOWN/MOVE 判断，触摸区域扩大到整行高度
             configSliderX = sTrackX; configSliderW = sTrackW;
-            configSliderY = sTrackY; configSliderH = sTrackH;
+            configSliderY = curY + rowH / 2f - 24f * uiScale; configSliderH = 48f * uiScale;
             curY += rowH + rowGap;
         }
 
@@ -2279,9 +2243,9 @@ private void drawFloatingBall() {
                     com.visiolab.nativebridge.ModuleHook.onToggle(activeConfigModule);
                     return;
                 }
-                // 检查滑块拖拽（大幅扩大触摸区域：上下各+30px，左右各+15px，便于手指触控）
+                // 检查滑块拖拽（M3 风格：热区已扩大到 48px 高，直接使用 configSlider 坐标）
                 if (configSliderW > 0 && ex >= configSliderX - 15f && ex <= configSliderX + configSliderW + 15f &&
-                    ey >= configSliderY - 30f && ey <= configSliderY + configSliderH + 30f) {
+                    ey >= configSliderY && ey <= configSliderY + configSliderH) {
                     draggingConfigSlider = true;
                     float t = (ex - configSliderX) / configSliderW;
                     t = Math.max(0f, Math.min(1f, t));

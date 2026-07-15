@@ -167,9 +167,7 @@ public class Category {
         Category client = new Category("Client", "\u2302", "MOD CONFIG");
         client.add(new ModuleItem("ArrayList", "Display enabled modules HUD", true)
                 .addSwitch("Background", true)
-                .addDropdown("Color", new String[]{"Rainbow", "LightRainbow", "Astolfo", "Weird", "Valentine"}, 0)
                 .addSwitch("Hide Render Modules", true)
-                .addSlider("Speed", 10, 5, 20, "")
                 .addSlider("Height", 1, 0.5f, 2.0f, "x")
                 .addSlider("Scale", 1, 0.5f, 2.0f, "x")
                 .addSwitch("Show in Chat", true)
