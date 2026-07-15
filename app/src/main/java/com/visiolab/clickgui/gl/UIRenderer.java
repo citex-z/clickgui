@@ -1662,7 +1662,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float hkTextW = text.measure(hkLabel, hkFontSize);
         float hkTextX = hkBtnX + (hkBtnW - hkTextW) / 2f;
         float hkTextY = hkBtnY + (hkBtnH - hkFontSize) / 2f - 1f * uiScale;
-        text.draw(hkLabel, hkTextX, hkTextY, hkFontSize, withAlpha(SOUTH_TEXT_WHITE, alpha), sw, sh);
+        text.draw(hkLabel, hkTextX, hkTextY, hkFontSize, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         // 热区
         assignHotkeyRect = new float[]{hkBtnX, hkBtnY, hkBtnW, hkBtnH};
         curY += hkBtnH + rowGap;
