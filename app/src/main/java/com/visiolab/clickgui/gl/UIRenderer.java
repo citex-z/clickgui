@@ -289,6 +289,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private final QuadBatch quad = new QuadBatch();
     private final TextRenderer text = new TextRenderer();
     private final BlurPipeline blur = new BlurPipeline();
+    private DynamicIslandRenderer dynamicIsland;
     private float sceneTime = 0f;
     private float frameDt = 0.016f; // 当前帧的 deltaTime，供 drawConfigPage 等子方法使用
 
@@ -1259,6 +1260,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
         // 1.2) ArrayList HUD：跟ClickGUI面板是否打开完全无关，游戏里随时都该显示
         refreshHudModuleRefs();
+        if (dynamicIsland == null) {
+            dynamicIsland = new DynamicIslandRenderer(quad, text, blur);
+        }
+        dynamicIsland.refreshModuleRefs(categories);
         updateHudAnimations(dt);
         // UI 元素动画更新
         sidebarIndicatorY.setTarget(sidebarIndicatorTargetY);
@@ -1272,6 +1277,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         drawArrayListHud();
         drawWatermark();
         drawKeystrokes();
+        // 灵动岛：最上层渲染
+        if (dynamicIsland != null) {
+            dynamicIsland.update(frameDt, screenW, screenH, uiScale);
+        }
 
         // 长按展开已由卡片箭头点击替代，不再需要
         // if (longPressCandidate != null && !longPressFired
@@ -2241,6 +2250,7 @@ private void drawFloatingBall() {
                     activeConfigModule.enabled = !activeConfigModule.enabled;
                     spawnModuleToast(activeConfigModule.name, activeConfigModule.enabled);
                     com.visiolab.nativebridge.ModuleHook.onToggle(activeConfigModule);
+                    if (dynamicIsland != null) dynamicIsland.addModuleToggle(activeConfigModule.name, activeConfigModule.enabled);
                     return;
                 }
                 // 检查滑块拖拽（M3 风格：热区已扩大到 48px 高，直接使用 configSlider 坐标）
@@ -2452,6 +2462,7 @@ private void drawFloatingBall() {
                         m.enabled = !m.enabled;
                         spawnModuleToast(m.name, m.enabled);
                         com.visiolab.nativebridge.ModuleHook.onToggle(m);
+                        if (dynamicIsland != null) dynamicIsland.addModuleToggle(m.name, m.enabled);
                         return;
                     }
                     if ("CARD".equals(type)) {

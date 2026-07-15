@@ -192,6 +192,12 @@ public class Category {
         client.add(new ModuleItem("Keystrokes", "Display WASD + mouse keys", false)
                 .addSwitch("Show Mouse", true)
                 .addSlider("Size", 1, 0.5f, 2.0f, "x"));
+        client.add(new ModuleItem("DynamicIsland", "Apple-style dynamic island HUD", true)
+                .addSwitch("Show FPS", true)
+                .addSwitch("Show Ping", true)
+                .addSlider("Duration", 2, 1, 5, "s")
+                .addSlider("Scale", 1, 0.7f, 1.5f, "x")
+        );
         client.add(new ModuleItem("Radar", "Entity radar HUD", false)
                 .addDropdown("Shape", new String[]{"Circle", "Square"}, 0)
                 .addSlider("Range", 50, 10, 200, "blocks"));
