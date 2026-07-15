@@ -22,14 +22,14 @@ import javax.microedition.khronos.opengles.GL10;
 public class UIRenderer implements GLSurfaceView.Renderer {
 
     // ---- 主题色：深色 / 浅色两套，"Dark Theme" 开关实际生效切换 ----
-    private static final float[] DARK_PANEL_BG = {0.11f, 0.11f, 0.13f, 0.92f};
+    private static final float[] DARK_PANEL_BG = {0.96f, 0.96f, 0.96f, 0.92f}; // 白色面板
     private static final float[] DARK_SIDEBAR_BG = {0.07f, 0.07f, 0.09f, 0.95f};
     private static final float[] DARK_CARD_BG = {0.16f, 0.16f, 0.19f, 0.9f};
     private static final float[] DARK_TEXT_MAIN = {1f, 1f, 1f, 1f};
     private static final float[] DARK_TEXT_DIM = {0.7f, 0.7f, 0.75f, 1f};
     private static final float[] DARK_TRACK_OFF = {0.3f, 0.3f, 0.34f, 1f};
 
-    private static final float[] LIGHT_PANEL_BG = {0.94f, 0.94f, 0.97f, 0.92f};
+    private static final float[] LIGHT_PANEL_BG = {0.96f, 0.96f, 0.96f, 0.92f}; // 白色面板
     private static final float[] LIGHT_SIDEBAR_BG = {0.99f, 0.99f, 1.0f, 0.95f};
     private static final float[] LIGHT_CARD_BG = {0.87f, 0.87f, 0.90f, 0.9f};
     private static final float[] LIGHT_TEXT_MAIN = {0.08f, 0.08f, 0.10f, 1f};
@@ -42,45 +42,54 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float[] TEXT_MAIN = DARK_TEXT_MAIN;
     private float[] TEXT_DIM = DARK_TEXT_DIM;
     private float[] TRACK_OFF = DARK_TRACK_OFF;
-    private static final float[] WORLD_BG = {0.04f, 0.05f, 0.06f, 1f};
-    private static final float[] KNOB_COLOR = {1f, 1f, 1f, 1f}; // 拖钮/滑块圆点固定用白色，不跟随主题切换（否则浅色主题下会变黑看不清）
+    private static final float[] WORLD_BG = {0.12f, 0.12f, 0.14f, 1f};
+    private static final float[] KNOB_COLOR = {0.15f, 0.15f, 0.15f, 1f}; // 深色拖钮（白底可见）
     // ---- 南方客户端真实颜色 (from source: Colors.java + SouthsideDarkStyle.java) ----
-    private static final float[] HDR_BG = {0.22f, 0.22f, 0.22f, 1f};               // #383838 标题栏（浅灰）
-    private static final float[] SOUTH_SIDEBAR_BG = {0.18f, 0.18f, 0.18f, 0.95f};  // #2E2E2E 侧栏
-    private static final float[] SOUTH_PANEL_BG = {0.15f, 0.15f, 0.15f, 1f};       // #262626 面板背景
-    private static final float[] SOUTH_CARD_BORDER = {0.20f, 0.20f, 0.20f, 1f};    // #333333
-    private static final float[] SOUTH_CARD_BORDER_SEL = {0.85f, 0.85f, 0.85f, 1f}; // #D9D9D9 白灰选中
-    private static final float[] SOUTH_SEARCH_BG = {0.22f, 0.22f, 0.22f, 1f};      // #383838
-    private static final float[] SOUTH_TRACK_OFF = {0.18f, 0.18f, 0.18f, 1f};      // #2E2E2E
-    private static final float[] SOUTH_TAB_OFF = {0.35f, 0.35f, 0.35f, 1f};        // #595959
-    private static final float[] SOUTH_SECTION_LBL = {0.35f, 0.35f, 0.35f, 1f};     // #595959
-    private static final float[] SOUTH_SLIDER_TRACK = {0.16f, 0.16f, 0.16f, 1f};    // #292929
-    private static final float[] SOUTH_MODULE_BG = {0.20f, 0.20f, 0.20f, 1f};       // #333333 配置行背景
-    private static final float[] SOUTH_CARD_BG = {0.16f, 0.16f, 0.16f, 1f};     // #292929 卡片背景
-    private static final float[] SOUTH_TOGGLE_ON = {0.85f, 0.85f, 0.85f, 1f};     // #D9D9D9 白灰（替代蓝色）
-    private static final float[] SOUTH_TOGGLE_OFF = {0.18f, 0.18f, 0.18f, 1f};      // #2E2E2E
-    private static final float[] SOUTH_TEXT_WHITE = {1f, 1f, 1f, 0.8f};             // WHITE_80
-    private static final float[] SOUTH_TEXT_DIM2 = {1f, 1f, 1f, 0.6f};             // WHITE_60
-    private static final float[] SOUTH_TEXT_DIM3 = {1f, 1f, 1f, 0.5f};             // WHITE_50
+    private static final float[] HDR_BG = {0.96f, 0.96f, 0.96f, 1f};               // #F5F5F5 标题栏（舒适白）
+    private static final float[] SOUTH_SIDEBAR_BG = {0.92f, 0.92f, 0.92f, 0.95f};  // #EBEBEB 侧栏
+    private static final float[] SOUTH_PANEL_BG = {0.96f, 0.96f, 0.96f, 1f};       // #F5F5F5 面板背景（舒适白）
+    private static final float[] SOUTH_CARD_BORDER = {0.80f, 0.80f, 0.80f, 1f};    // #CCCCCC 卡片边框
+    private static final float[] SOUTH_CARD_BORDER_SEL = {0.40f, 0.23f, 0.64f, 1f}; // #6750A4 MD3紫选中
+    private static final float[] SOUTH_SEARCH_BG = {0.88f, 0.88f, 0.88f, 1f};      // #E0E0E0 搜索框
+    private static final float[] SOUTH_TRACK_OFF = {0.85f, 0.85f, 0.85f, 1f};      // #D9D9D9
+    private static final float[] SOUTH_TAB_OFF = {0.60f, 0.60f, 0.60f, 1f};         // #999999
+    private static final float[] SOUTH_SECTION_LBL = {0.45f, 0.45f, 0.45f, 1f};     // #737373
+    private static final float[] SOUTH_SLIDER_TRACK = {0.85f, 0.85f, 0.85f, 1f};    // #D9D9D9
+    private static final float[] SOUTH_MODULE_BG = {0.90f, 0.90f, 0.90f, 1f};       // #E6E6E6 配置行背景
+    private static final float[] SOUTH_CARD_BG = {0.92f, 0.92f, 0.92f, 1f};         // #EBEBEB 卡片背景
+    private static final float[] SOUTH_TOGGLE_ON = {0.40f, 0.23f, 0.64f, 1f};        // #6750A4 MD3暗紫
+    private static final float[] SOUTH_TOGGLE_OFF = {0.80f, 0.80f, 0.80f, 1f};       // #CCCCCC
+    private static final float[] SOUTH_TEXT_WHITE = {0.08f, 0.08f, 0.08f, 0.87f};    // #141414 87% 黑色文字
+    private static final float[] SOUTH_TEXT_DIM2 = {0.08f, 0.08f, 0.08f, 0.60f};    // #141414 60% 次要文字
+    private static final float[] SOUTH_TEXT_DIM3 = {0.08f, 0.08f, 0.08f, 0.38f};    // #141414 38% 更暗
     // 通知左侧彩色竖线：启用=绿色 #039855，禁用=红色 #D92020（南方客户端风格）
     private static final float[] TOAST_GREEN = {0.012f, 0.596f, 0.333f, 1f};        // #039855 启用
     private static final float[] TOAST_RED   = {0.851f, 0.125f, 0.125f, 1f};        // #D92020 禁用
     private ModuleItem darkThemeToggle; // 指向 Setting 分类里的 "Dark Theme" 开关，驱动主题切换
 
     // ---- 主题色预设（白/黑/灰系，不与南方蓝色完全相同）----
-    private float[] ACCENT_1 = {0.85f, 0.85f, 0.85f, 1f}; // #D9D9D9 白灰
-    private float[] ACCENT_2 = {0.65f, 0.65f, 0.65f, 1f}; // #A6A6A6 中灰
+    private float[] ACCENT_1 = {0.40f, 0.23f, 0.64f, 1f}; // #6750A4 MD3暗紫
+    private float[] ACCENT_2 = {0.55f, 0.35f, 0.78f, 1f}; // #8C61C7 浅紫
     private int selectedThemeIndex = 0;          // 当前选中的主题索引
     private float[] themeThemeRects;              // 运行时主题按钮命中区域
-    private float customHue = 0f, customSat = 0f, customVal = 0.85f; // #D9D9D9 白灰
+    private float customHue = 0.73f, customSat = 0.63f, customVal = 0.64f; // #6750A4 MD3暗紫
     private int selectedSwatchIndex = -1;
     private float hueBarX, hueBarW, hueBarY, hueBarH;
     private float svBoxX, svBoxY, svBoxW, svBoxH;
     private float[] addBtnRect, removeBtnRect;
     private static final float[][] presetSwatches = new float[][]{
-            {1f,0f,0f,1f}, {1f,0.5f,0f,1f}, {1f,1f,0f,1f}, {0.5f,1f,0f,1f},
-            {0f,1f,0f,1f}, {0f,1f,0.5f,1f}, {0f,1f,1f,1f}, {0f,0.5f,1f,1f},
-            {0f,0f,1f,1f}, {0.5f,0f,1f,1f}, {1f,0f,1f,1f}, {1f,1f,1f,1f}
+            {0.40f, 0.23f, 0.64f, 1f},  // #6750A4 Purple (MD3 Primary)
+            {0.55f, 0.35f, 0.78f, 1f},  // #8C61C7 Light Purple
+            {0.30f, 0.16f, 0.52f, 1f},  // #4A2885 Deep Purple
+            {0.00f, 0.45f, 0.60f, 1f},  // #007399 Teal
+            {0.00f, 0.42f, 0.50f, 1f},  // #006B80 Cyan Dark
+            {0.10f, 0.50f, 0.40f, 1f},  // #1A8066 Green
+            {0.65f, 0.17f, 0.17f, 1f},  // #A62B2B Red
+            {0.75f, 0.38f, 0.08f, 1f},  // #C06115 Orange
+            {0.65f, 0.50f, 0.10f, 1f},  // #A6801A Amber
+            {0.00f, 0.00f, 0.00f, 1f},  // #000000 Black
+            {0.40f, 0.40f, 0.40f, 1f},  // #666666 Gray
+            {0.85f, 0.85f, 0.85f, 1f}   // #D9D9D9 Light Gray
     };
     private boolean draggingHue = false, draggingSV = false;
     private boolean accentThemeExpanded = false;
@@ -1094,10 +1103,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float sbW = sidebarW * (w / panelW);
         float pad = 16f * uiScale * (h / panelH);
         float contentX = x + sbW + pad;
-        float contentW = w - sbW - pad * 2;
+        float contentW = Math.min(w - sbW - pad * 2, w - sbW - pad - 4f * uiScale);
         float hdrH = 72f * uiScale * (h / panelH);
         float titleH = 30f * uiScale * (h / panelH);
-        float startY = y + hdrH + titleH - configScrollOffset;
+        float startY = y + hdrH + titleH - configScrollOffset + 16f * uiScale * (h / panelH);
 
         float rowH = 48f * uiScale * (h / panelH);
         float rowGap = 8f * uiScale * (h / panelH);
@@ -1224,10 +1233,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float sbW = sidebarW * (w / panelW);
         float pad = 16f * uiScale * (h / panelH);
         float contentX = x + sbW + pad;
-        float contentW = w - sbW - pad * 2;
+        float contentW = Math.min(w - sbW - pad * 2, w - sbW - pad - 4f * uiScale);
         float hdrH = 72f * uiScale * (h / panelH);
         float titleH = 30f * uiScale * (h / panelH);
-        float startY = y + hdrH + titleH - configScrollOffset;
+        float startY = y + hdrH + titleH - configScrollOffset + 16f * uiScale * (h / panelH);
 
         float rowH = 48f * uiScale * (h / panelH);
         float rowGap = 8f * uiScale * (h / panelH);

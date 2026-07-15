@@ -169,16 +169,30 @@ public class Category {
                 .addSwitch("Background", true)
                 .addDropdown("Color", new String[]{"Custom", "Rainbow", "LightRainbow", "Astolfo", "Valentine"}, 1)
                 .addSwitch("Hide Render Modules", true)
-                .addSlider("Custom Speed", 10, 5, 20, ""));
+                .addSlider("Custom Speed", 10, 5, 20, "")
+                .addSwitch("Show FPS", false)
+                .addSwitch("Show Ping", false)
+                .addSwitch("Show CPS", false)
+                .addSlider("Scale", 1, 0.5f, 2.0f, "x")
+                .addSwitch("Show in Chat", true)
+                .addSwitch("Show in F3", false)
+        );
         client.add(new ModuleItem("ClickGUI", "Click GUI settings", true)
                 .addSwitch("Blur Background", true)
                 .addSlider("GUI Scale", 1, 0.5f, 2.0f, "x"));
         client.add(new ModuleItem("Watermark", "Client watermark HUD", true)
                 .addSwitch("Show Version", true)
-                .addSwitch("Show FPS", false));
+                .addSwitch("Show FPS", false)
+                .addSwitch("Show Ping", false)
+                .addSlider("Scale", 1, 0.5f, 2.0f, "x")
+                .addSwitch("Background", true)
+        );
         client.add(new ModuleItem("Notifications", "Toast notifications", true)
                 .addSlider("Duration", 2, 1, 5, "s")
-                .addSwitch("Show in Chat", true));
+                .addSwitch("Show in Chat", true)
+                .addSlider("Font Size", 0.5f, 0.25f, 1.0f, "")
+                .addSwitch("Sound", false)
+        );
         client.add(new ModuleItem("Keystrokes", "Display WASD + mouse keys", false)
                 .addSwitch("Show Mouse", true)
                 .addSlider("Size", 1, 0.5f, 2.0f, "x"));
