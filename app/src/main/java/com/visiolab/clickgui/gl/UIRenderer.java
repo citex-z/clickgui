@@ -1051,54 +1051,6 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             float[] col = arrayListRowColor(i, sortedModules.size());
             text.draw(line, tx, ty, fontSize, new float[]{col[0], col[1], col[2], a}, screenW, screenH);
         }
-
-        // ---- Show FPS / Show Ping / Show CPS：在列表底部追加额外行 ----
-        int extraIdx = sortedModules.size();
-        if (arrayShowFpsOpt != null && arrayShowFpsOpt.boolValue) {
-            String fpsText = "FPS " + currentFps;
-            float tw = text.measure(fpsText, fontSize);
-            float rowY = marginTop + extraIdx * rowH;
-            float barW = tw + textPad * 2f;
-            float barX = screenW - marginRight - barW;
-            if (!glassMode) {
-                quad.addRect(barX, rowY, barW, barH, 0f, new float[]{0.92f, 0.93f, 0.95f, bgOpacity});
-                quad.flush(screenW, screenH);
-            }
-            float[] col = arrayListRowColor(extraIdx, extraIdx + 1);
-            text.draw(fpsText, screenW - marginRight - textPad - tw, rowY + (barH - fontSize) / 2f, fontSize,
-                    new float[]{col[0], col[1], col[2], 1f}, screenW, screenH);
-            extraIdx++;
-        }
-        if (arrayShowPingOpt != null && arrayShowPingOpt.boolValue) {
-            String pingText = "Ping " + currentPing + "ms";
-            float tw = text.measure(pingText, fontSize);
-            float rowY = marginTop + extraIdx * rowH;
-            float barW = tw + textPad * 2f;
-            float barX = screenW - marginRight - barW;
-            if (!glassMode) {
-                quad.addRect(barX, rowY, barW, barH, 0f, new float[]{0.92f, 0.93f, 0.95f, bgOpacity});
-                quad.flush(screenW, screenH);
-            }
-            float[] col = arrayListRowColor(extraIdx, extraIdx + 1);
-            text.draw(pingText, screenW - marginRight - textPad - tw, rowY + (barH - fontSize) / 2f, fontSize,
-                    new float[]{col[0], col[1], col[2], 1f}, screenW, screenH);
-            extraIdx++;
-        }
-        if (arrayShowCpsOpt != null && arrayShowCpsOpt.boolValue) {
-            String cpsText = "CPS " + currentCps;
-            float tw = text.measure(cpsText, fontSize);
-            float rowY = marginTop + extraIdx * rowH;
-            float barW = tw + textPad * 2f;
-            float barX = screenW - marginRight - barW;
-            if (!glassMode) {
-                quad.addRect(barX, rowY, barW, barH, 0f, new float[]{0.92f, 0.93f, 0.95f, bgOpacity});
-                quad.flush(screenW, screenH);
-            }
-            float[] col = arrayListRowColor(extraIdx, extraIdx + 1);
-            text.draw(cpsText, screenW - marginRight - textPad - tw, rowY + (barH - fontSize) / 2f, fontSize,
-                    new float[]{col[0], col[1], col[2], 1f}, screenW, screenH);
-            extraIdx++;
-        }
     }
 
     /** 水印："Rlin" 固定显示在左上角，跟 Home 分类里的 "Watermark" 开关联动。
