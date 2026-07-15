@@ -485,6 +485,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private boolean touchMoved = false;
     private ModuleItem pendingToggleModule = null; // DOWN时记录，UP时触发
     private ModuleItem pendingCardModule = null;   // DOWN时记录，UP时触发
+    private float[] assignHotkeyRect = null; // 每模块配置页的 Assign Hotkey 按钮热区
     // 配置页滑动误触修正：ACTION_DOWN 记录起点，ACTION_UP 时若移动距离超过阈值则视为滑动，不触发点击
     private float downX = -1f, downY = -1f;
     private long downTime = 0L;
@@ -1367,6 +1368,12 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         // 悬浮快捷键初始化
         if (floatingHotkeys == null) {
             floatingHotkeys = new FloatingHotkeyRenderer(quad, text);
+            floatingHotkeys.setOnHotkeyToggledListener(m -> {
+                spawnModuleToast(m.name, m.enabled);
+                com.visiolab.nativebridge.ModuleHook.onToggle(m);
+                if (dynamicIsland != null) dynamicIsland.addModuleToggle(m.name, m.enabled);
+                checkModuleConflicts();
+            });
         }
         floatingHotkeys.setCategories(categories);
         // 查找 Hotkeys 模块
@@ -1641,6 +1648,24 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
         // --- 描述区（已包含在大圆角矩形内，不再单独画背景） ---
         curY += descH + rowGap;
+
+        // --- Assign Hotkey 按钮（所有模块都有） ---
+        float hkBtnH = 36f * uiScale;
+        float hkBtnX = trackX + pad;
+        float hkBtnW = trackW - pad * 2f;
+        float hkBtnY = curY;
+        float hkCornerR = 8f * uiScale;
+        quad.addRect(hkBtnX, hkBtnY, hkBtnW, hkBtnH, hkCornerR, withAlpha(SOUTH_MODULE_BG, alpha));
+        // 文字居中
+        String hkLabel = "Assign Hotkey";
+        float hkFontSize = 13f * uiScale;
+        float hkTextW = text.measure(hkLabel, hkFontSize);
+        float hkTextX = hkBtnX + (hkBtnW - hkTextW) / 2f;
+        float hkTextY = hkBtnY + (hkBtnH - hkFontSize) / 2f - 1f * uiScale;
+        text.draw(hkLabel, hkTextX, hkTextY, hkFontSize, withAlpha(SOUTH_TEXT_WHITE, alpha), sw, sh);
+        // 热区
+        assignHotkeyRect = new float[]{hkBtnX, hkBtnY, hkBtnW, hkBtnH};
+        curY += hkBtnH + rowGap;
 
         // --- 调色板（仅 Preferences 分类下的 Theme 模块） ---
         if (m.name.equals("Theme") || m.name.equals("Theme Color")) {
@@ -2448,11 +2473,8 @@ private void drawFloatingBall() {
     private float[] hotkeyEditorDialogRect;
 
     private void handleHotkeyEditorTouch(MotionEvent event, float ex, float ey, int action) {
-        if (action != MotionEvent.ACTION_DOWN && action != MotionEvent.ACTION_UP) {
-            if (action == MotionEvent.ACTION_MOVE) return; // 编辑器不处理拖动
-            return;
-        }
-        if (action == MotionEvent.ACTION_DOWN) return; // 只处理 UP（点击）
+        // 只处理 ACTION_UP（点击），其他动作直接忽略
+        if (action != MotionEvent.ACTION_UP) return;
 
         float[] dr = hotkeyEditorDialogRect;
         if (dr == null) return;
@@ -2651,6 +2673,20 @@ private void drawFloatingBall() {
                             dynamicIsland.addProgress("Scaffold Toggled", "Placing blocks...", 0.3f);
                         } else {
                             dynamicIsland.removeProgress("Scaffold Toggled");
+                        }
+                    }
+                    return;
+                }
+                // 检查 Assign Hotkey 按钮
+                if (assignHotkeyRect != null && inside(ex, ey, assignHotkeyRect)) {
+                    if (activeConfigModule != null) {
+                        com.visiolab.clickgui.hotkey.HotkeyItem hk = new com.visiolab.clickgui.hotkey.HotkeyItem(
+                                activeConfigModule.name, activeConfigModule.name);
+                        hk.x = screenW * 0.5f - 22f * uiScale;
+                        hk.y = screenH * 0.7f;
+                        com.visiolab.clickgui.hotkey.HotkeyManager.getInstance().addHotkey(hk);
+                        if (dynamicIsland != null) {
+                            dynamicIsland.addSuccess("Hotkey Added", activeConfigModule.name + " hotkey created");
                         }
                     }
                     return;

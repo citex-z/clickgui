@@ -38,6 +38,20 @@ public class FloatingHotkeyRenderer {
     // Hotkeys 模块引用
     private ModuleItem hotkeysModule;
 
+    // 模块切换回调
+    public interface OnHotkeyToggledListener {
+        void onHotkeyToggled(ModuleItem module);
+    }
+    private OnHotkeyToggledListener toggleListener;
+
+    public void setOnHotkeyToggledListener(OnHotkeyToggledListener listener) {
+        this.toggleListener = listener;
+    }
+
+    private void onHotkeyToggled(ModuleItem m) {
+        if (toggleListener != null) toggleListener.onHotkeyToggled(m);
+    }
+
     public FloatingHotkeyRenderer(QuadBatch quad, TextRenderer text) {
         this.quad = quad;
         this.text = text;
@@ -208,6 +222,8 @@ public class FloatingHotkeyRenderer {
                         ModuleItem m = findModule(draggingItem.boundModuleName);
                         if (m != null) {
                             m.enabled = !m.enabled;
+                            // 通知外部（UIRenderer 会监听）
+                            onHotkeyToggled(m);
                         }
                     }
                     draggingItem.pressed = false;
