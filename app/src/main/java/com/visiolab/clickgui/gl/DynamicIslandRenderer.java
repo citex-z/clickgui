@@ -481,35 +481,36 @@ public class DynamicIslandRenderer {
                         break;
                     }
                     case PROGRESS: {
-                        // INFO 蓝色圆形图标背景
-                        // Color(48, 117, 147, 200)
+                        // 图标：蓝色圆形背景 + 白色 3D 立方体线框
                         float pb_r = 48f / 255f, pb_g = 117f / 255f, pb_b = 147f / 255f;
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
                                 new float[]{pb_r, pb_g, pb_b, (200f / 255f) * contentAlpha});
-                        // 3D 立方体图标（等距视角白色线框）
+
+                        // 3D 立方体图标（等距视角白色填充）
                         float cx = iconX + iconSize / 2f;
                         float cy = iconY + iconSize / 2f;
-                        float hs = iconSize * 0.28f; // 半尺寸
-                        // 立方体三个可见面（等距投影）
-                        // 顶面（菱形）
-                        quad.addRect(cx - hs * 0.5f, cy - hs, hs, hs * 0.5f, 0f,
-                                new float[]{1f, 1f, 1f, contentAlpha * 0.9f});
-                        // 左面
-                        quad.addRect(cx - hs * 0.5f, cy - hs * 0.5f, hs * 0.5f, hs, 0f,
-                                new float[]{1f, 1f, 1f, contentAlpha * 0.7f});
-                        // 右面
-                        quad.addRect(cx, cy - hs * 0.5f, hs * 0.5f, hs, 0f,
-                                new float[]{1f, 1f, 1f, contentAlpha * 0.8f});
+                        float cs = iconSize * 0.35f; // 立方体半尺寸
+                        float cs2 = cs * 0.5f;       // 等距投影偏移
+                        // 顶面（亮白）
+                        quad.addRect(cx - cs2, cy - cs, cs, cs2, 0f,
+                                new float[]{1f, 1f, 1f, contentAlpha * 0.95f});
+                        // 左面（中灰）
+                        quad.addRect(cx - cs2, cy - cs + cs2, cs2, cs, 0f,
+                                new float[]{0.8f, 0.8f, 0.8f, contentAlpha * 0.85f});
+                        // 右面（浅灰）
+                        quad.addRect(cx, cy - cs + cs2, cs2, cs, 0f,
+                                new float[]{0.9f, 0.9f, 0.9f, contentAlpha * 0.9f});
 
-                        // 进度条：蓝色填充
-                        float barX = baseX + 38f * s;
-                        float barY = baseY + 26f * s;
-                        float barW = ic.width - 38f * s - 8f * s;
+                        // 进度条：贴在内容区底部，蓝色填充
+                        float barPad = 4f * s;
+                        float barX = baseX + barPad;
+                        float barY = baseY + ic.height - barPad - 4f * s; // 贴底
+                        float barW = ic.width - barPad * 2f;
                         float barH = 4f * s;
                         float barR = 2f * s;
-                        // 背景
+                        // 背景轨道
                         quad.addRect(barX, barY, barW, barH, barR,
-                                new float[]{0.2f, 0.2f, 0.2f, contentAlpha});
+                                new float[]{0.15f, 0.15f, 0.15f, contentAlpha * 0.8f});
                         // 填充
                         float fillW = barW * tc.progress;
                         if (fillW > 0) {

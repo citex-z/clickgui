@@ -71,8 +71,14 @@ public class TextRenderer {
             GlyphAtlas.Glyph g = atlas.ensureGlyph(c, sizePx);
 
             float gx = penX;
-            float gy = y + g.bearingY - g.height + (g.height - g.bearingY); // 顶部对齐基线换算
-            gy = y; // 简化：以传入y为字形bitmap左上角，视觉上足够整齐
+            // 文字垂直居中修正：glyph bitmap 包含 ascent 上方的空白
+            // bearingY = -fm.top（即从 bitmap 顶部到基线的距离）
+            // 要让文字视觉居中于 y 坐标，需要向上偏移 bearingY - height/2
+            float gy = y + (g.height - g.bearingY) - g.height; // = y - bearingY + height - height = y - bearingY
+            // 简化：gy = y 表示 bitmap 左上角在 y 处
+            // 但 bitmap 有顶部空白，所以实际字符顶部在 y + (height - bearingY)
+            // 要让字符顶部在 y 处：gy = y - (height - bearingY)
+            gy = y - (g.height - g.bearingY);
 
             float[] verts = {
                     gx, gy, g.u0, g.v0,

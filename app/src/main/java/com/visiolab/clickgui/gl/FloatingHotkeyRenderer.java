@@ -23,7 +23,7 @@ public class FloatingHotkeyRenderer {
     // 尺寸常量
     private static final float BTN_HEIGHT = 28f;      // 按钮高度
     private static final float BTN_PADDING = 14f;      // 文字左右内边距
-    private static final float BTN_RADIUS = 14f;       // 圆角（药丸形）
+    private static final float BTN_RADIUS = 8f;        // 圆角（圆角矩形，非药丸）
     private static final float DRAG_THRESHOLD = 8f;    // 移动超过这个距离才算拖动
 
     // 拖动状态
@@ -112,13 +112,13 @@ public class FloatingHotkeyRenderer {
                         new float[]{0f, 0f, 0f, shadowAlpha});
             }
 
-            // 背景：深灰药丸形（开启时主题色高亮）
+            // 背景：灰黑圆角矩形（开启时主题色高亮）
             if (moduleEnabled) {
                 quad.addRect(x, y, drawW, drawH, btnR,
                         new float[]{0.15f, 0.42f, 0.58f, 0.92f * alpha}); // 主题蓝
             } else {
                 quad.addRect(x, y, drawW, drawH, btnR,
-                        new float[]{0.16f, 0.16f, 0.16f, 0.88f * alpha}); // 深灰
+                        new float[]{0.25f, 0.25f, 0.25f, 0.88f * alpha}); // 灰黑
             }
 
             // 文字居中
