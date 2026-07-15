@@ -206,15 +206,16 @@ public class DynamicIslandRenderer {
         float islandH = currentHeight;
         float cornerR = CORNER_RADIUS * s;
 
-        // 1. 背景模糊
+        // 1. 边缘模糊 (bloom)：捕获岛屿形状 → 模糊 → 叠加混合绘制出柔和光晕
         blur.captureAndBlurTransparent(() -> {
-            quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{1f, 1f, 1f, 1f});
+            quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 0.8f});
             quad.flush(sw, sh);
         });
-        blur.drawGlow(new float[]{0f, 0f, 0f, 0.3f * a}, sw, sh);
+        // drawGlowColor 使用叠加混合(GL_ONE,GL_ONE)，将模糊后的黑色形状作为柔和光晕叠加到边缘
+        blur.drawGlowColor(0.5f, sw, sh);
 
         // 2. 黑色半透明背景
-        quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 0.55f * a});
+        quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 0.75f * a});
         quad.flush(sw, sh);
 
         // 3. 裁剪区域
