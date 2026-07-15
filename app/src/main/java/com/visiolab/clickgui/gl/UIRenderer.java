@@ -1026,6 +1026,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         // 清空配置页热区
         configToggleRect = null;
         configSliderX = 0; configSliderW = 0; configSliderY = 0; configSliderH = 0;
+        // 清空调色板坐标（仅 Theme Color 模块会重新设置）
+        hueBarX = 0; hueBarW = 0; hueBarY = 0; hueBarH = 0;
+        svBoxX = 0; svBoxY = 0; svBoxW = 0; svBoxH = 0;
+        paletteHitRects.clear();
 
         float curY = startY;
 
@@ -1315,6 +1319,10 @@ private void drawFloatingBall() {
     }
     private void drawModuleCards(float x, float y, float w, float h, float alpha) {
         moduleHitRects.clear();
+        // 清空调色板坐标，避免卡片网格模式下命中残留的调色板热区
+        hueBarX = 0; hueBarW = 0; hueBarY = 0; hueBarH = 0;
+        svBoxX = 0; svBoxY = 0; svBoxW = 0; svBoxH = 0;
+        paletteHitRects.clear();
         float sbW = sidebarW * (w / panelW);
         float pad = 16f * uiScale * (h / panelH);
         float contentX = x + sbW + pad;
@@ -1681,16 +1689,44 @@ private void drawFloatingBall() {
                     activeConfigModule.sliderValue = Math.max(0f, Math.min(1f, t));
                     return;
                 }
-                // 检查配置页内滚动（非配置页时使用卡片滚动逻辑）
-                // 侧栏按钮（配置页模式下也可以切换分类，返回卡片视图）
+                // 调色板交互（仅 Theme Color 模块配置页内）
+                if (hueBarW > 0 && ex >= hueBarX - 6 && ex <= hueBarX + hueBarW + 6
+                        && ey >= hueBarY && ey <= hueBarY + hueBarH) {
+                    draggingHue = true;
+                    updateHueFromY(ey);
+                    return;
+                }
+                if (svBoxW > 0 && ex >= svBoxX && ex <= svBoxX + svBoxW
+                        && ey >= svBoxY && ey <= svBoxY + svBoxH) {
+                    draggingSV = true;
+                    updateSVFromXY(ex, ey);
+                    return;
+                }
+                for (int pi = 0; pi < paletteHitRects.size(); pi++) {
+                    if (inside(ex, ey, paletteHitRects.get(pi))) {
+                        selectedSwatchIndex = pi;
+                        applyCurrentColor();
+                        return;
+                    }
+                }
             }
             if (action == MotionEvent.ACTION_MOVE && draggingConfigSlider) {
                 float t = (ex - configSliderX) / configSliderW;
                 activeConfigModule.sliderValue = Math.max(0f, Math.min(1f, t));
                 return;
             }
+            if (action == MotionEvent.ACTION_MOVE && draggingHue) {
+                updateHueFromY(ey);
+                return;
+            }
+            if (action == MotionEvent.ACTION_MOVE && draggingSV) {
+                updateSVFromXY(ex, ey);
+                return;
+            }
             if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                 draggingConfigSlider = false;
+                draggingHue = false;
+                draggingSV = false;
             }
 
             // 在配置页模式下，侧栏分类点击仍然生效（切换分类后返回卡片视图）
