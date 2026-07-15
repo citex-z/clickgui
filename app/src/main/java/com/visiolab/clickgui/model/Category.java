@@ -21,6 +21,145 @@ public class Category {
         return this;
     }
 
+    /** 模块名称中英文映射 */
+    public static String localizedName(String name, boolean zh) {
+        if (!zh) return name;
+        switch (name) {
+            // Client
+            case "ArrayList": return "模块列表";
+            case "ClickGUI": return "点击界面";
+            case "Watermark": return "水印";
+            case "Notifications": return "通知";
+            case "Keystrokes": return "按键显示";
+            case "Radar": return "雷达";
+            case "HUD Editor": return "HUD编辑器";
+            case "Cape": return "披风";
+            // Combat
+            case "KillAura": return "杀戮光环";
+            case "Criticals": return "暴击";
+            case "Velocity": return "击退减免";
+            case "AutoClicker": return "自动点击";
+            case "Reach": return "攻击距离";
+            case "AimAssist": return "瞄准辅助";
+            case "AutoArmor": return "自动穿甲";
+            case "TriggerBot": return "触发攻击";
+            // Movement
+            case "Sprint": return "自动疾跑";
+            case "Speed": return "加速";
+            case "Fly": return "飞行";
+            case "NoSlow": return "无减速";
+            case "Step": return "自动跨步";
+            case "NoFall": return "无掉落伤害";
+            case "Jesus": return "水上行走";
+            case "Spider": return "爬墙";
+            case "HighJump": return "高跳";
+            case "Sneak": return "自动潜行";
+            // Player
+            case "FullBright": return "全亮";
+            case "Freecam": return "自由视角";
+            case "AutoRespawn": return "自动重生";
+            case "AntiAFK": return "防挂机";
+            case "FastEat": return "快速进食";
+            case "SkinBlinker": return "皮肤闪烁";
+            case "AutoFish": return "自动钓鱼";
+            // Render
+            case "ESP": return "实体透视";
+            case "Tracers": return "追踪线";
+            case "Nametags": return "名称标签";
+            case "Chams": return "实体高亮";
+            case "XRay": return "透视";
+            case "NoHurtCam": return "无受伤抖动";
+            case "MotionBlur": return "动态模糊";
+            case "FreeCam": return "自由相机";
+            case "Zoom": return "缩放";
+            case "PotionEffects": return "药水效果";
+            case "TargetHUD": return "目标显示";
+            case "ArmorHUD": return "护甲显示";
+            case "CPS": return "点击速度";
+            case "FPS": return "帧率显示";
+            case "Coordinates": return "坐标显示";
+            case "ReachDisplay": return "距离显示";
+            // World
+            case "Nuker": return "方块破坏";
+            case "FastPlace": return "快速放置";
+            case "AutoMine": return "自动挖矿";
+            case "Scaffold": return "自动搭桥";
+            case "Timer": return "时间加速";
+            case "AutoFarm": return "自动农场";
+            case "MobAura": return "生物光环";
+            // Misc
+            case "IRC": return "聊天";
+            case "AutoGG": return "自动GG";
+            case "AutoTip": return "自动打赏";
+            case "NameProtect": return "名称保护";
+            case "FakeLag": return "假延迟";
+            case "PingSpoof": return "延迟伪装";
+            // Preferences
+            case "Dark Theme": return "深色主题";
+            case "Blur Background": return "模糊背景";
+            case "Gradient Speed": return "渐变速度";
+            case "Theme Color": return "主题颜色";
+            case "Background Opacity": return "背景透明度";
+            case "Text Scale": return "文字缩放";
+            // 配置选项标签也翻译
+            case "Mode": return "模式";
+            case "Priority": return "优先级";
+            case "CPS Mode": return "CPS模式";
+            case "Min CPS": return "最小CPS";
+            case "Max CPS": return "最大CPS";
+            case "Wall Range": return "穿墙距离";
+            case "Auto Block": return "自动格挡";
+            case "Silent Rotation": return "静默旋转";
+            case "Auto Disable": return "自动禁用";
+            case "Follow Target": return "跟随目标";
+            case "Only When Jump": return "仅跳跃时";
+            case "Adaptive": return "自适应";
+            case "Soul Sand": return "灵魂沙";
+            case "Web": return "蛛网";
+            case "Show Health": return "显示血量";
+            case "Show Ping": return "显示延迟";
+            case "Through Walls": return "穿墙";
+            case "Smooth": return "平滑";
+            case "Background": return "背景";
+            case "Color": return "颜色";
+            case "Hide Render Modules": return "隐藏渲染模块";
+            case "Custom Speed": return "自定义速度";
+            case "GUI Scale": return "界面缩放";
+            case "Show Version": return "显示版本";
+            case "Show FPS": return "显示帧率";
+            case "Duration": return "持续时间";
+            case "Show in Chat": return "聊天中显示";
+            case "Show Mouse": return "显示鼠标";
+            case "Size": return "大小";
+            case "Shape": return "形状";
+            case "Range": return "范围";
+            case "Delay": return "延迟";
+            case "Interval": return "间隔";
+            case "Drop Wrong": return "丢弃旧装备";
+            case "Break Blocks": return "破坏方块";
+            case "Show Direction": return "显示方向";
+            case "Show Durability": return "显示耐久";
+            case "FOV": return "视野范围";
+            default: return name;
+        }
+    }
+
+    /** 分类名称中英文映射 */
+    public static String localizedCategory(String name, boolean zh) {
+        if (!zh) return name;
+        switch (name) {
+            case "Client": return "客户端";
+            case "Combat": return "战斗";
+            case "Movement": return "移动";
+            case "Player": return "玩家";
+            case "Render": return "渲染";
+            case "World": return "世界";
+            case "Misc": return "其他";
+            case "Preferences": return "偏好设置";
+            default: return name;
+        }
+    }
+
     public static List<Category> buildDefault() {
         List<Category> list = new ArrayList<>();
 

@@ -249,8 +249,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
     /** 模块开关提示：显示 "某某某模块已启用/已禁用"，不再出现 "ON"/"OFF" */
     private void spawnModuleToast(String moduleName, boolean enabled) {
-        String text = moduleName + " " + t("已启用", "enabled");
-        if (!enabled) text = moduleName + " " + t("已禁用", "disabled");
+        String dispName = Category.localizedName(moduleName, langZh);
+        String text = dispName + " " + t("已启用", "enabled");
+        if (!enabled) text = dispName + " " + t("已禁用", "disabled");
         pendingToastEnabled = enabled;
         spawnToast(text);
     }
@@ -672,7 +673,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         final float measureFontSize = fontSize;
         List<String> lineList = new ArrayList<>();
         for (ModuleItem m : visible) {
-            lineList.add(m.hasSlider ? (m.name + " " + String.format("%.0f%s", m.getRealValue(), m.sliderUnit)) : m.name);
+            String dispName = Category.localizedName(m.name, langZh);
+            lineList.add(m.hasSlider ? (dispName + " " + String.format("%.0f%s", m.getRealValue(), m.sliderUnit)) : dispName);
         }
 
         // 排序：默认按“肉眼可见的像素宽度”从长到短排序，不能用字符数/字节数排序——
@@ -1258,7 +1260,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             ModuleItem.ConfigOption opt = m.options.get(oi);
             if (opt.type == ModuleItem.ConfigOption.TYPE_DROPDOWN) {
                 // label 左侧
-                text.draw(opt.label, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
+                String optLabel = Category.localizedName(opt.label, langZh);
+                text.draw(optLabel, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
                         14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
                 // 当前选中项 + 下拉箭头 ▼ 右侧
                 String curChoice = (opt.dropdownChoices != null && opt.dropdownIndex >= 0
@@ -1271,12 +1274,14 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 curY += rowH + rowGap;
             } else if (opt.type == ModuleItem.ConfigOption.TYPE_SWITCH) {
                 // 开关：值由图形层显示，这里只画 label
-                text.draw(opt.label, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
+                String optLabel = Category.localizedName(opt.label, langZh);
+                text.draw(optLabel, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
                         14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
                 curY += rowH + rowGap;
             } else if (opt.type == ModuleItem.ConfigOption.TYPE_SLIDER) {
                 // label 左侧 + 当前数值右侧
-                text.draw(opt.label, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
+                String optLabel = Category.localizedName(opt.label, langZh);
+                text.draw(optLabel, contentX + 14f * uiScale, curY + rowH / 2f - 14f * uiScale * 0.4f,
                         14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
                 String unit = opt.sliderUnit != null ? opt.sliderUnit : "";
                 String valStr = String.format("%.1f%s", opt.getRealSliderValue(), unit);
@@ -1669,13 +1674,13 @@ private void drawFloatingBall() {
         Category curCat = categories.get(currentCategoryIndex);
         if (activeConfigModule != null) {
             // 配置页：显示面包屑导航 "← 分类名 > 模块名"，左侧返回箭头对应 configBackRect 热区
-            String breadcrumb = "\u2190 " + curCat.name + " > " + activeConfigModule.name;
+            String breadcrumb = "\u2190 " + Category.localizedCategory(curCat.name, langZh) + " > " + Category.localizedName(activeConfigModule.name, langZh);
             text.draw(breadcrumb, x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.4f,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         } else {
             text.draw(t("Rlin", "Rlin") + " b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.4f,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
-            text.draw("\u2190 \u2192 " + curCat.name, x + sbW + 80f * uiScale, y + hdrH / 2f - 11f * uiScale * 0.4f,
+            text.draw("\u2190 \u2192 " + Category.localizedCategory(curCat.name, langZh), x + sbW + 80f * uiScale, y + hdrH / 2f - 11f * uiScale * 0.4f,
                     11f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         }
         if (searchBoxRect != null) {
@@ -1724,7 +1729,7 @@ private void drawFloatingBall() {
             boolean sel = i == currentCategoryIndex;
             float[] col = withAlpha(sel ? SOUTH_TEXT_WHITE : SOUTH_TEXT_DIM2, alpha);
             text.draw(c.icon, x + btnPadX + 8f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.4f, 13f * uiScale, col, screenW, screenH);
-            text.draw(c.name, x + btnPadX + 30f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.4f, 13f * uiScale, col, screenW, screenH);
+            text.draw(Category.localizedCategory(c.name, langZh), x + btnPadX + 30f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.4f, 13f * uiScale, col, screenW, screenH);
             curY += rowH + 4f * uiScale * (h / panelH);
         }
 
@@ -1799,8 +1804,9 @@ private void drawFloatingBall() {
 
             // 上方开关区: 模块名居中
             float nameSize = 16f * uiScale;
-            float nameW = text.measure(m.name, nameSize);
-            text.draw(m.name, cardX + cardW / 2f - nameW / 2f, drawY + iconAreaH / 2f - nameSize * 0.4f,
+            String dispName = Category.localizedName(m.name, langZh);
+            float nameW = text.measure(dispName, nameSize);
+            text.draw(dispName, cardX + cardW / 2f - nameW / 2f, drawY + iconAreaH / 2f - nameSize * 0.4f,
                     nameSize, withAlpha(SOUTH_TEXT_WHITE, rowAlpha), screenW, screenH);
 
             // 下方配置栏: "Configure" 文字
