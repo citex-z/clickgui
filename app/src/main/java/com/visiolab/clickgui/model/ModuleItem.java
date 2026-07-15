@@ -86,6 +86,7 @@ public class ModuleItem {
         public float sliderMin, sliderMax;
         public String sliderUnit;
         public boolean boolValue;               // 开关用
+        public final com.visiolab.clickgui.anim.Anim switchAnim = new com.visiolab.clickgui.anim.Anim(0f, 12f); // 开关动画
 
         public ConfigOption(String label, int type, String[] choices, float defaultValue) {
             this.label = label;
@@ -95,6 +96,7 @@ public class ModuleItem {
                 this.dropdownIndex = (int) defaultValue;
             } else if (type == TYPE_SWITCH) {
                 this.boolValue = defaultValue > 0.5f;
+                this.switchAnim.snapTo(this.boolValue ? 1f : 0f);
             } else {
                 this.sliderValue = defaultValue;
             }

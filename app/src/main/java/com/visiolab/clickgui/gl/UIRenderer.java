@@ -21,13 +21,13 @@ import javax.microedition.khronos.opengles.GL10;
  */
 public class UIRenderer implements GLSurfaceView.Renderer {
 
-    // ---- 主题色：MD3 深色风格（非纯黑）----
-    private static final float[] DARK_PANEL_BG = {0.11f, 0.105f, 0.12f, 0.96f};     // #1C1B1F MD3 Surface
-    private static final float[] DARK_SIDEBAR_BG = {0.085f, 0.08f, 0.095f, 0.98f};  // #161519 MD3 Surface Variant
-    private static final float[] DARK_CARD_BG = {0.14f, 0.135f, 0.155f, 0.95f};    // #242329 MD3 Surface Container
-    private static final float[] DARK_TEXT_MAIN = {0.95f, 0.95f, 0.95f, 1f};       // #F2F2F2 MD3 On Surface
-    private static final float[] DARK_TEXT_DIM = {0.68f, 0.68f, 0.70f, 1f};        // #AEAEAE MD3 On Surface Variant
-    private static final float[] DARK_TRACK_OFF = {0.22f, 0.22f, 0.25f, 1f};      // #383840 MD3 Surface Container High
+    // ---- 主题色：深色 / 浅色两套，"Dark Theme" 开关实际生效切换 ----
+    private static final float[] DARK_PANEL_BG = {0.96f, 0.96f, 0.96f, 0.92f}; // 白色面板
+    private static final float[] DARK_SIDEBAR_BG = {0.07f, 0.07f, 0.09f, 0.95f};
+    private static final float[] DARK_CARD_BG = {0.16f, 0.16f, 0.19f, 0.9f};
+    private static final float[] DARK_TEXT_MAIN = {1f, 1f, 1f, 1f};
+    private static final float[] DARK_TEXT_DIM = {0.7f, 0.7f, 0.75f, 1f};
+    private static final float[] DARK_TRACK_OFF = {0.3f, 0.3f, 0.34f, 1f};
 
     private static final float[] LIGHT_PANEL_BG = {0.96f, 0.96f, 0.96f, 0.92f}; // 白色面板
     private static final float[] LIGHT_SIDEBAR_BG = {0.99f, 0.99f, 1.0f, 0.95f};
@@ -42,26 +42,26 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float[] TEXT_MAIN = DARK_TEXT_MAIN;
     private float[] TEXT_DIM = DARK_TEXT_DIM;
     private float[] TRACK_OFF = DARK_TRACK_OFF;
-    private static final float[] WORLD_BG = {0.12f, 0.12f, 0.14f, 1f};
+    private static final float[] WORLD_BG = {0.11f, 0.105f, 0.12f, 1f}; // #1C1B1F MD3 Surface（非纯黑）
     private static final float[] KNOB_COLOR = {1f, 1f, 1f, 1f}; // 白色拖钮/滑块圆点
-    // ---- 南方客户端风格色（适配MD3深色背景）----
-    private static final float[] HDR_BG = {0.13f, 0.125f, 0.14f, 1f};               // MD3 Surface Container
-    private static final float[] SOUTH_SIDEBAR_BG = {0.085f, 0.08f, 0.095f, 0.98f};  // MD3 Surface Variant
-    private static final float[] SOUTH_PANEL_BG = {0.11f, 0.105f, 0.12f, 1f};       // MD3 Surface
-    private static final float[] SOUTH_CARD_BORDER = {0.22f, 0.22f, 0.25f, 1f};      // MD3 Outline
+    // ---- 南方客户端真实颜色 (from source: Colors.java + SouthsideDarkStyle.java) ----
+    private static final float[] HDR_BG = {0.96f, 0.96f, 0.96f, 1f};               // #F5F5F5 标题栏（舒适白）
+    private static final float[] SOUTH_SIDEBAR_BG = {0.92f, 0.92f, 0.92f, 0.95f};  // #EBEBEB 侧栏
+    private static final float[] SOUTH_PANEL_BG = {0.96f, 0.96f, 0.96f, 1f};       // #F5F5F5 面板背景（舒适白）
+    private static final float[] SOUTH_CARD_BORDER = {0.80f, 0.80f, 0.80f, 1f};    // #CCCCCC 卡片边框
     private static final float[] SOUTH_CARD_BORDER_SEL = {0.50f, 0.50f, 0.50f, 1f}; // #808080 灰色选中
-    private static final float[] SOUTH_SEARCH_BG = {0.16f, 0.155f, 0.17f, 1f};       // MD3 Surface Container High
-    private static final float[] SOUTH_TRACK_OFF = {0.22f, 0.22f, 0.25f, 1f};       // MD3 Surface Container High
-    private static final float[] SOUTH_TAB_OFF = {0.50f, 0.50f, 0.50f, 1f};          // #808080
-    private static final float[] SOUTH_SECTION_LBL = {0.55f, 0.55f, 0.57f, 1f};     // #8C8C8C
-    private static final float[] SOUTH_SLIDER_TRACK = {0.22f, 0.22f, 0.25f, 1f};     // MD3 Surface Container High
-    private static final float[] SOUTH_MODULE_BG = {0.14f, 0.135f, 0.155f, 1f};      // MD3 Surface Container
-    private static final float[] SOUTH_CARD_BG = {0.13f, 0.125f, 0.14f, 1f};        // MD3 Surface Container
+    private static final float[] SOUTH_SEARCH_BG = {0.88f, 0.88f, 0.88f, 1f};      // #E0E0E0 搜索框
+    private static final float[] SOUTH_TRACK_OFF = {0.85f, 0.85f, 0.85f, 1f};      // #D9D9D9
+    private static final float[] SOUTH_TAB_OFF = {0.60f, 0.60f, 0.60f, 1f};         // #999999
+    private static final float[] SOUTH_SECTION_LBL = {0.45f, 0.45f, 0.45f, 1f};     // #737373
+    private static final float[] SOUTH_SLIDER_TRACK = {0.85f, 0.85f, 0.85f, 1f};    // #D9D9D9
+    private static final float[] SOUTH_MODULE_BG = {0.90f, 0.90f, 0.90f, 1f};       // #E6E6E6 配置行背景
+    private static final float[] SOUTH_CARD_BG = {0.92f, 0.92f, 0.92f, 1f};         // #EBEBEB 卡片背景
     private static final float[] SOUTH_TOGGLE_ON = {0.50f, 0.50f, 0.50f, 1f};        // #808080 灰色开启
-    private static final float[] SOUTH_TOGGLE_OFF = {0.30f, 0.30f, 0.33f, 1f};      // MD3 Surface Container Highest
-    private static final float[] SOUTH_TEXT_WHITE = {0.95f, 0.95f, 0.95f, 0.95f};    // MD3 On Surface
-    private static final float[] SOUTH_TEXT_DIM2 = {0.95f, 0.95f, 0.95f, 0.65f};     // MD3 On Surface 65%
-    private static final float[] SOUTH_TEXT_DIM3 = {0.95f, 0.95f, 0.95f, 0.40f};     // MD3 On Surface 40%
+    private static final float[] SOUTH_TOGGLE_OFF = {0.80f, 0.80f, 0.80f, 1f};       // #CCCCCC
+    private static final float[] SOUTH_TEXT_WHITE = {0.08f, 0.08f, 0.08f, 0.87f};    // #141414 87% 黑色文字
+    private static final float[] SOUTH_TEXT_DIM2 = {0.08f, 0.08f, 0.08f, 0.60f};    // #141414 60% 次要文字
+    private static final float[] SOUTH_TEXT_DIM3 = {0.08f, 0.08f, 0.08f, 0.38f};    // #141414 38% 更暗
     // 通知左侧彩色竖线：启用=绿色 #039855，禁用=红色 #D92020（南方客户端风格）
     private static final float[] TOAST_GREEN = {0.012f, 0.596f, 0.333f, 1f};        // #039855 启用
     private static final float[] TOAST_RED   = {0.851f, 0.125f, 0.125f, 1f};        // #D92020 禁用
@@ -290,6 +290,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private final TextRenderer text = new TextRenderer();
     private final BlurPipeline blur = new BlurPipeline();
     private float sceneTime = 0f;
+    private float frameDt = 0.016f; // 当前帧的 deltaTime，供 drawConfigPage 等子方法使用
 
     // ---- 登录界面 ----
     private final LoginRenderer loginRenderer;
@@ -624,18 +625,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     /**
     /** 模拟一个有层次感的"游戏世界"背景（天空渐变 + 漂浮色块），用来验证毛玻璃模糊效果 */
     private void drawWorldScene() {
-        float t = sceneTime;
-        quad.addRectGradient(0, 0, screenW, screenH, 0,
-                new float[]{0.10f, 0.14f, 0.22f, 1f}, new float[]{0.10f, 0.14f, 0.22f, 1f},
-                new float[]{0.02f, 0.03f, 0.05f, 1f}, new float[]{0.02f, 0.03f, 0.05f, 1f});
-        for (int i = 0; i < 8; i++) {
-            float bx = (screenW * (i / 8f) + t * 40f * (i % 2 == 0 ? 1 : -1)) % (screenW + 200) - 100;
-            float by = screenH * 0.2f + (float) Math.sin(t * 0.6 + i) * 60f + i * 40f;
-            float size = 50f + (i % 3) * 20f;
-            float[] col = (i % 2 == 0) ? ACCENT_1 : ACCENT_2;
-            quad.addRect(bx, by, size, size, 10f, new float[]{col[0], col[1], col[2], 0.5f});
-        }
-        quad.flush(screenW, screenH);
+        // MD3 深色背景：纯色填充（非纯黑 #1C1B1F），替代程序化生成的渐变+浮动方块
+        GLES20.glClearColor(WORLD_BG[0], WORLD_BG[1], WORLD_BG[2], 1f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
     }
 
     /** 每帧更新所有模块的HUD滑入/淡出动画——故意不依赖ClickGUI面板是否打开，
@@ -1253,6 +1245,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     public void onDrawFrame(GL10 gl) {
         long now = System.nanoTime();
         float dt = Math.min(0.05f, (now - lastFrameNs) / 1_000_000_000f);
+        frameDt = dt; // 保存当前帧 dt 供子方法使用
         lastFrameNs = now;
 
         // ---- 登录界面阶段 ----
@@ -1462,7 +1455,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float toggleY = curY + rowH / 2f - toggleH / 2f;
         configToggleRect = new float[]{toggleX, toggleY, toggleW, toggleH};
         m.toggleAnim.setTarget(m.enabled ? 1f : 0f);
-        m.toggleAnim.update(0.016f);
+        m.toggleAnim.update(frameDt);
         float tst = Anim.backEaseOut(m.toggleAnim.get());
         float[] tc = mixColor(SOUTH_TOGGLE_OFF, SOUTH_TOGGLE_ON, tst);
         quad.addRect(toggleX, toggleY, toggleW, toggleH, toggleH / 2f, withAlpha(tc, alpha));
@@ -1491,7 +1484,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 float stToggleY = curY + rowH / 2f - stToggleH / 2f;
                 // 热区只注册开关本身位置（不是整行），避免滑动误触
                 configOptionRects.add(new Object[]{new float[]{stToggleX, stToggleY, stToggleW, stToggleH}, oi, ModuleItem.ConfigOption.TYPE_SWITCH});
-                float stT = Anim.backEaseOut(opt.boolValue ? 1f : 0f);
+                // 使用 switchAnim 实现平滑动画（而非直接转换 boolValue）
+                opt.switchAnim.setTarget(opt.boolValue ? 1f : 0f);
+                opt.switchAnim.update(frameDt);
+                float stT = Anim.backEaseOut(opt.switchAnim.get());
                 float[] stTc = mixColor(SOUTH_TOGGLE_OFF, SOUTH_TOGGLE_ON, stT);
                 quad.addRect(stToggleX, stToggleY, stToggleW, stToggleH, stToggleH / 2f, withAlpha(stTc, alpha));
                 float stKnobD = stToggleH - 6f * uiScale;
@@ -1913,7 +1909,7 @@ private void drawFloatingBall() {
                     && curTouchX >= cardX && curTouchX <= cardX + cardW
                     && curTouchY >= baseDrawY && curTouchY <= baseDrawY + cardH;
             m.hoverAnim.setTarget(isHover ? 1f : 0f);
-            m.hoverAnim.update(0.016f);
+            m.hoverAnim.update(frameDt);
             float drawY = baseDrawY - m.hoverAnim.get() * 2f * uiScale;
 
             // 注册热区: 上方区域(图标区)=切换开关，下方区域(配置栏)=打开配置页
@@ -1923,7 +1919,7 @@ private void drawFloatingBall() {
             float cornerR = 12f * uiScale;
             // 上半部分: 开关区 (圆角顶部) — 颜色随开关状态变化（带弹跳回弹动画）
             m.toggleAnim.setTarget(m.enabled ? 1f : 0f);
-            m.toggleAnim.update(0.016f);
+            m.toggleAnim.update(frameDt);
             float cardTst = Anim.backEaseOut(m.toggleAnim.get());
             float[] toggleCol = mixColor(withAlpha(SOUTH_TOGGLE_OFF, rowAlpha), withAlpha(SOUTH_TOGGLE_ON, rowAlpha), cardTst);
             quad.addRect(cardX, drawY, cardW, iconAreaH, cornerR, toggleCol);
