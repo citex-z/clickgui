@@ -323,8 +323,9 @@ public class DynamicIslandRenderer {
                         quad.addRect(trackX, trackY, trackW, trackH, trackR,
                                 new float[]{0.25f, 0.25f, 0.25f, a}); // DARK_GRAY
 
-                        // 内圈颜色：从 gray(128,128,128) → green(48,117,147)
+                        // 内圈颜色：从 gray(128,128,128) → blue(48,117,147)
                         // 原版: Color((int)(128-80*a), (int)(128-11*a), (int)(128+19*a), 255)
+                        // animF=0: rgb(128,128,128) 灰色  animF=1: rgb(48,117,147) 蓝色
                         float r = (128f - 80f * animF) / 255f;
                         float g = (128f - 11f * animF) / 255f;
                         float b = (128f + 19f * animF) / 255f;
@@ -346,46 +347,77 @@ public class DynamicIslandRenderer {
                         break;
                     }
                     case SUCCESS: {
-                        // 原版 SUCCESS：绿色圆形 + stencil 填充动画
+                        // 绿色圆形 + 白色对号动画
                         // Color(95, 143, 80, 200)
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
                                 new float[]{95f / 255f, 143f / 255f, 80f / 255f, (200f / 255f) * a});
-                        // 填充动画：从左到右填充白色矩形（简化版 stencil）
-                        float fillW = iconSize * animF;
-                        if (fillW > 0) {
-                            quad.addRect(iconX, iconY, fillW, iconSize, 0f,
-                                    new float[]{1f, 1f, 1f, 0.6f * a});
+                        // 对号动画：两条线段组成 √ 形状
+                        // 原版用 stencil 裁剪，这里用渐进绘制简化
+                        // 第一段（短）：从左下到中下
+                        float p1 = Math.min(1f, animF * 2f); // 前半段
+                        if (p1 > 0) {
+                            float x1 = iconX + 5f * s;
+                            float y1 = iconY + 12f * s;
+                            float x2 = iconX + 10f * s;
+                            float y2 = iconY + 17f * s;
+                            // 简化：画一个细矩形旋转近似对号第一段
+                            float dx = x2 - x1;
+                            float dy = y2 - y1;
+                            float len = (float) Math.sqrt(dx * dx + dy * dy) * p1;
+                            float angle = (float) Math.atan2(dy, dx);
+                            // 用小矩形模拟线段
+                            quad.addRect(x1, y1 - 1f * s, len, 2.5f * s, 0f,
+                                    new float[]{1f, 1f, 1f, a});
+                        }
+                        // 第二段（长）：从中下到右上
+                        if (animF > 0.5f) {
+                            float p2 = (animF - 0.5f) * 2f;
+                            float x1 = iconX + 10f * s;
+                            float y1 = iconY + 17f * s;
+                            float x2 = iconX + 19f * s;
+                            float y2 = iconY + 8f * s;
+                            float dx = x2 - x1;
+                            float dy = y2 - y1;
+                            float len = (float) Math.sqrt(dx * dx + dy * dy) * p2;
+                            quad.addRect(x1, y1 - 1f * s, len, 2.5f * s, 0f,
+                                    new float[]{1f, 1f, 1f, a});
                         }
                         break;
                     }
                     case WARNING: {
-                        // 原版 WARNING：红色圆形 + stencil 填充动画（从上到下）
+                        // 红色圆形 + 白色感叹号动画
                         // Color(143, 80, 80, 200)
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
                                 new float[]{143f / 255f, 80f / 255f, 80f / 255f, (200f / 255f) * a});
-                        // 填充动画：从上到下填充
-                        float fillH = iconSize * animF;
-                        if (fillH > 0) {
-                            quad.addRect(iconX, iconY, iconSize, fillH, 0f,
-                                    new float[]{1f, 1f, 1f, 0.6f * a});
+                        // 感叹号竖线（从上往下生长）
+                        float barH = 12f * s * animF;
+                        if (barH > 0) {
+                            quad.addRect(iconX + 11f * s, iconY + 3f * s, 2f * s, barH, 1f * s,
+                                    new float[]{1f, 1f, 1f, a});
+                        }
+                        // 感叹号底部圆点（动画完成后出现）
+                        if (animF > 0.7f) {
+                            float dotA = (animF - 0.7f) / 0.3f;
+                            quad.addRect(iconX + 10.5f * s, iconY + 17f * s, 3f * s, 3f * s, 1.5f * s,
+                                    new float[]{1f, 1f, 1f, a * dotA});
                         }
                         break;
                     }
                     case INFO: {
-                        // 原版 INFO：蓝色圆形 + 十字动画
+                        // 蓝色圆形 + 白色十字/加号动画
                         // Color(48, 117, 147, 200)
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
                                 new float[]{48f / 255f, 117f / 255f, 147f / 255f, (200f / 255f) * a});
-                        // 竖线：(18.2, 11, 1.5, 18*animation, 0.75, WHITE)
-                        float vBarH = 18f * animF * s;
+                        // 竖线（从中心向上下扩展）
+                        float vBarH = 14f * s * animF;
                         if (vBarH > 0) {
-                            quad.addRect(iconX + 11.2f * s, iconY + 3f * s, 1.5f * s, vBarH, 0.75f * s,
+                            quad.addRect(iconX + 11f * s, iconY + 5f * s, 2f * s, vBarH, 1f * s,
                                     new float[]{1f, 1f, 1f, a});
                         }
-                        // 横线：(10, 19, 18*animation, 1.5, 0.75, WHITE)
-                        float hBarW = 18f * animF * s;
+                        // 横线（从中心向左右扩展）
+                        float hBarW = 14f * s * animF;
                         if (hBarW > 0) {
-                            quad.addRect(iconX + 3f * s, iconY + 11f * s, hBarW, 1.5f * s, 0.75f * s,
+                            quad.addRect(iconX + 5f * s, iconY + 11f * s, hBarW, 2f * s, 1f * s,
                                     new float[]{1f, 1f, 1f, a});
                         }
                         break;
@@ -397,8 +429,23 @@ public class DynamicIslandRenderer {
                         new float[]{1f, 1f, 1f, a}, sw, sh);
 
                 // ---- 描述文字（原版 38, 24, regular 18）----
-                text.draw(tc.description, baseX + 38f * s, baseY + 24f * s, 12f * s,
-                        new float[]{0.85f, 0.85f, 0.85f, a}, sw, sh);
+                // 视频中 "Enabled" 是绿色, "Disabled" 是红色
+                if (tc.type == ContentType.MODULE) {
+                    // 分段绘制：模块名(白色) + "has been "(白色) + Enabled/Disabled(彩色)
+                    String prefix = tc.moduleName + " has been ";
+                    String status = tc.enabled ? "Enabled" : "Disabled";
+                    float[] statusColor = tc.enabled
+                            ? new float[]{0.37f, 0.56f, 0.31f, a}  // 绿色
+                            : new float[]{0.56f, 0.31f, 0.31f, a};  // 红色
+                    float prefixW = text.measure(prefix, 12f * s);
+                    text.draw(prefix, baseX + 38f * s, baseY + 24f * s, 12f * s,
+                            new float[]{0.85f, 0.85f, 0.85f, a}, sw, sh);
+                    text.draw(status, baseX + 38f * s + prefixW, baseY + 24f * s, 12f * s,
+                            statusColor, sw, sh);
+                } else {
+                    text.draw(tc.description, baseX + 38f * s, baseY + 24f * s, 12f * s,
+                            new float[]{0.85f, 0.85f, 0.85f, a}, sw, sh);
+                }
 
                 contentY += ic.height;
             }
