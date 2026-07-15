@@ -250,7 +250,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
     /** 模块开关提示：显示 "某某某模块已启用/已禁用"，不再出现 "ON"/"OFF" */
     private void spawnModuleToast(String moduleName, boolean enabled) {
-        String text = moduleName + (enabled ? " 已启用" : " 已禁用");
+        String text = moduleName + " " + t("已启用", "enabled");
+        if (!enabled) text = moduleName + " " + t("已禁用", "disabled");
         pendingToastEnabled = enabled;
         spawnToast(text);
     }
@@ -283,6 +284,16 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
     private final Anim highlightY = new Anim(0f, 14f);   // 分类侧栏"流动"高亮条
     private final Anim contentScroll = new Anim(0f, 16f); // 模块列表滚动
+
+    // ---- UI 元素动画 ----
+    private final Anim sidebarIndicatorY = new Anim(0f, 14f); // 侧栏选中指示器滑动（~300ms EaseOutExpo）
+    private float sidebarIndicatorTargetY = 0f;
+    private final Anim configPageAnim = new Anim(0f, 14f); // 配置页滑入动画（0=关闭, 1=打开）
+    private float cardHoverAlpha = 0f; // 卡片 hover 透明度
+
+    // ---- 中英文语言系统 ----
+    private boolean langZh = true; // 默认中文
+    private float[] langBtnRect = null;
 
     // 布局参数
     private float panelX, panelY;
@@ -531,17 +542,32 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
     }
 
+    // ---- 中英文翻译 ----
+    /** 翻译：中文模式返回 zh，英文模式返回 en */
+    private String t(String zh, String en) {
+        return langZh ? zh : en;
+    }
+
+    /** 切换语言 */
+    private void toggleLanguage() {
+        langZh = !langZh;
+        spawnToast(langZh ? "已切换为中文" : "Switched to English");
+    }
+
     /** 点击卡片：切换到该模块的配置页（页面切换，非弹窗） */
     private void toggleConfigPanelFor(ModuleItem targetM) {
         activeConfigModule = targetM;
         configScrollOffset = 0f;
         contentScroll.snapTo(0);
+        configPageAnim.snapTo(0f);
+        configPageAnim.setTarget(1f);
     }
 
     /** 返回卡片网格视图 */
     private void backToCardGrid() {
         activeConfigModule = null;
         configScrollOffset = 0f;
+        configPageAnim.setTarget(0f);
     }
 
     /** 模块行的错落进场动画：面板刚展开时，越往下的行越晚出现，带一点回弹和轻微上浮位移。
@@ -951,6 +977,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         // 1.2) ArrayList HUD：跟ClickGUI面板是否打开完全无关，游戏里随时都该显示
         refreshHudModuleRefs();
         updateHudAnimations(dt);
+        // UI 元素动画更新
+        sidebarIndicatorY.setTarget(sidebarIndicatorTargetY);
+        sidebarIndicatorY.update(dt);
+        configPageAnim.update(dt);
         drawArrayListHud();
         drawWatermark();
         updateToasts(dt);
@@ -1006,9 +1036,15 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             // 5) 内容区：根据状态切换卡片网格或配置页
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
             GLES20.glScissor((int) clipX, (int) (screenH - (clipY + clipH)), (int) clipW, (int) clipH);
-            if (activeConfigModule != null) {
-                drawConfigPage(drawX, drawY, drawW, drawH, panelAlpha);
-            } else {
+            float pageSlide = Anim.backEaseOut(configPageAnim.get()) * 20f * uiScale; // 配置页从右侧滑入
+            float pageAlpha = configPageAnim.get();
+            if (activeConfigModule != null || configPageAnim.get() > 0.01f) {
+                drawConfigPage(drawX + pageSlide, drawY, drawW, drawH, panelAlpha * pageAlpha);
+            }
+            if (activeConfigModule == null && configPageAnim.get() < 0.99f) {
+                // 配置页关闭动画期间，卡片网格淡入
+                drawModuleCards(drawX, drawY, drawW, drawH, panelAlpha);
+            } else if (activeConfigModule == null) {
                 drawModuleCards(drawX, drawY, drawW, drawH, panelAlpha);
             }
             quad.flush(screenW, screenH);
@@ -1135,27 +1171,27 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float curY = startY;
 
         // Enabled 行
-        text.draw("Enabled", contentX + 14f * uiScale, curY + rowH / 2f - 7f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+        text.draw(t("启用", "Enabled"), contentX + 14f * uiScale, curY + rowH / 2f - 7f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         curY += rowH + rowGap;
 
         // 滑块行
         if (m.hasSlider) {
             String valStr = String.format("%.1f%s", m.getRealValue(), m.sliderUnit);
             float valW = text.measure(valStr, 13f * uiScale);
-            text.draw("Value", contentX + 14f * uiScale, curY + 12f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+            text.draw(t("数值", "Value"), contentX + 14f * uiScale, curY + 12f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
             text.draw(valStr, contentX + contentW - 14f * uiScale - valW, curY + 12f * uiScale, 13f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
             curY += rowH + rowGap;
         }
 
         // 描述区
         float descH = 80f * uiScale * (h / panelH);
-        text.draw("Description", contentX + 14f * uiScale, curY + 14f * uiScale, 12f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
+        text.draw(t("描述", "Description"), contentX + 14f * uiScale, curY + 14f * uiScale, 12f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         text.draw(m.description, contentX + 14f * uiScale, curY + 34f * uiScale, 13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         curY += descH + rowGap;
 
         // 调色板文字
         if (m.name.equals("Theme") || m.name.equals("Theme Color")) {
-            text.draw("Color Picker", contentX + 14f * uiScale, curY + 14f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
+            text.draw(t("调色板", "Color Picker"), contentX + 14f * uiScale, curY + 14f * uiScale, 14f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         }
     }
 
@@ -1235,6 +1271,7 @@ private void drawFloatingBall() {
             categoryHitRects.add(new float[]{btnX, ry, btnW, rowH});
             if (i == currentCategoryIndex) {
                 highlightY.setTarget(ry - y);
+                sidebarIndicatorTargetY = ry - y;
             }
             curY += rowH + 4f * uiScale * (h / panelH);
         }
@@ -1312,6 +1349,19 @@ private void drawFloatingBall() {
             quad.addRect(closeX, closeY, closeSize, closeSize, closeSize / 2f, withAlpha(SOUTH_SEARCH_BG, alpha));
         } else {
             closeBtnRect = null;
+        }
+
+        // 语言切换按钮（在关闭按钮左侧）
+        float langW = 52f * uiScale * (w / panelW);
+        float langH = closeSize;
+        float langX = closeBtnRect != null ? closeX - langW - closeGap : searchX - langW - closeGap;
+        float langY = y + (hdrH - langH) / 2f;
+        if (langX > hdrX + 8f * uiScale) {
+            langBtnRect = new float[]{langX, langY, langW, langH};
+            quad.addRect(langX, langY, langW, langH, langH / 2f, withAlpha(SOUTH_SEARCH_BG, alpha));
+            quad.addRect(langX, langY, langW, langH, langH / 2f, withAlpha(SOUTH_CARD_BORDER, alpha * 0.5f));
+        } else {
+            langBtnRect = null;
         }
     }
 
@@ -1509,13 +1559,13 @@ private void drawFloatingBall() {
             text.draw(breadcrumb, x + sbW + 14f * uiScale, y + hdrH / 2f - 6f * uiScale,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         } else {
-            text.draw("SOUTHSIDE b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 6f * uiScale,
+            text.draw(t("南方客户端", "SOUTHSIDE") + " b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 6f * uiScale,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
             text.draw("\u2190 \u2192 " + curCat.name, x + sbW + 80f * uiScale, y + hdrH / 2f - 5f * uiScale,
                     11f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
         }
         if (searchBoxRect != null) {
-            String searchText = searchActive ? searchQuery : "\u2315 search...";
+            String searchText = searchActive ? searchQuery : t("\u2315 搜索...", "\u2315 search...");
             text.draw(searchText, searchBoxRect[0] + 12f * uiScale,
                     searchBoxRect[1] + searchBoxRect[3] / 2f - 4f * uiScale,
                     10f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
@@ -1524,6 +1574,16 @@ private void drawFloatingBall() {
             text.draw("\u00D7", closeBtnRect[0] + closeBtnRect[2] / 2f - 5f * uiScale,
                     closeBtnRect[1] + closeBtnRect[3] / 2f - 7f * uiScale,
                     18f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
+        }
+
+        // 语言切换按钮文字
+        if (langBtnRect != null) {
+            String langText = langZh ? "中/EN" : "EN/中";
+            float langTextSize = 11f * uiScale;
+            float langTextW = text.measure(langText, langTextSize);
+            text.draw(langText, langBtnRect[0] + langBtnRect[2] / 2f - langTextW / 2f,
+                    langBtnRect[1] + langBtnRect[3] / 2f - langTextSize * 0.4f,
+                    langTextSize, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         }
 
         // ---- 分组侧栏文字 ----
@@ -1538,7 +1598,10 @@ private void drawFloatingBall() {
             Category c = categories.get(i);
             if (prevSection == null || !c.section.equals(prevSection)) {
                 curY += (prevSection != null ? sectionGap : 0f) + sectionLblH;
-                text.draw(c.section.toUpperCase(), x + btnPadX + 8f * uiScale,
+                String sectionLabel = c.section.equals("MOD CONFIG")
+                        ? t("模组配置", "MOD CONFIG")
+                        : t("个性化", "PERSONALIZATION");
+                text.draw(sectionLabel, x + btnPadX + 8f * uiScale,
                         curY - sectionLblH + 8f * uiScale * (h / panelH),
                         sectionLblSize, withAlpha(SOUTH_SECTION_LBL, alpha), screenW, screenH);
                 prevSection = c.section;
@@ -1553,12 +1616,12 @@ private void drawFloatingBall() {
 
         // 侧栏底部按钮文字
         if (editHudRect != null) {
-            text.draw("Edit HUD", editHudRect[0] + 12f * uiScale,
+            text.draw(t("编辑HUD", "Edit HUD"), editHudRect[0] + 12f * uiScale,
                     editHudRect[1] + editHudRect[3] / 2f - 5f * uiScale,
                     12f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         }
         if (closeSideRect != null) {
-            text.draw("Close", closeSideRect[0] + 12f * uiScale,
+            text.draw(t("关闭", "Close"), closeSideRect[0] + 12f * uiScale,
                     closeSideRect[1] + closeSideRect[3] / 2f - 5f * uiScale,
                     12f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         }
@@ -1628,7 +1691,7 @@ private void drawFloatingBall() {
 
             // 下方配置栏: "Configure" 文字
             float cfgSize = 11f * uiScale;
-            String cfgText = m.hasSlider ? "\u2699 Configure" : "\u2699 Configure";
+            String cfgText = "\u2699 " + t("配置", "Configure");
             float cfgW = text.measure(cfgText, cfgSize);
             text.draw(cfgText, cardX + cardW / 2f - cfgW / 2f, drawY + iconAreaH + toggleBarH / 2f - cfgSize * 0.4f,
                     cfgSize, withAlpha(SOUTH_TEXT_DIM2, rowAlpha), screenW, screenH);
@@ -1699,7 +1762,11 @@ private void drawFloatingBall() {
                     openness.setTarget(0f);
                     return;
                 }
-                // 检查搜索框（配置页模式下搜索框禁用，点击返回卡片视图）
+                // 检查语言切换按钮
+                if (langBtnRect != null && inside(ex, ey, langBtnRect)) {
+                    toggleLanguage();
+                    return;
+                }
                 if (searchBoxRect != null && inside(ex, ey, searchBoxRect)) {
                     backToCardGrid();
                     return;
@@ -1796,6 +1863,11 @@ private void drawFloatingBall() {
                     guiOpen = false;
                     overlayOpenness.setTarget(0f);
                     openness.setTarget(0f);
+                    return;
+                }
+                // 语言切换按钮
+                if (langBtnRect != null && inside(ex, ey, langBtnRect)) {
+                    toggleLanguage();
                     return;
                 }
                 if (searchActive && (searchBoxRect == null || !inside(ex, ey, searchBoxRect))) {
