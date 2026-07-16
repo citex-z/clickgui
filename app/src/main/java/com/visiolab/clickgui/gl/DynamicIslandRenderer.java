@@ -191,21 +191,25 @@ public class DynamicIslandRenderer {
         float s = uiScale * scale;
 
         // ---- 处理 timedContents（原版逻辑 + 退场淡出）----
-        // 原版：timer 到期即移除
-        // 改进：timer 到期后给 300ms 退场动画时间，让文字和图标淡出
+        // PROGRESS 类型始终置顶：排序时 PROGRESS 排在最前面
         contents.clear();
         boolean timedEmpty = true;
-        for (int i = timedContents.size() - 1; i >= 0; i--) {
-            TimedContent tc = timedContents.get(i);
+        // 先收集 PROGRESS，再收集其他（确保进度条在最上方渲染）
+        java.util.List<TimedContent> ordered = new java.util.ArrayList<>();
+        for (TimedContent tc : timedContents) {
+            if (tc.type == ContentType.PROGRESS) ordered.add(tc);
+        }
+        for (TimedContent tc : timedContents) {
+            if (tc.type != ContentType.PROGRESS) ordered.add(tc);
+        }
+        // 正序构建 contents，同时移除过期的
+        java.util.List<TimedContent> toRemove = new java.util.ArrayList<>();
+        for (TimedContent tc : ordered) {
             long elapsed = tc.timer.getTime();
-
-            // 退场动画时长
             int exitDuration = 300;
             long totalLife = tc.time + exitDuration;
-
             if (elapsed > totalLife) {
-                // 退场动画也结束了，真正移除
-                timedContents.remove(i);
+                toRemove.add(tc);
                 continue;
             }
             timedEmpty = false;
@@ -222,26 +226,24 @@ public class DynamicIslandRenderer {
                 case SUCCESS:
                 case WARNING:
                 case INFO:
-                    // 在 time-200 时开始退场动画
                     if (elapsed >= tc.time - 200) {
                         tc.animation.setDirection(Direction.BACKWARDS);
                     }
                     break;
                 case PROGRESS:
-                    // 持续显示，不自动退场
                     tc.animation.setDirection(Direction.FORWARDS);
                     break;
             }
 
-            // 计算内容尺寸：图标区 + 文字区(自适应文字长度)
+            // 计算内容尺寸
             float titleW = text.measure(tc.title, 14f * s);
             float descW = text.measure(tc.description, 12f * s);
             float textW = Math.max(titleW, descW);
-            float contentW = CONTENT_WIDTH_BASE * s + textW + 8f * s; // 右侧8px padding
-            // PROGRESS 类型需要额外高度给进度条
+            float contentW = CONTENT_WIDTH_BASE * s + textW + 8f * s;
             float contentH = (tc.type == ContentType.PROGRESS ? 50f : CONTENT_HEIGHT) * s;
             contents.add(new IslandContent(tc, contentW, contentH));
         }
+        timedContents.removeAll(toRemove);
 
         // ---- 计算目标尺寸（原版逻辑）----
         float targetWidth, targetHeight;
