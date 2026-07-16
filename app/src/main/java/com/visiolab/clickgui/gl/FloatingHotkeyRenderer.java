@@ -112,28 +112,28 @@ public class FloatingHotkeyRenderer {
                         new float[]{0f, 0f, 0f, 0.3f * alpha});
             }
 
-            // 背景：很浅的半透明黑色圆角矩形
+            // 背景：很浅的半透明黑色圆角矩形（更透明）
             quad.addRect(x, y, drawW, drawH, btnR,
-                    new float[]{0f, 0f, 0f, 0.35f * alpha});
+                    new float[]{0f, 0f, 0f, 0.20f * alpha});
 
-            // 开启状态：主题色边框
+            // 开启状态：白色边框
             if (moduleEnabled) {
-                float bw = 2f * s; // 边框宽度
-                // 外圈：主题色
+                float bw = 1.5f * s;
+                // 外圈：白色边框
                 quad.addRect(x - bw, y - bw, drawW + bw * 2f, drawH + bw * 2f, btnR + bw,
-                        new float[]{0.18f, 0.46f, 0.58f, 0.85f * alpha});
+                        new float[]{1f, 1f, 1f, 0.9f * alpha});
                 // 内圈：重新画背景
                 quad.addRect(x, y, drawW, drawH, btnR,
-                        new float[]{0f, 0f, 0f, 0.35f * alpha});
+                        new float[]{0f, 0f, 0f, 0.20f * alpha});
             }
 
             // 文字居中
             float textX = x + (drawW - textW) / 2f;
             float textY = y + (drawH - fontSize) / 2f;
-            // 文字颜色：开启=主题色亮色，关闭=白色
+            // 文字颜色：开启=白色，关闭=灰色
             float[] textColor = moduleEnabled
-                    ? new float[]{0.35f, 0.70f, 0.85f, alpha}  // 主题蓝亮色
-                    : new float[]{1f, 1f, 1f, alpha};             // 白色
+                    ? new float[]{1f, 1f, 1f, alpha}         // 白色
+                    : new float[]{0.5f, 0.5f, 0.5f, alpha};   // 灰色
             text.draw(displayText, textX, textY, fontSize, textColor, sw, sh);
         }
 

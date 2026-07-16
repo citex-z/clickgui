@@ -679,7 +679,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         arrayListLineToggle = new ModuleItem("右侧竖线连接", "在ArrayList右边画一条带渐变的竖线，连接所有开启的模块", true);
 
         // 水印自定义配置：不放进Category列表，长按水印开关的那一行时展开
-        watermarkSyncToggle = new ModuleItem("跟随主题渐变", "关闭后使用下面的自定义颜色", true);
+        watermarkSyncToggle = new ModuleItem("动态渐变", "左上到右下颜色渐变（类似ArrayList）", false);
         watermarkUnderlineToggle = new ModuleItem("显示下划线", "文字下方的强调色细线", true);
         watermarkFontSizeSlider = new ModuleItem("字号", "水印文字大小", false, true, 0.45f, 0, 1, "");
         watermarkXSlider = new ModuleItem("X 位置", "水印距离左边的距离", false, true, 0.1f, 0, 1, "");
@@ -1210,14 +1210,22 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
         // 水印文字
         String text2 = "Rlin B1";
-        float fontSize = (14f + (watermarkFontSizeSlider != null ? watermarkFontSizeSlider.sliderValue : 0.45f) * 20f) * uiScale * (wmScaleOpt != null ? (0.5f + wmScaleOpt.sliderValue * 1.5f) : 1f);
+        // 默认字号加大
+        float wmFontBase = 20f + (watermarkFontSizeSlider != null ? watermarkFontSizeSlider.sliderValue : 0.5f) * 28f;
+        float fontSize = wmFontBase * uiScale * (wmScaleOpt != null ? (0.5f + wmScaleOpt.sliderValue * 1.5f) : 1f);
         float tx = (watermarkXSlider != null ? watermarkXSlider.sliderValue : 0.1f) * (screenW * 0.4f);
         float ty = (watermarkYSlider != null ? watermarkYSlider.sliderValue : 0.1f) * (screenH * 0.3f);
 
-        boolean colorful = watermarkSyncToggle == null || watermarkSyncToggle.enabled;
-        float[] col = colorful
-                ? mixColor(ACCENT_1, ACCENT_2, 0.5f + 0.5f * (float) Math.sin(flowOffset * Math.PI * 2.0))
-                : hsv2rgb(watermarkHueSlider != null ? watermarkHueSlider.sliderValue : 0.55f, 0.75f, 1f);
+        // 默认白色；开启动态渐变时使用左上到右下的渐变
+        boolean useGradient = watermarkSyncToggle != null && watermarkSyncToggle.enabled;
+        float[] defaultWhite = new float[]{1f, 1f, 1f, a};
+        float[] col;
+        if (useGradient) {
+            // 不用单色，使用渐变绘制（下方处理）
+            col = defaultWhite;
+        } else {
+            col = hsv2rgb(watermarkHueSlider != null ? watermarkHueSlider.sliderValue : 0.0f, 0.0f, 1f); // 默认白色
+        }
 
         // 使用 Pacifico 字体测量
         float tw = text.measureWatermark(text2, fontSize);
@@ -1232,15 +1240,39 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             blur.drawGlow(new float[]{0f, 0f, 0f, 0.55f * a}, screenW, screenH);
         }
 
-        // Pacifico 字体绘制水印文字（不加粗，不加背景）
-        text.drawWatermark(text2, tx, ty, fontSize, new float[]{col[0], col[1], col[2], a}, screenW, screenH);
+        if (useGradient) {
+            // 动态渐变：逐字符左上→右下颜色渐变（类似 ArrayList）
+            float penX = tx;
+            for (int i = 0; i < text2.length(); i++) {
+                char c = text2.charAt(i);
+                if (c == ' ') {
+                    penX += fontSize * 0.3f;
+                    continue;
+                }
+                float progress = (float) i / Math.max(1, text2.length() - 1);
+                float flow = (progress + flowOffset) % 1f;
+                float[] gc = mixColor(ACCENT_1, ACCENT_2, flow);
+                float charW = text.drawWatermark(String.valueOf(c), penX, ty, fontSize,
+                        new float[]{gc[0], gc[1], gc[2], a}, screenW, screenH);
+                penX += charW;
+            }
+        } else {
+            // 单色白色
+            text.drawWatermark(text2, tx, ty, fontSize, new float[]{col[0], col[1], col[2], a}, screenW, screenH);
+        }
 
         // 文字下方一条细细的强调色下划线
         if (watermarkUnderlineToggle == null || watermarkUnderlineToggle.enabled) {
             float underlineY = ty + fontSize + 2f * uiScale;
-            quad.addRectGradient(tx, underlineY, tw, 2f * uiScale, 1f * uiScale,
-                    withAlpha(colorful ? ACCENT_1 : col, a), withAlpha(colorful ? ACCENT_2 : col, a),
-                    withAlpha(colorful ? ACCENT_1 : col, a), withAlpha(colorful ? ACCENT_2 : col, a));
+            if (useGradient) {
+                quad.addRectGradient(tx, underlineY, tw, 2f * uiScale, 1f * uiScale,
+                        withAlpha(ACCENT_1, a), withAlpha(ACCENT_2, a),
+                        withAlpha(ACCENT_1, a), withAlpha(ACCENT_2, a));
+            } else {
+                quad.addRectGradient(tx, underlineY, tw, 2f * uiScale, 1f * uiScale,
+                        withAlpha(col, a), withAlpha(col, a),
+                        withAlpha(col, a), withAlpha(col, a));
+            }
             quad.flush(screenW, screenH);
         }
     }
