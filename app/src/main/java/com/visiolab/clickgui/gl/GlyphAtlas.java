@@ -4,6 +4,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Typeface;
 import android.opengl.GLES20;
 import android.opengl.GLUtils;
 
@@ -32,6 +33,42 @@ public class GlyphAtlas {
 
     private final Map<String, Glyph> glyphs = new HashMap<>();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private Paint iconPaint; // 图标字体 Paint（Tenacity Icons）
+    private Typeface iconTypeface;
+    private boolean iconFontLoaded = false;
+
+    /** 加载图标字体（从 assets） */
+    public void loadIconFont(android.content.res.AssetManager assets, String path) {
+        try {
+            iconTypeface = Typeface.createFromAsset(assets, path);
+            iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            iconPaint.setTypeface(iconTypeface);
+            iconPaint.setColor(Color.WHITE);
+            iconFontLoaded = true;
+        } catch (Exception e) {
+            // 字体加载失败，静默降级到默认字体
+        }
+    }
+
+    /** 检查图标字体是否已加载 */
+    public boolean isIconFontLoaded() {
+        return iconFontLoaded;
+    }
+
+    /** 获取图标字符对应的码点（Tenacity Icons 映射） */
+    public static String categoryIcon(String categoryName) {
+        switch (categoryName) {
+            case "Client":      return "n"; // wrench
+            case "Combat":      return "c"; // bomb
+            case "Movement":    return "w"; // up
+            case "Player":      return "e"; // adult
+            case "Render":      return "d"; // eye
+            case "World":       return "s"; // pin
+            case "Misc":        return "b"; // th-list
+            case "Preferences": return "n"; // wrench
+            default:            return null;
+        }
+    }
 
     public void init() {
         int[] tex = new int[1];
@@ -122,6 +159,67 @@ public class GlyphAtlas {
         shelfRowHeight = Math.max(shelfRowHeight, h);
 
         return g;
+    }
+
+    /** 用图标字体生成字形（Tenacity Icons） */
+    public Glyph ensureIconGlyph(char c, float sizePx) {
+        if (!iconFontLoaded) return ensureGlyph(c, sizePx); // 降级
+        int sizeBucket = Math.round(sizePx / 4f) * 4;
+        if (sizeBucket < 4) sizeBucket = 4;
+        String key = "icon#" + c + "#" + sizeBucket;
+        Glyph g = glyphs.get(key);
+        if (g != null) return g;
+
+        iconPaint.setTextSize(sizeBucket);
+        iconPaint.setColor(Color.WHITE);
+        String s = String.valueOf(c);
+
+        Paint.FontMetrics fm = iconPaint.getFontMetrics();
+        int w = Math.max(1, (int) Math.ceil(iconPaint.measureText(s)) + 2);
+        int h = Math.max(1, (int) Math.ceil(fm.bottom - fm.top) + 2);
+        float advance = iconPaint.measureText(s);
+
+        if (shelfX + w + 2 > ATLAS_W) {
+            shelfX = 1;
+            shelfY += shelfRowHeight + 2;
+            shelfRowHeight = 0;
+        }
+        if (shelfY + h + 2 > ATLAS_H) {
+            resetAtlas();
+        }
+
+        Bitmap glyphBmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(glyphBmp);
+        canvas.drawText(s, 1, -fm.top + 1, iconPaint);
+
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
+        GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D, 0, shelfX, shelfY, glyphBmp);
+        glyphBmp.recycle();
+
+        float inset = 0.5f;
+        g = new Glyph();
+        g.u0 = (shelfX + inset) / (float) ATLAS_W;
+        g.v0 = (shelfY + inset) / (float) ATLAS_H;
+        g.u1 = (shelfX + w - inset) / (float) ATLAS_W;
+        g.v1 = (shelfY + h - inset) / (float) ATLAS_H;
+        g.width = w;
+        g.height = h;
+        g.advance = advance;
+        g.bearingY = -fm.top;
+
+        glyphs.put(key, g);
+
+        shelfX += w + 2;
+        shelfRowHeight = Math.max(shelfRowHeight, h);
+
+        return g;
+    }
+
+    /** 测量图标文字宽度 */
+    public float measureIcon(String text, float sizePx) {
+        if (!iconFontLoaded) return measure(text, sizePx);
+        iconPaint.setTextSize(sizePx);
+        return iconPaint.measureText(text);
     }
 
     public float measure(String text, float sizePx) {

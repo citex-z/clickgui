@@ -14,6 +14,11 @@ public class TextRenderer {
 
     private final GlyphAtlas atlas = new GlyphAtlas();
 
+    /** 获取内部 GlyphAtlas（用于加载图标字体等） */
+    public GlyphAtlas getAtlas() {
+        return atlas;
+    }
+
     private int program;
     private int aPos, aUV, uTex, uColor, uScreenSize;
     private FloatBuffer buffer;
@@ -125,5 +130,57 @@ public class TextRenderer {
 
     public float measure(String text, float sizePx) {
         return atlas.measure(text, sizePx);
+    }
+
+    /** 用图标字体画一个图标字符 */
+    public float drawIcon(char iconChar, float x, float y, float sizePx, float[] rgba, int screenW, int screenH) {
+        buffer.clear();
+        float penX = x;
+
+        GlyphAtlas.Glyph g = atlas.ensureIconGlyph(iconChar, sizePx);
+        float gx = penX;
+        float gy = y - (g.height - g.bearingY);
+
+        float[] verts = {
+                gx, gy, g.u0, g.v0,
+                gx + g.width, gy, g.u1, g.v0,
+                gx, gy + g.height, g.u0, g.v1,
+                gx + g.width, gy, g.u1, g.v0,
+                gx + g.width, gy + g.height, g.u1, g.v1,
+                gx, gy + g.height, g.u0, g.v1,
+        };
+        buffer.put(verts);
+        penX += g.advance;
+
+        buffer.position(0);
+        GLES20.glUseProgram(program);
+        GLES20.glUniform2f(uScreenSize, screenW, screenH);
+        GLES20.glUniform4f(uColor, rgba[0], rgba[1], rgba[2], rgba[3]);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, atlas.getTexture());
+        GLES20.glUniform1i(uTex, 0);
+
+        GLES20.glEnable(GLES20.GL_BLEND);
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+
+        int stride = 16;
+        buffer.position(0);
+        GLES20.glEnableVertexAttribArray(aPos);
+        GLES20.glVertexAttribPointer(aPos, 2, GLES20.GL_FLOAT, false, stride, buffer);
+        buffer.position(2);
+        GLES20.glEnableVertexAttribArray(aUV);
+        GLES20.glVertexAttribPointer(aUV, 2, GLES20.GL_FLOAT, false, stride, buffer);
+
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6);
+
+        GLES20.glDisableVertexAttribArray(aPos);
+        GLES20.glDisableVertexAttribArray(aUV);
+
+        return penX - x;
+    }
+
+    /** 测量图标字符宽度 */
+    public float measureIcon(char iconChar, float sizePx) {
+        return atlas.measureIcon(String.valueOf(iconChar), sizePx);
     }
 }

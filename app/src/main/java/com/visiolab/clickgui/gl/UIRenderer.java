@@ -631,6 +631,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         loginRenderer.init(quad, text, blur);
         // 初始化音效
         com.visiolab.clickgui.audio.SoundManager.getInstance().init(context);
+        // 加载图标字体
+        text.getAtlas().loadIconFont(context.getAssets(), "fonts/Tenacity-Icons.ttf");
         lastFrameNs = System.nanoTime();
 
         for (Category c : categories) {
@@ -2246,8 +2248,17 @@ private void drawFloatingBall() {
             float ry = curY;
             boolean sel = i == currentCategoryIndex;
             float[] col = withAlpha(sel ? SOUTH_TEXT_WHITE : SOUTH_TEXT_DIM2, alpha);
-            // 取消图标符号，只显示分类名称
-            text.draw(Category.localizedCategory(c.name, langZh), x + btnPadX + 8f * uiScale, ry + rowH / 2f - 13f * uiScale * 0.5f, 13f * uiScale, col, screenW, screenH);
+            // 图标 + 分类名称
+            String iconChar = GlyphAtlas.categoryIcon(c.name);
+            float iconSize = 14f * uiScale;
+            float iconPad = 8f * uiScale;
+            float textStartX = x + btnPadX + 8f * uiScale;
+            if (iconChar != null && text.getAtlas().isIconFontLoaded()) {
+                float iconW = text.drawIcon(iconChar.charAt(0), textStartX, ry + rowH / 2f - iconSize * 0.5f,
+                        iconSize, col, screenW, screenH);
+                textStartX += iconW + iconPad;
+            }
+            text.draw(Category.localizedCategory(c.name, langZh), textStartX, ry + rowH / 2f - 13f * uiScale * 0.5f, 13f * uiScale, col, screenW, screenH);
             curY += rowH + 4f * uiScale * (h / panelH);
         }
 
