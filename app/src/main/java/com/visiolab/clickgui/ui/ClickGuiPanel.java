@@ -411,9 +411,9 @@ public class ClickGuiPanel {
                 currentCategoryIndex = idx;
                 // 找到 moduleList 并刷新
                 View root = popup.getContentView();
-                LinearLayout moduleList = findViewWithTag(root, "moduleList");
-                if (moduleList instanceof LinearLayout) {
-                    refreshModuleList((LinearLayout) moduleList);
+                View found = findViewWithTag(root, "moduleList");
+                if (found instanceof LinearLayout) {
+                    refreshModuleList((LinearLayout) found);
                 }
                 // 更新分类按钮颜色
                 updateCategoryColors(nav, idx);

@@ -84,7 +84,7 @@ public class SliderView extends View {
         // thumb 画笔（带阴影，需要软件渲染层）
         thumbPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         thumbPaint.setColor(colorThumb);
-        thumbPaint.setShadowLayer(dp(3), 0f, dp(1.5f), 0x66000000);
+        thumbPaint.setShadowLayer(dp(3), 0, dp(2), 0x66000000);
         setLayerType(LAYER_TYPE_SOFTWARE, null);
 
         // 数值文字画笔
