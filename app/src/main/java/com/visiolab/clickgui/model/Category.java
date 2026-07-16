@@ -177,11 +177,7 @@ public class Category {
                 .addSwitch("Blur Background", true)
                 .addSlider("GUI Scale", 1, 0.5f, 2.0f, "x"));
         client.add(new ModuleItem("Watermark", "Client watermark HUD", true)
-                .addSwitch("Show Version", true)
-                .addSwitch("Show FPS", false)
-                .addSwitch("Show Ping", false)
                 .addSlider("Scale", 1, 0.5f, 2.0f, "x")
-                .addSwitch("Background", true)
         );
         client.add(new ModuleItem("Notifications", "Toast notifications", true)
                 .addSlider("Duration", 2, 1, 5, "s")

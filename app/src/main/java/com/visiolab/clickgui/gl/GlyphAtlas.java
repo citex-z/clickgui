@@ -38,6 +38,8 @@ public class GlyphAtlas {
     private Typeface iconTypeface;
     private boolean iconFontLoaded = false;
     private boolean boldFontLoaded = false;
+    private Paint watermarkPaint; // 水印字体 Paint（Pacifico）
+    private boolean watermarkFontLoaded = false;
 
     /** 加载主字体（Regular + Bold） */
     public void loadMainFont(android.content.res.AssetManager assets, String regularPath, String boldPath) {
@@ -61,6 +63,75 @@ public class GlyphAtlas {
             android.util.Log.e("GlyphAtlas", "Failed to load bold font " + boldPath + ": " + e.getMessage());
         }
     }
+
+    /** 加载水印字体（Pacifico） */
+    public void loadWatermarkFont(android.content.res.AssetManager assets, String path) {
+        try {
+            Typeface wm = Typeface.createFromAsset(assets, path);
+            if (wm != null) {
+                watermarkPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                watermarkPaint.setTypeface(wm);
+                watermarkPaint.setColor(Color.WHITE);
+                watermarkFontLoaded = true;
+                android.util.Log.i("GlyphAtlas", "Watermark font loaded: " + path);
+            }
+        } catch (Exception e) {
+            android.util.Log.e("GlyphAtlas", "Failed to load watermark font: " + e.getMessage());
+        }
+    }
+
+    /** 用水印字体生成字形 */
+    public Glyph ensureWatermarkGlyph(char c, float sizePx) {
+        if (!watermarkFontLoaded) return ensureGlyph(c, sizePx);
+        int sizeBucket = Math.round(sizePx / 4f) * 4;
+        if (sizeBucket < 4) sizeBucket = 4;
+        String key = "wm#" + c + "#" + sizeBucket;
+        Glyph g = glyphs.get(key);
+        if (g != null) return g;
+
+        watermarkPaint.setTextSize(sizeBucket);
+        watermarkPaint.setColor(Color.WHITE);
+        String s = String.valueOf(c);
+
+        Paint.FontMetrics fm = watermarkPaint.getFontMetrics();
+        int w = Math.max(1, (int) Math.ceil(watermarkPaint.measureText(s)) + 2);
+        int h = Math.max(1, (int) Math.ceil(fm.bottom - fm.top) + 2);
+        float advance = watermarkPaint.measureText(s);
+
+        if (shelfX + w + 2 > ATLAS_W) { shelfX = 1; shelfY += shelfRowHeight + 2; shelfRowHeight = 0; }
+        if (shelfY + h + 2 > ATLAS_H) { resetAtlas(); }
+
+        Bitmap glyphBmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(glyphBmp);
+        canvas.drawText(s, 1, -fm.top + 1, watermarkPaint);
+
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
+        GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D, 0, shelfX, shelfY, glyphBmp);
+        glyphBmp.recycle();
+
+        float inset = 0.5f;
+        g = new Glyph();
+        g.u0 = (shelfX + inset) / (float) ATLAS_W;
+        g.v0 = (shelfY + inset) / (float) ATLAS_H;
+        g.u1 = (shelfX + w - inset) / (float) ATLAS_W;
+        g.v1 = (shelfY + h - inset) / (float) ATLAS_H;
+        g.width = w;
+        g.height = h;
+        g.advance = advance;
+        g.bearingY = -fm.top;
+        glyphs.put(key, g);
+        shelfX += w + 2;
+        shelfRowHeight = Math.max(shelfRowHeight, h);
+        return g;
+    }
+
+    public float measureWatermark(String text, float sizePx) {
+        if (!watermarkFontLoaded) return measure(text, sizePx);
+        watermarkPaint.setTextSize(sizePx);
+        return watermarkPaint.measureText(text);
+    }
+
+    public boolean isWatermarkFontLoaded() { return watermarkFontLoaded; }
 
     /** 用 Bold 字体生成字形 */
     public Glyph ensureBoldGlyph(char c, float sizePx) {

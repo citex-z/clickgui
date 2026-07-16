@@ -503,25 +503,19 @@ public class DynamicIslandRenderer {
                         break;
                     }
                     case PROGRESS: {
-                        // 图标：蓝色圆形背景 + 白色 3D 立方体线框
+                        // 图标：蓝色圆形背景 + Tenacity 'b' (th-list) 图标
                         float pb_r = 48f / 255f, pb_g = 117f / 255f, pb_b = 147f / 255f;
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
                                 new float[]{pb_r, pb_g, pb_b, (200f / 255f) * contentAlpha});
 
-                        // 3D 立方体图标（等距视角白色填充）
-                        float cx = iconX + iconSize / 2f;
-                        float cy = iconY + iconSize / 2f;
-                        float cs = iconSize * 0.35f; // 立方体半尺寸
-                        float cs2 = cs * 0.5f;       // 等距投影偏移
-                        // 顶面（亮白）
-                        quad.addRect(cx - cs2, cy - cs, cs, cs2, 0f,
-                                new float[]{1f, 1f, 1f, contentAlpha * 0.95f});
-                        // 左面（中灰）
-                        quad.addRect(cx - cs2, cy - cs + cs2, cs2, cs, 0f,
-                                new float[]{0.8f, 0.8f, 0.8f, contentAlpha * 0.85f});
-                        // 右面（浅灰）
-                        quad.addRect(cx, cy - cs + cs2, cs2, cs, 0f,
-                                new float[]{0.9f, 0.9f, 0.9f, contentAlpha * 0.9f});
+                        // Tenacity 'b' 图标替代 3D 立方体
+                        if (text.getAtlas().isIconFontLoaded()) {
+                            float progIconSize = iconSize * 0.6f;
+                            float progIconX = iconX + (iconSize - progIconSize) / 2f;
+                            float progIconY = iconY + (iconSize - progIconSize) / 2f;
+                            text.drawIcon('b', progIconX, progIconY, progIconSize,
+                                    new float[]{1f, 1f, 1f, contentAlpha}, sw, sh);
+                        }
 
                         // 进度条：贴在内容区底部，蓝色填充
                         float barPad = 4f * s;

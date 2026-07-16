@@ -197,6 +197,71 @@ public class TextRenderer {
         return atlas.measureBold(text, sizePx);
     }
 
+    /** 用水印字体(Pacifico)画一行文字 */
+    public float drawWatermark(String text, float x, float y, float sizePx, float[] rgba, int screenW, int screenH) {
+        if (text == null || text.isEmpty()) return 0;
+
+        buffer.clear();
+        float penX = x;
+        int charCount = 0;
+
+        for (int i = 0; i < text.length() && charCount < MAX_CHARS; i++) {
+            char c = text.charAt(i);
+            if (c == ' ') {
+                penX += sizePx * 0.3f;
+                continue;
+            }
+            GlyphAtlas.Glyph g = atlas.ensureWatermarkGlyph(c, sizePx);
+
+            float gx = penX;
+            float gy = y - (g.height - g.bearingY);
+
+            float[] verts = {
+                    gx, gy, g.u0, g.v0,
+                    gx + g.width, gy, g.u1, g.v0,
+                    gx, gy + g.height, g.u0, g.v1,
+                    gx + g.width, gy, g.u1, g.v0,
+                    gx + g.width, gy + g.height, g.u1, g.v1,
+                    gx, gy + g.height, g.u0, g.v1,
+            };
+            buffer.put(verts);
+            penX += g.advance;
+            charCount++;
+        }
+
+        if (charCount == 0) return penX - x;
+
+        buffer.position(0);
+        GLES20.glUseProgram(program);
+        GLES20.glUniform2f(uScreenSize, screenW, screenH);
+        GLES20.glUniform4f(uColor, rgba[0], rgba[1], rgba[2], rgba[3]);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, atlas.getTexture());
+        GLES20.glUniform1i(uTex, 0);
+
+        GLES20.glEnable(GLES20.GL_BLEND);
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+
+        int stride = 16;
+        buffer.position(0);
+        GLES20.glEnableVertexAttribArray(aPos);
+        GLES20.glVertexAttribPointer(aPos, 2, GLES20.GL_FLOAT, false, stride, buffer);
+        buffer.position(2);
+        GLES20.glEnableVertexAttribArray(aUV);
+        GLES20.glVertexAttribPointer(aUV, 2, GLES20.GL_FLOAT, false, stride, buffer);
+
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, charCount * 6);
+
+        GLES20.glDisableVertexAttribArray(aPos);
+        GLES20.glDisableVertexAttribArray(aUV);
+
+        return penX - x;
+    }
+
+    public float measureWatermark(String text, float sizePx) {
+        return atlas.measureWatermark(text, sizePx);
+    }
+
     /** 用图标字体画一个图标字符 */
     public float drawIcon(char iconChar, float x, float y, float sizePx, float[] rgba, int screenW, int screenH) {
         buffer.clear();

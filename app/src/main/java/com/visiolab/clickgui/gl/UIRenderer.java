@@ -636,6 +636,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         // 加载 Comfortaa 字体（Regular 用于普通文字，Bold 用于标题/强调）
         text.getAtlas().loadMainFont(context.getAssets(),
                 "fonts/Comfortaa-Regular.ttf", "fonts/Comfortaa-Bold.ttf");
+        // 加载 Pacifico 字体（水印专用）
+        text.getAtlas().loadWatermarkFont(context.getAssets(), "fonts/Pacifico.ttf");
         lastFrameNs = System.nanoTime();
 
         for (Category c : categories) {
@@ -1206,15 +1208,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float a = Math.max(0f, Math.min(1f, watermarkToggle.hudAnim.get()));
         if (a <= 0.01f) return;
 
-        String text2;
-        {
-            float wmScale = wmScaleOpt != null ? (0.5f + wmScaleOpt.sliderValue * 1.5f) : 1f;
-            StringBuilder sb = new StringBuilder("Rlin");
-            if (wmShowVerOpt == null || wmShowVerOpt.boolValue) sb.append(" b13");
-            if (wmShowFpsOpt != null && wmShowFpsOpt.boolValue) sb.append("  ").append(currentFps).append("fps");
-            if (wmShowPingOpt != null && wmShowPingOpt.boolValue) sb.append("  ").append(currentPing).append("ms");
-            text2 = sb.toString();
-        }
+        // 水印文字：只显示 "Rlin b13"，不再显示 FPS/Ping
+        String text2 = "Rlin b13";
         float fontSize = (14f + (watermarkFontSizeSlider != null ? watermarkFontSizeSlider.sliderValue : 0.45f) * 20f) * uiScale * (wmScaleOpt != null ? (0.5f + wmScaleOpt.sliderValue * 1.5f) : 1f);
         float tx = (watermarkXSlider != null ? watermarkXSlider.sliderValue : 0.1f) * (screenW * 0.4f);
         float ty = (watermarkYSlider != null ? watermarkYSlider.sliderValue : 0.1f) * (screenH * 0.3f);
@@ -1224,32 +1219,23 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 ? mixColor(ACCENT_1, ACCENT_2, 0.5f + 0.5f * (float) Math.sin(flowOffset * Math.PI * 2.0))
                 : hsv2rgb(watermarkHueSlider != null ? watermarkHueSlider.sliderValue : 0.55f, 0.75f, 1f);
 
-        float tw = text.measure(text2, fontSize);
-
-        // Background：开启时在文字下方画半透明背景
-        if (wmBgOpt == null || wmBgOpt.boolValue) {
-            float bgPad = 6f * uiScale;
-            quad.addRect(tx - bgPad, ty - 2f * uiScale, tw + bgPad * 2f, fontSize + 6f * uiScale, 4f * uiScale,
-                    new float[]{0f, 0f, 0f, 0.3f * a});
-            quad.flush(screenW, screenH);
-        }
+        // 使用 Pacifico 字体测量
+        float tw = text.measureWatermark(text2, fontSize);
 
         // 文字周围轻微发散的阴影
         if (watermarkShadowToggle == null || watermarkShadowToggle.enabled) {
             final float sTx = tx, sTy = ty, sFontSize = fontSize;
             final String sText = text2;
             blur.captureAndBlurTransparentTight(() -> {
-                text.draw(sText, sTx, sTy, sFontSize, new float[]{1f, 1f, 1f, a}, screenW, screenH);
+                text.drawWatermark(sText, sTx, sTy, sFontSize, new float[]{1f, 1f, 1f, a}, screenW, screenH);
             });
             blur.drawGlow(new float[]{0f, 0f, 0f, 0.55f * a}, screenW, screenH);
         }
 
-        // 简单的“加粗”技巧：同一行文字用极小的偏移多画一次，笔画更扎实一点
-        text.draw(text2, tx + 1.2f * uiScale, ty + 1.8f * uiScale, fontSize, new float[]{0f, 0f, 0f, 0.5f * a}, screenW, screenH);
-        text.draw(text2, tx + 0.6f * uiScale, ty, fontSize, new float[]{col[0], col[1], col[2], a}, screenW, screenH);
-        text.draw(text2, tx, ty, fontSize, new float[]{col[0], col[1], col[2], a}, screenW, screenH);
+        // Pacifico 字体绘制水印文字（不加粗，不加背景）
+        text.drawWatermark(text2, tx, ty, fontSize, new float[]{col[0], col[1], col[2], a}, screenW, screenH);
 
-        // 文字下方一条细细的强调色下划线，跟着渐变一起流动，作为点缀——可以关掉
+        // 文字下方一条细细的强调色下划线
         if (watermarkUnderlineToggle == null || watermarkUnderlineToggle.enabled) {
             float underlineY = ty + fontSize + 2f * uiScale;
             quad.addRectGradient(tx, underlineY, tw, 2f * uiScale, 1f * uiScale,
