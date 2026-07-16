@@ -53,6 +53,20 @@ public class LoginRenderer {
     private TextRenderer text;
     private BlurPipeline blur;
 
+    /** 获取模块 AssetManager（Xposed 注入模式） */
+    private android.content.res.AssetManager getModuleAssets() {
+        try {
+            Class<?> mrl = Class.forName("com.visiolab.clickgui.xposed.ModuleResourceLoader");
+            java.lang.reflect.Method getAssets = mrl.getMethod("getAssets");
+            java.lang.reflect.Method isInit = mrl.getMethod("isInitialized");
+            if ((boolean) isInit.invoke(null)) {
+                android.content.res.AssetManager am = (android.content.res.AssetManager) getAssets.invoke(null);
+                if (am != null) return am;
+            }
+        } catch (Throwable e) { /* 非注入模式 */ }
+        return context.getAssets();
+    }
+
     private float animTime = 0f;
     private boolean loginDone = false;
 
@@ -533,7 +547,9 @@ public class LoginRenderer {
 
     private void loadBackgroundTexture() {
         try {
-            Bitmap bmp = BitmapFactory.decodeStream(context.getAssets().open("login_bg.jpg"));
+            // 优先使用模块资源（Xposed 注入模式）
+            android.content.res.AssetManager am = getModuleAssets();
+            Bitmap bmp = BitmapFactory.decodeStream(am.open("login_bg.jpg"));
             if (bmp == null) return;
             int[] ids = new int[1];
             GLES20.glGenTextures(1, ids, 0);

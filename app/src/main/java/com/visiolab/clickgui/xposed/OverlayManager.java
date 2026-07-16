@@ -47,6 +47,10 @@ public class OverlayManager {
         Log.i(TAG, "Attaching overlay to " + activity.getClass().getName());
         activityRef = new WeakReference<>(activity);
 
+        // 初始化模块资源加载器（必须在创建 UIRenderer 之前）
+        ModuleResourceLoader.init(activity);
+        Log.i(TAG, "Module resources: " + (ModuleResourceLoader.isInitialized() ? "OK" : "FAILED"));
+
         // 创建 UIRenderer
         renderer = new UIRenderer(activity);
 

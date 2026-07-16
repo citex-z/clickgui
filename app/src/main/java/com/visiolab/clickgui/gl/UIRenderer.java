@@ -42,7 +42,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private float[] TEXT_MAIN = DARK_TEXT_MAIN;
     private float[] TEXT_DIM = DARK_TEXT_DIM;
     private float[] TRACK_OFF = DARK_TRACK_OFF;
-    private static final float[] WORLD_BG = {0.11f, 0.105f, 0.12f, 1f}; // #1C1B1F MD3 Surface（非纯黑）
+    private static final float[] WORLD_BG = {0f, 0f, 0f, 0f}; // 透明背景（透出游戏画面）
     private static final float[] KNOB_COLOR = {1f, 1f, 1f, 1f}; // 白色拖钮/滑块圆点
     // ---- 南方客户端真实颜色 (from source: Colors.java + SouthsideDarkStyle.java) ----
     private static final float[] HDR_BG = {0.96f, 0.96f, 0.96f, 1f};               // #F5F5F5 标题栏（舒适白）
@@ -550,6 +550,26 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         com.visiolab.clickgui.hotkey.HotkeyManager.getInstance().init(ctx);
     }
 
+    /**
+     * 获取模块的 AssetManager。
+     * 在 Xposed 注入模式下，优先使用 ModuleResourceLoader 加载模块资源。
+     * 正常模式下直接用 context.getAssets()。
+     */
+    private android.content.res.AssetManager getModuleAssets() {
+        try {
+            Class<?> mrl = Class.forName("com.visiolab.clickgui.xposed.ModuleResourceLoader");
+            java.lang.reflect.Method getAssets = mrl.getMethod("getAssets");
+            java.lang.reflect.Method isInit = mrl.getMethod("isInitialized");
+            if ((boolean) isInit.invoke(null)) {
+                android.content.res.AssetManager am = (android.content.res.AssetManager) getAssets.invoke(null);
+                if (am != null) return am;
+            }
+        } catch (Throwable e) {
+            // 非注入模式，忽略
+        }
+        return context.getAssets();
+    }
+
     // ================================================================
     //  软键盘输入支持（隐藏 EditText 承载输入）
     // ================================================================
@@ -640,20 +660,22 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
-        GLES20.glClearColor(WORLD_BG[0], WORLD_BG[1], WORLD_BG[2], 1f);
+        GLES20.glClearColor(WORLD_BG[0], WORLD_BG[1], WORLD_BG[2], 0f);
         quad.init();
         text.init();
         blur.init();
         loginRenderer.init(quad, text, blur);
         // 初始化音效
         com.visiolab.clickgui.audio.SoundManager.getInstance().init(context);
+        // 获取 AssetManager：优先使用模块资源加载器（Xposed 注入模式）
+        android.content.res.AssetManager am = getModuleAssets();
         // 加载图标字体
-        text.getAtlas().loadIconFont(context.getAssets(), "fonts/Tenacity-Icons.ttf");
+        text.getAtlas().loadIconFont(am, "fonts/Tenacity-Icons.ttf");
         // 加载 Comfortaa 字体（Regular 用于普通文字，Bold 用于标题/强调）
-        text.getAtlas().loadMainFont(context.getAssets(),
+        text.getAtlas().loadMainFont(am,
                 "fonts/Comfortaa-Regular.ttf", "fonts/Comfortaa-Bold.ttf");
         // 加载 Pacifico 字体（水印专用）
-        text.getAtlas().loadWatermarkFont(context.getAssets(), "fonts/Pacifico.ttf");
+        text.getAtlas().loadWatermarkFont(am, "fonts/Pacifico.ttf");
         lastFrameNs = System.nanoTime();
 
         for (Category c : categories) {
@@ -755,7 +777,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     /** 模拟一个有层次感的"游戏世界"背景（天空渐变 + 漂浮色块），用来验证毛玻璃模糊效果 */
     private void drawWorldScene() {
         // MD3 深色背景：纯色填充（非纯黑 #1C1B1F），替代程序化生成的渐变+浮动方块
-        GLES20.glClearColor(WORLD_BG[0], WORLD_BG[1], WORLD_BG[2], 1f);
+        GLES20.glClearColor(WORLD_BG[0], WORLD_BG[1], WORLD_BG[2], 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
     }
 
@@ -1396,7 +1418,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float panelAlpha = t;
 
         GLES20.glDisable(GLES20.GL_DEPTH_TEST);
-        GLES20.glClearColor(WORLD_BG[0], WORLD_BG[1], WORLD_BG[2], 1f);
+        GLES20.glClearColor(WORLD_BG[0], WORLD_BG[1], WORLD_BG[2], 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
         panelX = screenW / 2f - panelW / 2f;

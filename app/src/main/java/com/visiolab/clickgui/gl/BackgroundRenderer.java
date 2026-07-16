@@ -25,6 +25,20 @@ public class BackgroundRenderer {
     private float texScaleU = 1f, texScaleV = 1f;
     private int imgW = 1, imgH = 1;
 
+    /** 获取模块 AssetManager（Xposed 注入模式） */
+    private android.content.res.AssetManager getModuleAssets(Context ctx) {
+        try {
+            Class<?> mrl = Class.forName("com.visiolab.clickgui.xposed.ModuleResourceLoader");
+            java.lang.reflect.Method getAssets = mrl.getMethod("getAssets");
+            java.lang.reflect.Method isInit = mrl.getMethod("isInitialized");
+            if ((boolean) isInit.invoke(null)) {
+                android.content.res.AssetManager am = (android.content.res.AssetManager) getAssets.invoke(null);
+                if (am != null) return am;
+            }
+        } catch (Throwable e) { /* 非注入模式 */ }
+        return ctx.getAssets();
+    }
+
     private static final String VERT =
             "precision mediump float;\n" +
             "uniform vec2 uScreenSize;\n" +
@@ -57,7 +71,9 @@ public class BackgroundRenderer {
         if (textureId != 0) return; // 只加载一次
 
         try {
-            InputStream is = ctx.getAssets().open(assetPath);
+            // 优先使用模块资源（Xposed 注入模式）
+            android.content.res.AssetManager am = getModuleAssets(ctx);
+            InputStream is = am.open(assetPath);
             Bitmap bitmap = BitmapFactory.decodeStream(is);
             is.close();
 
