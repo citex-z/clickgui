@@ -157,10 +157,5 @@ public class OverlayManager {
             }
         }
 
-        @Override
-        public boolean onInterceptTouchEvent(MotionEvent ev) {
-            // 捕获模式下拦截所有触摸事件
-            return !passthrough;
-        }
     }
 }
