@@ -20,7 +20,7 @@ public class HotkeyItem {
     public transient boolean dragging = false;
     public transient boolean pressed = false;
     public transient float pressAnim = 0f; // 按压缩放动画
-    public transient float clickFlash = 0f; // 点击闪烁动画 0→1→0
+    public transient float clickScale = 1f; // 点击缩放动画：点击时设为0，恢复到1
 
     public HotkeyItem(String displayText, String boundModuleName) {
         this.displayText = displayText;

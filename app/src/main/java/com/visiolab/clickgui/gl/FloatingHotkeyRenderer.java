@@ -92,10 +92,14 @@ public class FloatingHotkeyRenderer {
             // 宽度 = max(文字+padding, 最小宽度) 保证模块间宽差不大
             float btnW = Math.max(textW + padW * 2f, BTN_MIN_WIDTH * s);
 
-            // 按压缩放动画
+            // 按压+点击缩放动画
+            // pressAnim: 持续按住时 0→1
             float targetPress = (hk.pressed || hk.dragging) ? 1f : 0f;
             hk.pressAnim += (targetPress - hk.pressAnim) * Math.min(1f, dt * 12f);
-            float scale = 1f - hk.pressAnim * 0.06f;
+            // clickScale: 点击后 1→0.88→1 弹回（0.3s）
+            hk.clickScale = Math.min(1f, hk.clickScale + dt * 3.5f); // 0→1 恢复
+            float clickShrink = (1f - hk.clickScale) * 0.12f; // 最大缩12%
+            float scale = 1f - hk.pressAnim * 0.06f - clickShrink;
             float drawW = btnW * scale;
             float drawH = btnH * scale;
             float offsetX = (btnW - drawW) / 2f;
@@ -114,9 +118,6 @@ public class FloatingHotkeyRenderer {
                         new float[]{0f, 0f, 0f, shadowAlpha});
             }
 
-            // 点击闪烁动画：clickFlash 从 1→0 衰减
-            hk.clickFlash = Math.max(0f, hk.clickFlash - dt * 4f); // 0.25s 衰减
-
             // 开启状态颜色
             float[] enabledColor = new float[]{0.18f, 0.46f, 0.58f, alpha}; // 主题蓝
             float borderWidth = 1.5f * s; // 细描边
@@ -134,12 +135,6 @@ public class FloatingHotkeyRenderer {
                 // 内圈：重新画背景覆盖中间，只留边框
                 quad.addRect(x, y, drawW, drawH, btnR,
                         new float[]{0.22f, 0.22f, 0.22f, 0.90f * alpha});
-            }
-
-            // 点击闪烁：白色快速覆盖
-            if (hk.clickFlash > 0.01f) {
-                quad.addRect(x, y, drawW, drawH, btnR,
-                        new float[]{1f, 1f, 1f, hk.clickFlash * 0.3f * alpha});
             }
 
             // 文字居中 — 偏移修正
@@ -247,7 +242,7 @@ public class FloatingHotkeyRenderer {
                         draggingItem.dragging = false;
                     } else {
                         // 点击切换模块
-                        draggingItem.clickFlash = 1f; // 触发闪烁
+                        draggingItem.clickScale = 0f; // 触发缩放弹回
                         ModuleItem m = findModule(draggingItem.boundModuleName);
                         if (m != null) {
                             m.enabled = !m.enabled;
