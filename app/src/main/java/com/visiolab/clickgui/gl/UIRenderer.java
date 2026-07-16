@@ -381,6 +381,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private final QuadBatch quad = new QuadBatch();
     private final TextRenderer text = new TextRenderer();
     private final BlurPipeline blur = new BlurPipeline();
+    private final ScreenCapture screenCapture = new ScreenCapture();
+    private boolean captureRequested = false; // 是否已请求截屏
     private DynamicIslandRenderer dynamicIsland;
     private FloatingHotkeyRenderer floatingHotkeys;
     private boolean hotkeyEditorOpen = false; // 快捷键编辑器是否打开
@@ -665,6 +667,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         text.init();
         blur.init();
         loginRenderer.init(quad, text, blur);
+        // 初始化屏幕截图工具
+        screenCapture.setActivity(context instanceof android.app.Activity ? (android.app.Activity) context : null);
         // 初始化音效
         com.visiolab.clickgui.audio.SoundManager.getInstance().init(context);
         // 获取 AssetManager：优先使用模块资源加载器（Xposed 注入模式）
@@ -1458,10 +1462,24 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             return; // 跳过面板渲染
         }
 
-        // 面板打开时：画半透明遮罩让游戏变暗
+        // 面板打开时：截屏 + 高斯模糊背景
         if (t > 0.01f && !loginActive) {
-            quad.addRect(0, 0, screenW, screenH, 0, new float[]{0f, 0f, 0f, 0.4f * t});
-            quad.flush(screenW, screenH);
+            // 面板刚打开时请求截屏（只请求一次）
+            if (!captureRequested) {
+                captureRequested = true;
+                screenCapture.requestCapture();
+            }
+            // 检查截屏是否就绪，上传到 GL 纹理
+            screenCapture.uploadToGl();
+
+            // 如果有截屏纹理，画高斯模糊背景
+            if (screenCapture.hasTexture()) {
+                blur.drawBlurredFullscreen(screenCapture.getTexture(), t, (int) screenW, (int) screenH);
+            } else {
+                // 截屏还没准备好，先用半透明黑色过渡
+                quad.addRect(0, 0, screenW, screenH, 0, new float[]{0f, 0f, 0f, 0.4f * t});
+                quad.flush(screenW, screenH);
+            }
         }
 
         panelX = screenW / 2f - panelW / 2f;
@@ -2774,6 +2792,9 @@ private void drawFloatingBall() {
                     guiOpen = !guiOpen;
                     if (!guiOpen) {
                         overlayOpenness.setTarget(0f); // 关闭整个面板时同时关闭弹窗
+                        // 清除截屏纹理，下次打开时重新截取
+                        screenCapture.clear();
+                        captureRequested = false;
                     } else {
                         openElapsedSec = 0f; // 重新打开：错落进场动画从头开始播
                     }

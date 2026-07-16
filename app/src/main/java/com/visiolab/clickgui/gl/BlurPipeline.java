@@ -278,6 +278,76 @@ public class BlurPipeline {
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
     }
 
+    /**
+     * 模糊一个外部纹理（如 PixelCopy 截屏），并将模糊结果全屏绘制到屏幕上。
+     * @param srcTexture 源纹理 ID
+     * @param alpha 绘制透明度（跟随面板打开动画）
+     * @param screenW 屏幕宽
+     * @param screenH 屏幕高
+     */
+    public void drawBlurredFullscreen(int srcTexture, float alpha, int screenW, int screenH) {
+        if (srcTexture == 0 || alpha <= 0.01f) return;
+
+        // Step 1: 将外部纹理渲染到低分辨率 FBO
+        pingA.bindAndSetViewport();
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glClearColor(0f, 0f, 0f, 0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+
+        // 用 blur shader 的 vertex 做一次简单拷贝（dir=0 时退化为直接采样）
+        // 但 blur shader 需要正确的 texel offset，这里直接用一个 fullscreen pass
+        GLES20.glUseProgram(blurProgram);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTexture);
+        GLES20.glUniform1i(bUTex, 0);
+        GLES20.glUniform2f(bUDir, 0f, 0f);
+        GLES20.glUniform2f(bUTexel, 1f / pingA.width, 1f / pingA.height);
+        fullscreenQuad.position(0);
+        GLES20.glEnableVertexAttribArray(bAPos);
+        GLES20.glVertexAttribPointer(bAPos, 2, GLES20.GL_FLOAT, false, 16, fullscreenQuad);
+        fullscreenQuad.position(2);
+        GLES20.glEnableVertexAttribArray(bAUV);
+        GLES20.glVertexAttribPointer(bAUV, 2, GLES20.GL_FLOAT, false, 16, fullscreenQuad);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6);
+        GLES20.glDisableVertexAttribArray(bAPos);
+        GLES20.glDisableVertexAttribArray(bAUV);
+
+        // Step 2: 多轮高斯模糊
+        for (int i = 0; i < 3; i++) {
+            blurPass(pingA.texture, pingB, 1f, 0f);
+            blurPass(pingB.texture, pingA, 0f, 1f);
+        }
+
+        // Step 3: 全屏绘制模糊纹理
+        FrameBuffer.bindScreen(screenW, screenH);
+        GLES20.glEnable(GLES20.GL_BLEND);
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+
+        // 用 glow shader 直接输出纹理颜色
+        GLES20.glUseProgram(glowColorProgram);
+        GLES20.glUniform2f(gcUScreenSize, screenW, screenH);
+        GLES20.glUniform1f(gcUIntensity, alpha);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, pingA.texture);
+        GLES20.glUniform1i(gcUTex, 0);
+
+        float[] verts = {
+                0, 0, screenW, 0, 0, screenH,
+                screenW, 0, screenW, screenH, 0, screenH,
+        };
+        java.nio.ByteBuffer bb = java.nio.ByteBuffer.allocateDirect(verts.length * 4);
+        bb.order(java.nio.ByteOrder.nativeOrder());
+        java.nio.FloatBuffer fb = bb.asFloatBuffer();
+        fb.put(verts);
+        fb.position(0);
+
+        GLES20.glEnableVertexAttribArray(gcAPos);
+        GLES20.glVertexAttribPointer(gcAPos, 2, GLES20.GL_FLOAT, false, 8, fb);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6);
+        GLES20.glDisableVertexAttribArray(gcAPos);
+    }
+
     public void captureAndBlur(SceneDrawer scene) {
         pingA.bindAndSetViewport();
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
