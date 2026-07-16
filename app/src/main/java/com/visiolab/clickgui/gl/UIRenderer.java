@@ -2658,8 +2658,10 @@ private void drawFloatingBall() {
             return;
         }
 
-        // 悬浮快捷键：优先处理（在 ClickGUI 之上）
-        if (floatingHotkeys != null) {
+        // 悬浮快捷键：面板关闭时才处理触摸（面板打开时快捷键不响应点击）
+        if (guiOpen && openness.get() > 0.5f) {
+            // 面板打开中，跳过快捷键触摸处理
+        } else if (floatingHotkeys != null) {
             if (floatingHotkeys.onTouchEvent(event, uiScale, (int) screenW, (int) screenH)) {
                 return; // 事件被快捷键消费
             }
