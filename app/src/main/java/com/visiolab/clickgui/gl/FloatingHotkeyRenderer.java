@@ -21,9 +21,9 @@ public class FloatingHotkeyRenderer {
     private final TextRenderer text;
 
     // 尺寸常量
-    private static final float BTN_HEIGHT = 28f;      // 按钮高度
-    private static final float BTN_PADDING = 14f;      // 文字左右内边距
-    private static final float BTN_RADIUS = 8f;        // 圆角（圆角矩形，非药丸）
+    private static final float BTN_HEIGHT = 36f;      // 按钮高度（更大）
+    private static final float BTN_PADDING = 18f;      // 文字左右内边距（更大）
+    private static final float BTN_RADIUS = 8f;        // 圆角（圆角矩形）
     private static final float DRAG_THRESHOLD = 8f;    // 移动超过这个距离才算拖动
 
     // 拖动状态
@@ -112,19 +112,16 @@ public class FloatingHotkeyRenderer {
                         new float[]{0f, 0f, 0f, shadowAlpha});
             }
 
-            // 背景：灰黑圆角矩形（开启时主题色高亮）
-            if (moduleEnabled) {
-                quad.addRect(x, y, drawW, drawH, btnR,
-                        new float[]{0.15f, 0.42f, 0.58f, 0.92f * alpha}); // 主题蓝
-            } else {
-                quad.addRect(x, y, drawW, drawH, btnR,
-                        new float[]{0.25f, 0.25f, 0.25f, 0.88f * alpha}); // 灰黑
-            }
+            // 背景：统一灰黑圆角矩形（不随开关变化）
+            quad.addRect(x, y, drawW, drawH, btnR,
+                    new float[]{0.22f, 0.22f, 0.22f, 0.90f * alpha});
 
-            // 文字居中
+            // 文字居中 — 颜色辨识开关：开启=白色，关闭=灰色
             float textX = x + (drawW - textW) / 2f;
             float textY = y + (drawH - fontSize) / 2f - 1f * s;
-            float[] textColor = new float[]{1f, 1f, 1f, alpha}; // 始终白色
+            float[] textColor = moduleEnabled
+                    ? new float[]{1f, 1f, 1f, alpha}          // 开启：白色
+                    : new float[]{0.45f, 0.45f, 0.45f, alpha}; // 关闭：灰色
             text.draw(displayText, textX, textY, fontSize, textColor, sw, sh);
         }
 

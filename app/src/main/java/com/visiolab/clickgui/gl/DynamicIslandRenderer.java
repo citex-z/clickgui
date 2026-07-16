@@ -35,7 +35,7 @@ public class DynamicIslandRenderer {
     // 原版常量
     private static final float ISLAND_Y = 15f;       // 距顶部偏移（原版固定值）
     private static final float CORNER_RADIUS = 10.5f; // 原版圆角
-    private static final float CONTENT_WIDTH_BASE = 50f; // 图标区基础宽度
+    private static final float CONTENT_WIDTH_BASE = 38f; // 图标区基础宽度（收窄减少空余）
     private static final float CONTENT_HEIGHT = 40f;  // 单条内容高度
     private static final float DEFAULT_TEXT_PAD = 16f; // 默认状态左右内边距
 

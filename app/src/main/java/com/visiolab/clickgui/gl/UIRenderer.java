@@ -275,9 +275,11 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         spawnToast(text);
     }
 
-    /** 检查模块冲突，触发灵动岛警告 */
-    private void checkModuleConflicts() {
+    /** 检查模块冲突，触发灵动岛警告。只在切换 KillAura 或 Scaffold 时调用 */
+    private void checkModuleConflicts(String toggledModuleName) {
         if (dynamicIsland == null) return;
+        // 只在切换 KillAura 或 Scaffold 时检测
+        if (!"KillAura".equals(toggledModuleName) && !"Scaffold".equals(toggledModuleName)) return;
         boolean scaffoldOn = false, killAuraOn = false;
         for (Category c : categories) {
             for (ModuleItem m : c.modules) {
@@ -983,33 +985,41 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         final float sFontSize = fontSize, sRowH = rowH, sBarH = barH, sMarginTop = marginTop, sMarginRight = marginRight, sTextPad = textPad;
         final float sSpread = shadowSpread;
         blur.captureAndBlurTransparent(() -> {
+            float cumY = sMarginTop;
             for (int i = 0; i < shadowModules.size(); i++) {
                 ModuleItem m = shadowModules.get(i);
                 float a = Math.max(0f, Math.min(1f, m.hudAnim.get()));
-                if (a <= 0.01f) continue;
-                float rowY = sMarginTop + i * sRowH;
+                if (a <= 0.01f) { cumY += 0; continue; }
+                float rowY = cumY;
                 float tw = text.measure(shadowLines.get(i), sFontSize);
                 float slideOffset = (1f - Anim.backEaseOut(a)) * 24f * uiScale;
                 float barW = tw + sTextPad * 2f;
                 float barX = screenW - sMarginRight - barW + slideOffset;
-                // 扩散范围：把源形状往四周扩大一点再模糊，散得更开；X/Y偏移单独控制阴影的整体位置
+                // 扩散范围
                 quad.addRect(barX + shadowShiftX - sSpread, rowY + shadowShiftY - sSpread,
                         barW + sSpread * 2f, sBarH + sSpread * 2f, sSpread, new float[]{1f, 1f, 1f, a});
+                // 累积偏移：每行贡献 rowH * a，模块退出时逐渐释放空间
+                cumY += sRowH * a;
             }
             quad.flush(screenW, screenH);
         });
         blur.drawGlow(new float[]{0f, 0f, 0f, 0.7f}, screenW, screenH);
 
         // ---- 条形本体 ----
-        // 玻璃镂空模式：不画任何遮色，而是用 scissor 只在每条的范围内重新画一遍干净的背景场景，
-        // 把刚才那层阴影"擦掉"露出真实背景——这样条形内部完全通透无色，只有边缘的模糊阴影可见，
-        // 是真正的"镂空玻璃"效果，不是拿半透明白色去冒充。
-        // 关掉之后退回传统的半透明毛玻璃条（不透明度可调）。
+        // 使用累积Y偏移：模块进入/退出时，下方模块平滑补位
+        float cumY = marginTop;
+        float[] rowYs = new float[sortedModules.size()];
+        for (int i = 0; i < sortedModules.size(); i++) {
+            ModuleItem m = sortedModules.get(i);
+            float a = Math.max(0f, Math.min(1f, m.hudAnim.get()));
+            rowYs[i] = cumY;
+            cumY += rowH * a; // 累积偏移
+        }
         for (int i = 0; i < sortedModules.size(); i++) {
             ModuleItem m = sortedModules.get(i);
             float a = Math.max(0f, Math.min(1f, m.hudAnim.get()));
             if (a <= 0.01f) continue;
-            float rowY = marginTop + i * rowH;
+            float rowY = rowYs[i];
             float tw = text.measure(sortedLines.get(i), fontSize);
             float slideOffset = (1f - Anim.backEaseOut(a)) * 24f * uiScale;
             float barW = tw + textPad * 2f;
@@ -1027,40 +1037,41 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         }
         if (!glassMode) quad.flush(screenW, screenH);
 
-        // ---- 竖线连接：紧贴在所有条形的右侧，画一条带渐变的竖线，把开启的模块串起来 ----
+        // ---- 竖线连接 ----
         if (showLine) {
-            int visCount = 0;
-            for (int i = 0; i < sortedModules.size(); i++) {
-                ModuleItem m = sortedModules.get(i);
-                float a = Math.max(0f, Math.min(1f, m.hudAnim.get()));
-                if (a <= 0.01f) continue;
-                visCount++;
-            }
-            if (visCount > 0) {
-                float lineX = screenW - marginRight; // 紧贴条形右边缘，中间零间隙
-                float lineTop = marginTop; // 跟第一条的顶部对齐
-                float lineBottom = marginTop + visCount * rowH; // 跟最后一条的底部对齐
+            float lineTop = marginTop;
+            float lineBottom = cumY; // 使用累积偏移作为底部
+            if (lineBottom > lineTop) {
+                float lineX = screenW - marginRight;
                 float lineH = Math.max(2f * uiScale, lineBottom - lineTop);
-                float[] topCol = arrayListRowColor(0, visCount);
-                float[] botCol = arrayListRowColor(Math.max(0, visCount - 1), visCount);
-                quad.addRectGradient(lineX, lineTop, lineW, lineH, 1.2f * uiScale,
-                        topCol, topCol, botCol, botCol);
-                quad.flush(screenW, screenH);
+                int visCount = 0;
+                for (int i = 0; i < sortedModules.size(); i++) {
+                    ModuleItem m = sortedModules.get(i);
+                    float a = Math.max(0f, Math.min(1f, m.hudAnim.get()));
+                    if (a > 0.01f) visCount++;
+                }
+                if (visCount > 0) {
+                    float[] topCol = arrayListRowColor(0, visCount);
+                    float[] botCol = arrayListRowColor(Math.max(0, visCount - 1), visCount);
+                    quad.addRectGradient(lineX, lineTop, lineW, lineH, 1.2f * uiScale,
+                            topCol, topCol, botCol, botCol);
+                    quad.flush(screenW, screenH);
+                }
             }
         }
 
-        // ---- 文字：条形内垂直居中，右对齐并留出内边距，绝不会超出条形范围 ----
+        // ---- 文字 ----
         for (int i = 0; i < sortedModules.size(); i++) {
             ModuleItem m = sortedModules.get(i);
             float a = Math.max(0f, Math.min(1f, m.hudAnim.get()));
             if (a <= 0.01f) continue;
 
-            float rowY = marginTop + i * rowH;
+            float rowY = rowYs[i];
             String line = sortedLines.get(i);
             float tw = text.measure(line, fontSize);
             float slideOffset = (1f - Anim.backEaseOut(a)) * 24f * uiScale;
             float tx = screenW - marginRight - textPad - tw + slideOffset;
-            float ty = rowY + (barH - fontSize) / 2f; // 垂直居中
+            float ty = rowY + (barH - fontSize) / 2f;
 
             float[] col = arrayListRowColor(i, sortedModules.size());
             text.draw(line, tx, ty, fontSize, new float[]{col[0], col[1], col[2], a}, screenW, screenH);
@@ -1372,7 +1383,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 spawnModuleToast(m.name, m.enabled);
                 com.visiolab.nativebridge.ModuleHook.onToggle(m);
                 if (dynamicIsland != null) dynamicIsland.addModuleToggle(m.name, m.enabled);
-                checkModuleConflicts();
+                checkModuleConflicts(m.name);
             });
         }
         floatingHotkeys.setCategories(categories);
@@ -1531,23 +1542,23 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float decorH = 3f * uiScale;
         quad.addRect(trackX, startY + groupContentH - decorH, trackW, decorH, 0f, withAlpha(ACCENT_1, alpha * 0.3f));
 
-        // --- "Enabled" 开关行 + Assign Hotkey 按钮（同一行） ---
+        // --- "Enabled" 开关行 + Hotkey 按钮（同一行） ---
         float toggleW = 44f * uiScale, toggleH = 22f * uiScale;
         float toggleX = trackX + trackW - pad - toggleW;
         float toggleY = curY + rowH / 2f - toggleH / 2f;
-        // Assign Hotkey 小按钮：放在 toggle 左侧
+        // Hotkey 按钮：放在 toggle 左侧
         float hkBtnH2 = 22f * uiScale;
         float hkBtnGap = 8f * uiScale;
-        float hkBtnW2 = 100f * uiScale;
+        float hkBtnW2 = 110f * uiScale;
         float hkBtnX2 = toggleX - pad - hkBtnW2 - hkBtnGap;
         float hkBtnY2 = curY + rowH / 2f - hkBtnH2 / 2f;
         // 检查是否已有快捷键
         boolean hasHotkey = com.visiolab.clickgui.hotkey.HotkeyManager.getInstance().hasHotkeyForModule(m.name);
         float[] hkBgColor = hasHotkey
-                ? withAlpha(ACCENT_1, alpha * 0.3f)
+                ? withAlpha(ACCENT_1, alpha * 0.25f)
                 : withAlpha(SOUTH_MODULE_BG, alpha);
         quad.addRect(hkBtnX2, hkBtnY2, hkBtnW2, hkBtnH2, 6f * uiScale, hkBgColor);
-        String hkLabel2 = hasHotkey ? "Hotkey: ON" : "Hotkey";
+        String hkLabel2 = hasHotkey ? "Hotkey: ON" : "Enable Hotkey";
         float hkFontSize2 = 11f * uiScale;
         float hkTextW2 = text.measure(hkLabel2, hkFontSize2);
         float hkTextX2 = hkBtnX2 + (hkBtnW2 - hkTextW2) / 2f;
@@ -2667,7 +2678,7 @@ private void drawFloatingBall() {
                     spawnModuleToast(activeConfigModule.name, activeConfigModule.enabled);
                     com.visiolab.nativebridge.ModuleHook.onToggle(activeConfigModule);
                     if (dynamicIsland != null) dynamicIsland.addModuleToggle(activeConfigModule.name, activeConfigModule.enabled);
-                    checkModuleConflicts();
+                    checkModuleConflicts(activeConfigModule.name);
                     // Scaffold 搭路：开关时显示进度条提示
                     if (activeConfigModule.name.equals("Scaffold")) {
                         if (activeConfigModule.enabled) {
@@ -2998,7 +3009,7 @@ private void drawFloatingBall() {
                         spawnModuleToast(tm.name, tm.enabled);
                         com.visiolab.nativebridge.ModuleHook.onToggle(tm);
                         if (dynamicIsland != null) dynamicIsland.addModuleToggle(tm.name, tm.enabled);
-                        checkModuleConflicts();
+                        checkModuleConflicts(tm.name);
                         // Scaffold 搭路：开关时显示进度条提示
                         if (tm.name.equals("Scaffold")) {
                             if (tm.enabled) {
