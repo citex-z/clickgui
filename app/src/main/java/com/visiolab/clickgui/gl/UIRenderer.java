@@ -1397,6 +1397,14 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 com.visiolab.nativebridge.ModuleHook.onToggle(m);
                 if (dynamicIsland != null) dynamicIsland.addModuleToggle(m.name, m.enabled);
                 checkModuleConflicts(m.name);
+                // Scaffold 搭路：快捷键切换时也显示进度条提示
+                if (m.name.equals("Scaffold")) {
+                    if (m.enabled) {
+                        dynamicIsland.addProgress("Scaffold Toggled", "Placing blocks...", 0.3f);
+                    } else {
+                        dynamicIsland.removeProgress("Scaffold Toggled");
+                    }
+                }
             });
         }
         floatingHotkeys.setCategories(categories);
@@ -1560,9 +1568,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float toggleX = trackX + trackW - pad - toggleW;
         float toggleY = curY + rowH / 2f - toggleH / 2f;
         // Hotkey 按钮：放在 toggle 左侧
-        float hkBtnH2 = 22f * uiScale;
+        float hkBtnH2 = 24f * uiScale;
         float hkBtnGap = 8f * uiScale;
-        float hkBtnW2 = 110f * uiScale;
+        float hkBtnW2 = 120f * uiScale;
         float hkBtnX2 = toggleX - pad - hkBtnW2 - hkBtnGap;
         float hkBtnY2 = curY + rowH / 2f - hkBtnH2 / 2f;
         // 检查是否已有快捷键
@@ -1572,10 +1580,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 : withAlpha(SOUTH_MODULE_BG, alpha);
         quad.addRect(hkBtnX2, hkBtnY2, hkBtnW2, hkBtnH2, 6f * uiScale, hkBgColor);
         String hkLabel2 = hasHotkey ? "Hotkey: ON" : "Enable Hotkey";
-        float hkFontSize2 = 11f * uiScale;
+        float hkFontSize2 = 10f * uiScale;
         float hkTextW2 = text.measure(hkLabel2, hkFontSize2);
         float hkTextX2 = hkBtnX2 + (hkBtnW2 - hkTextW2) / 2f;
-        float hkTextY2 = hkBtnY2 + (hkBtnH2 - hkFontSize2) / 2f - 1f * uiScale;
+        float hkTextY2 = hkBtnY2 + (hkBtnH2 - hkFontSize2) / 2f;
         text.draw(hkLabel2, hkTextX2, hkTextY2, hkFontSize2, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         assignHotkeyRect = new float[]{hkBtnX2, hkBtnY2, hkBtnW2, hkBtnH2};
         configToggleRect = new float[]{toggleX, toggleY, toggleW, toggleH};

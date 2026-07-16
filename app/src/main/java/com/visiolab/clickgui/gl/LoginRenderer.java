@@ -175,7 +175,7 @@ public class LoginRenderer {
 
         // 4. 进度条 — 标题下方（视觉中心），加粗 + 柔光
         float barW = Math.min(sw * 0.5f, 500f);
-        float barH = 8f;
+        float barH = 12f; // 加粗进度条
         float barX = cx - barW / 2f;
         float barY = cy + titleSize * 1.2f;
         // 背景

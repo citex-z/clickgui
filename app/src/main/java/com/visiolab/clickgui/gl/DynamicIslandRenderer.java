@@ -260,12 +260,20 @@ public class DynamicIslandRenderer {
             targetWidth = nameW + defW + defIconW + DEFAULT_TEXT_PAD * s;
             targetHeight = 20f * s; // 默认药丸高度
         } else {
-            // 有内容：取最大宽度 + 总高度（不加额外 padding，原版直接用 getMaxWidth/getTotalHeight）
+            // 有内容：取最大宽度 + 总高度（退出时高度逐渐缩小，上方平滑跟随）
             float maxW = 0f;
             float totalH = 0f;
             for (IslandContent ic : contents) {
+                TimedContent tc = ic.timedContent;
                 if (ic.width > maxW) maxW = ic.width;
-                totalH += ic.height;
+                // 退出淡出时高度逐渐缩小
+                long elapsed = tc.timer.getTime();
+                float hFactor = 1f;
+                if (elapsed > tc.time) {
+                    float exitProgress = (elapsed - tc.time) / 300f;
+                    hFactor = Math.max(0f, 1f - exitProgress);
+                }
+                totalH += ic.height * hFactor;
             }
             targetWidth = maxW;
             targetHeight = totalH;
@@ -564,7 +572,8 @@ public class DynamicIslandRenderer {
                             new float[]{0.85f, 0.85f, 0.85f, contentAlpha}, sw, sh);
                 }
 
-                contentY += ic.height;
+                // 退出时高度逐渐缩小，上方内容平滑跟随
+                contentY += ic.height * fadeAlpha;
             }
         }
 

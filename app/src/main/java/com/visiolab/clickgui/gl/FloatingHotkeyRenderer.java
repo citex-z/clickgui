@@ -21,9 +21,9 @@ public class FloatingHotkeyRenderer {
     private final TextRenderer text;
 
     // 尺寸常量
-    private static final float BTN_HEIGHT = 44f;      // 按钮高度（手机适配，更大）
+    private static final float BTN_HEIGHT = 44f;      // 按钮高度（固定）
+    private static final float BTN_WIDTH = 120f;      // 按钮宽度（固定）
     private static final float BTN_PADDING = 16f;      // 文字左右内边距
-    private static final float BTN_MIN_WIDTH = 90f;   // 最小宽度（避免模块间宽差太大）
     private static final float BTN_RADIUS = 10f;      // 圆角
     private static final float DRAG_THRESHOLD = 8f;  // 移动超过这个距离才算拖动
 
@@ -81,24 +81,20 @@ public class FloatingHotkeyRenderer {
 
         for (HotkeyItem hk : mgr.getHotkeys()) {
             float s = uiScale;
-            float fontSize = 14f * s; // 更大字体适配手机
-            float padW = BTN_PADDING * s;
+            float fontSize = 13f * s;
             float btnH = BTN_HEIGHT * s;
+            float btnW = BTN_WIDTH * s; // 固定宽度
             float btnR = BTN_RADIUS * s;
 
             // 文字：小写
             String displayText = hk.displayText.toLowerCase();
             float textW = text.measure(displayText, fontSize);
-            // 宽度 = max(文字+padding, 最小宽度) 保证模块间宽差不大
-            float btnW = Math.max(textW + padW * 2f, BTN_MIN_WIDTH * s);
 
             // 按压+点击缩放动画
-            // pressAnim: 持续按住时 0→1
             float targetPress = (hk.pressed || hk.dragging) ? 1f : 0f;
             hk.pressAnim += (targetPress - hk.pressAnim) * Math.min(1f, dt * 12f);
-            // clickScale: 点击后 1→0.88→1 弹回（0.3s）
-            hk.clickScale = Math.min(1f, hk.clickScale + dt * 3.5f); // 0→1 恢复
-            float clickShrink = (1f - hk.clickScale) * 0.12f; // 最大缩12%
+            hk.clickScale = Math.min(1f, hk.clickScale + dt * 3.5f);
+            float clickShrink = (1f - hk.clickScale) * 0.12f;
             float scale = 1f - hk.pressAnim * 0.06f - clickShrink;
             float drawW = btnW * scale;
             float drawH = btnH * scale;
@@ -108,42 +104,36 @@ public class FloatingHotkeyRenderer {
             float x = hk.x + offsetX;
             float y = hk.y + offsetY;
 
-            // 查找绑定模块的开关状态
             boolean moduleEnabled = isModuleEnabled(hk.boundModuleName);
 
             // 拖动时阴影
             if (hk.dragging) {
-                float shadowAlpha = 0.3f * alpha;
                 quad.addRect(x - 3f * s, y + 2f * s, drawW + 6f * s, drawH + 3f * s, btnR,
-                        new float[]{0f, 0f, 0f, shadowAlpha});
+                        new float[]{0f, 0f, 0f, 0.3f * alpha});
             }
 
-            // 开启状态颜色
-            float[] enabledColor = new float[]{0.18f, 0.46f, 0.58f, alpha}; // 主题蓝
-            float borderWidth = 1.5f * s; // 细描边
-
-            // 背景：灰黑圆角矩形
+            // 背景：很浅的半透明黑色圆角矩形
             quad.addRect(x, y, drawW, drawH, btnR,
-                    new float[]{0.20f, 0.20f, 0.20f, 0.90f * alpha});
+                    new float[]{0f, 0f, 0f, 0.35f * alpha});
 
-            // 开启状态：细描边（外圈稍大 + 主色填充 → 形成边框效果）
+            // 开启状态：主题色边框
             if (moduleEnabled) {
+                float bw = 2f * s; // 边框宽度
                 // 外圈：主题色
-                quad.addRect(x - borderWidth, y - borderWidth,
-                        drawW + borderWidth * 2f, drawH + borderWidth * 2f, btnR + borderWidth,
-                        new float[]{enabledColor[0], enabledColor[1], enabledColor[2], 0.85f * alpha});
-                // 内圈：重新画背景覆盖中间，只留边框
+                quad.addRect(x - bw, y - bw, drawW + bw * 2f, drawH + bw * 2f, btnR + bw,
+                        new float[]{0.18f, 0.46f, 0.58f, 0.85f * alpha});
+                // 内圈：重新画背景
                 quad.addRect(x, y, drawW, drawH, btnR,
-                        new float[]{0.22f, 0.22f, 0.22f, 0.90f * alpha});
+                        new float[]{0f, 0f, 0f, 0.35f * alpha});
             }
 
-            // 文字居中 — 垂直居中于按钮
+            // 文字居中
             float textX = x + (drawW - textW) / 2f;
-            // TextRenderer 的 gy = y - (height - bearingY)
-            // 所以 y 应该是期望的文字顶部位置，简单用 fontSize 居中
             float textY = y + (drawH - fontSize) / 2f;
-            // 文字颜色：始终白色
-            float[] textColor = new float[]{1f, 1f, 1f, alpha};
+            // 文字颜色：开启=主题色亮色，关闭=白色
+            float[] textColor = moduleEnabled
+                    ? new float[]{0.35f, 0.70f, 0.85f, alpha}  // 主题蓝亮色
+                    : new float[]{1f, 1f, 1f, alpha};             // 白色
             text.draw(displayText, textX, textY, fontSize, textColor, sw, sh);
         }
 
@@ -187,15 +177,13 @@ public class FloatingHotkeyRenderer {
         int action = event.getActionMasked();
         float s = uiScale;
         float btnH = BTN_HEIGHT * s;
-        float fontSize = 14f * s; // 更大字体适配手机
+        float fontSize = 13f * s;
 
         switch (action) {
             case MotionEvent.ACTION_DOWN: {
                 for (int i = mgr.getHotkeys().size() - 1; i >= 0; i--) {
                     HotkeyItem hk = mgr.getHotkeys().get(i);
-                    String displayText = hk.displayText.toLowerCase();
-                    float textW = text.measure(displayText, fontSize);
-                    float btnW = Math.max(textW + BTN_PADDING * s * 2f, BTN_MIN_WIDTH * s);
+                    float btnW = BTN_WIDTH * s; // 固定宽度
                     if (ex >= hk.x && ex <= hk.x + btnW && ey >= hk.y && ey <= hk.y + btnH) {
                         draggingItem = hk;
                         hk.pressed = true;
@@ -222,9 +210,7 @@ public class FloatingHotkeyRenderer {
                         float newX = ex - dragOffsetX;
                         float newY = ey - dragOffsetY;
                         // 限制在屏幕范围内
-                        String displayText = draggingItem.displayText.toLowerCase();
-                        float textW = text.measure(displayText, fontSize);
-                        float btnW = Math.max(textW + BTN_PADDING * s * 2f, BTN_MIN_WIDTH * s);
+                        float btnW = BTN_WIDTH * s; // 固定宽度
                         newX = Math.max(0, Math.min(newX, screenW - btnW));
                         newY = Math.max(0, Math.min(newY, screenH - btnH));
                         draggingItem.x = newX;
