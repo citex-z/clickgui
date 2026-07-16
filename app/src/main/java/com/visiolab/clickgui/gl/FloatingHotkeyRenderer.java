@@ -114,29 +114,41 @@ public class FloatingHotkeyRenderer {
                         new float[]{0f, 0f, 0f, shadowAlpha});
             }
 
+            // 点击闪烁动画：clickFlash 从 1→0 衰减
+            hk.clickFlash = Math.max(0f, hk.clickFlash - dt * 4f); // 0.25s 衰减
+
+            // 开启状态颜色
+            float[] enabledColor = new float[]{0.18f, 0.46f, 0.58f, alpha}; // 主题蓝
+            float borderWidth = 1.5f * s; // 细描边
+
             // 背景：灰黑圆角矩形
             quad.addRect(x, y, drawW, drawH, btnR,
                     new float[]{0.20f, 0.20f, 0.20f, 0.90f * alpha});
 
-            // 开关指示条：左侧竖条，开启=亮蓝，关闭=暗灰
-            float indicatorW = 3f * s;
-            float indicatorH = drawH * 0.5f;
-            float indicatorX = x + 8f * s;
-            float indicatorY = y + (drawH - indicatorH) / 2f;
+            // 开启状态：细描边（外圈稍大 + 主色填充 → 形成边框效果）
             if (moduleEnabled) {
-                quad.addRect(indicatorX, indicatorY, indicatorW, indicatorH, 1.5f * s,
-                        new float[]{0.18f, 0.46f, 0.58f, alpha}); // 亮蓝
-            } else {
-                quad.addRect(indicatorX, indicatorY, indicatorW, indicatorH, 1.5f * s,
-                        new float[]{0.35f, 0.35f, 0.35f, alpha}); // 暗灰
+                // 外圈：主题色
+                quad.addRect(x - borderWidth, y - borderWidth,
+                        drawW + borderWidth * 2f, drawH + borderWidth * 2f, btnR + borderWidth,
+                        new float[]{enabledColor[0], enabledColor[1], enabledColor[2], 0.85f * alpha});
+                // 内圈：重新画背景覆盖中间，只留边框
+                quad.addRect(x, y, drawW, drawH, btnR,
+                        new float[]{0.22f, 0.22f, 0.22f, 0.90f * alpha});
             }
 
-            // 文字居中 — 偏移修正：文字向上偏以视觉居中
+            // 点击闪烁：白色快速覆盖
+            if (hk.clickFlash > 0.01f) {
+                quad.addRect(x, y, drawW, drawH, btnR,
+                        new float[]{1f, 1f, 1f, hk.clickFlash * 0.3f * alpha});
+            }
+
+            // 文字居中 — 偏移修正
             float textX = x + (drawW - textW) / 2f;
             float textY = y + (drawH - fontSize) / 2f - fontSize * 0.28f;
+            // 文字颜色：开启=主题蓝亮色，关闭=灰
             float[] textColor = moduleEnabled
-                    ? new float[]{1f, 1f, 1f, alpha}          // 开启：白色
-                    : new float[]{0.40f, 0.40f, 0.40f, alpha}; // 关闭：深灰
+                    ? new float[]{0.35f, 0.70f, 0.85f, alpha}  // 亮蓝
+                    : new float[]{0.50f, 0.50f, 0.50f, alpha}; // 灰
             text.draw(displayText, textX, textY, fontSize, textColor, sw, sh);
         }
 
@@ -234,6 +246,8 @@ public class FloatingHotkeyRenderer {
                         mgr.save();
                         draggingItem.dragging = false;
                     } else {
+                        // 点击切换模块
+                        draggingItem.clickFlash = 1f; // 触发闪烁
                         ModuleItem m = findModule(draggingItem.boundModuleName);
                         if (m != null) {
                             m.enabled = !m.enabled;
