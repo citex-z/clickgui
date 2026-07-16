@@ -21,10 +21,11 @@ public class FloatingHotkeyRenderer {
     private final TextRenderer text;
 
     // 尺寸常量
-    private static final float BTN_HEIGHT = 36f;      // 按钮高度（更大）
-    private static final float BTN_PADDING = 18f;      // 文字左右内边距（更大）
-    private static final float BTN_RADIUS = 8f;        // 圆角（圆角矩形）
-    private static final float DRAG_THRESHOLD = 8f;    // 移动超过这个距离才算拖动
+    private static final float BTN_HEIGHT = 44f;      // 按钮高度（手机适配，更大）
+    private static final float BTN_PADDING = 16f;      // 文字左右内边距
+    private static final float BTN_MIN_WIDTH = 90f;   // 最小宽度（避免模块间宽差太大）
+    private static final float BTN_RADIUS = 10f;      // 圆角
+    private static final float DRAG_THRESHOLD = 8f;  // 移动超过这个距离才算拖动
 
     // 拖动状态
     private HotkeyItem draggingItem = null;
@@ -80,7 +81,7 @@ public class FloatingHotkeyRenderer {
 
         for (HotkeyItem hk : mgr.getHotkeys()) {
             float s = uiScale;
-            float fontSize = 12f * s;
+            float fontSize = 14f * s; // 更大字体适配手机
             float padW = BTN_PADDING * s;
             float btnH = BTN_HEIGHT * s;
             float btnR = BTN_RADIUS * s;
@@ -88,7 +89,8 @@ public class FloatingHotkeyRenderer {
             // 文字：小写
             String displayText = hk.displayText.toLowerCase();
             float textW = text.measure(displayText, fontSize);
-            float btnW = textW + padW * 2f;
+            // 宽度 = max(文字+padding, 最小宽度) 保证模块间宽差不大
+            float btnW = Math.max(textW + padW * 2f, BTN_MIN_WIDTH * s);
 
             // 按压缩放动画
             float targetPress = (hk.pressed || hk.dragging) ? 1f : 0f;
@@ -112,16 +114,29 @@ public class FloatingHotkeyRenderer {
                         new float[]{0f, 0f, 0f, shadowAlpha});
             }
 
-            // 背景：统一灰黑圆角矩形（不随开关变化）
+            // 背景：灰黑圆角矩形
             quad.addRect(x, y, drawW, drawH, btnR,
-                    new float[]{0.22f, 0.22f, 0.22f, 0.90f * alpha});
+                    new float[]{0.20f, 0.20f, 0.20f, 0.90f * alpha});
 
-            // 文字居中 — 颜色辨识开关：开启=白色，关闭=灰色
+            // 开关指示条：左侧竖条，开启=亮蓝，关闭=暗灰
+            float indicatorW = 3f * s;
+            float indicatorH = drawH * 0.5f;
+            float indicatorX = x + 8f * s;
+            float indicatorY = y + (drawH - indicatorH) / 2f;
+            if (moduleEnabled) {
+                quad.addRect(indicatorX, indicatorY, indicatorW, indicatorH, 1.5f * s,
+                        new float[]{0.18f, 0.46f, 0.58f, alpha}); // 亮蓝
+            } else {
+                quad.addRect(indicatorX, indicatorY, indicatorW, indicatorH, 1.5f * s,
+                        new float[]{0.35f, 0.35f, 0.35f, alpha}); // 暗灰
+            }
+
+            // 文字居中 — 偏移修正：文字向上偏以视觉居中
             float textX = x + (drawW - textW) / 2f;
-            float textY = y + (drawH - fontSize) / 2f - 1f * s;
+            float textY = y + (drawH - fontSize) / 2f - fontSize * 0.28f;
             float[] textColor = moduleEnabled
                     ? new float[]{1f, 1f, 1f, alpha}          // 开启：白色
-                    : new float[]{0.45f, 0.45f, 0.45f, alpha}; // 关闭：灰色
+                    : new float[]{0.40f, 0.40f, 0.40f, alpha}; // 关闭：深灰
             text.draw(displayText, textX, textY, fontSize, textColor, sw, sh);
         }
 
@@ -165,8 +180,7 @@ public class FloatingHotkeyRenderer {
         int action = event.getActionMasked();
         float s = uiScale;
         float btnH = BTN_HEIGHT * s;
-        float fontSize = 12f * s;
-        float padW = BTN_PADDING * s;
+        float fontSize = 14f * s; // 更大字体适配手机
 
         switch (action) {
             case MotionEvent.ACTION_DOWN: {
@@ -174,7 +188,7 @@ public class FloatingHotkeyRenderer {
                     HotkeyItem hk = mgr.getHotkeys().get(i);
                     String displayText = hk.displayText.toLowerCase();
                     float textW = text.measure(displayText, fontSize);
-                    float btnW = textW + padW * 2f;
+                    float btnW = Math.max(textW + BTN_PADDING * s * 2f, BTN_MIN_WIDTH * s);
                     if (ex >= hk.x && ex <= hk.x + btnW && ey >= hk.y && ey <= hk.y + btnH) {
                         draggingItem = hk;
                         hk.pressed = true;
@@ -203,7 +217,7 @@ public class FloatingHotkeyRenderer {
                         // 限制在屏幕范围内
                         String displayText = draggingItem.displayText.toLowerCase();
                         float textW = text.measure(displayText, fontSize);
-                        float btnW = textW + padW * 2f;
+                        float btnW = Math.max(textW + BTN_PADDING * s * 2f, BTN_MIN_WIDTH * s);
                         newX = Math.max(0, Math.min(newX, screenW - btnW));
                         newY = Math.max(0, Math.min(newY, screenH - btnH));
                         draggingItem.x = newX;

@@ -992,28 +992,27 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 if (a <= 0.01f) { cumY += 0; continue; }
                 float rowY = cumY;
                 float tw = text.measure(shadowLines.get(i), sFontSize);
-                float slideOffset = (1f - Anim.backEaseOut(a)) * 24f * uiScale;
+                float slideOffset = (1f - Anim.backEaseOut(a)) * (m.enabled ? 24f : 120f) * uiScale;
                 float barW = tw + sTextPad * 2f;
                 float barX = screenW - sMarginRight - barW + slideOffset;
-                // 扩散范围
                 quad.addRect(barX + shadowShiftX - sSpread, rowY + shadowShiftY - sSpread,
                         barW + sSpread * 2f, sBarH + sSpread * 2f, sSpread, new float[]{1f, 1f, 1f, a});
-                // 累积偏移：每行贡献 rowH * a，模块退出时逐渐释放空间
-                cumY += sRowH * a;
+                cumY += m.enabled ? sRowH * a : sRowH;
             }
             quad.flush(screenW, screenH);
         });
         blur.drawGlow(new float[]{0f, 0f, 0f, 0.7f}, screenW, screenH);
 
         // ---- 条形本体 ----
-        // 使用累积Y偏移：模块进入/退出时，下方模块平滑补位
+        // 使用累积Y偏移：进入时逐渐占位，退出时保持全高并右滑淡出
         float cumY = marginTop;
         float[] rowYs = new float[sortedModules.size()];
         for (int i = 0; i < sortedModules.size(); i++) {
             ModuleItem m = sortedModules.get(i);
             float a = Math.max(0f, Math.min(1f, m.hudAnim.get()));
             rowYs[i] = cumY;
-            cumY += rowH * a; // 累积偏移
+            // 退出(!enabled)时保持全高，模块右滑淡出而非缩行
+            cumY += m.enabled ? rowH * a : rowH;
         }
         for (int i = 0; i < sortedModules.size(); i++) {
             ModuleItem m = sortedModules.get(i);
@@ -1021,7 +1020,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             if (a <= 0.01f) continue;
             float rowY = rowYs[i];
             float tw = text.measure(sortedLines.get(i), fontSize);
-            float slideOffset = (1f - Anim.backEaseOut(a)) * 24f * uiScale;
+            // 退出时大幅右滑
+            float slideOffset = (1f - Anim.backEaseOut(a)) * (m.enabled ? 24f : 120f) * uiScale;
             float barW = tw + textPad * 2f;
             float barX = screenW - marginRight - barW + slideOffset;
 
@@ -1069,7 +1069,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             float rowY = rowYs[i];
             String line = sortedLines.get(i);
             float tw = text.measure(line, fontSize);
-            float slideOffset = (1f - Anim.backEaseOut(a)) * 24f * uiScale;
+            float slideOffset = (1f - Anim.backEaseOut(a)) * (m.enabled ? 24f : 120f) * uiScale;
             float tx = screenW - marginRight - textPad - tw + slideOffset;
             float ty = rowY + (barH - fontSize) / 2f;
 
