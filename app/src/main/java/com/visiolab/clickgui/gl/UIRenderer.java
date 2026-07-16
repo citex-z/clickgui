@@ -1208,8 +1208,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         float a = Math.max(0f, Math.min(1f, watermarkToggle.hudAnim.get()));
         if (a <= 0.01f) return;
 
-        // 水印文字：只显示 "Rlin b13"，不再显示 FPS/Ping
-        String text2 = "Rlin b13";
+        // 水印文字
+        String text2 = "Rlin B1";
         float fontSize = (14f + (watermarkFontSizeSlider != null ? watermarkFontSizeSlider.sliderValue : 0.45f) * 20f) * uiScale * (wmScaleOpt != null ? (0.5f + wmScaleOpt.sliderValue * 1.5f) : 1f);
         float tx = (watermarkXSlider != null ? watermarkXSlider.sliderValue : 0.1f) * (screenW * 0.4f);
         float ty = (watermarkYSlider != null ? watermarkYSlider.sliderValue : 0.1f) * (screenH * 0.3f);
@@ -2199,7 +2199,7 @@ private void drawFloatingBall() {
             text.drawBold(breadcrumb, x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.5f,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         } else {
-            text.drawBold(t("Rlin", "Rlin") + " b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.5f,
+            text.drawBold(t("Rlin", "Rlin") + " B1", x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.5f,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
             text.draw("\u2190 \u2192 " + Category.localizedCategory(curCat.name, langZh), x + sbW + 80f * uiScale, y + hdrH / 2f - 11f * uiScale * 0.5f,
                     11f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
