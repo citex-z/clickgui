@@ -1007,7 +1007,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 float barX = screenW - sMarginRight - barW + slideOffset;
                 quad.addRect(barX + shadowShiftX - sSpread, rowY + shadowShiftY - sSpread,
                         barW + sSpread * 2f, sBarH + sSpread * 2f, sSpread, new float[]{1f, 1f, 1f, a});
-                cumY += m.enabled ? sRowH * a : sRowH;
+                cumY += m.enabled ? sRowH * a : sRowH * a; // 退出时也释放空间，下方补位
             }
             quad.flush(screenW, screenH);
         });
@@ -1021,8 +1021,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             ModuleItem m = sortedModules.get(i);
             float a = Math.max(0f, Math.min(1f, m.hudAnim.get()));
             rowYs[i] = cumY;
-            // 退出(!enabled)时保持全高，模块右滑淡出而非缩行
-            cumY += m.enabled ? rowH * a : rowH;
+            // 退出时也释放空间，下方平滑补位上滑
+            cumY += rowH * a;
         }
         for (int i = 0; i < sortedModules.size(); i++) {
             ModuleItem m = sortedModules.get(i);
@@ -1933,9 +1933,13 @@ private void drawFloatingBall() {
         float hdrX = x + sbW;
         float hdrW = w - sbW;
 
-        // 标题栏背景
-        quad.addRect(hdrX, y, hdrW, hdrH, 0f, withAlpha(HDR_BG, alpha));
-        quad.addRect(hdrX, y, hdrW, radius, 0f, withAlpha(HDR_BG, alpha));
+        // 标题栏背景（右上角圆角）
+        // 整体用圆角，然后左下角用直角矩形覆盖补齐
+        quad.addRect(hdrX, y, hdrW, hdrH, radius, withAlpha(HDR_BG, alpha));
+        // 左下角补直角
+        quad.addRect(hdrX, y + hdrH - radius, radius, radius, 0f, withAlpha(HDR_BG, alpha));
+        // 左上角补直角（因为左侧连着侧栏，不需要圆角）
+        quad.addRect(hdrX, y, radius, radius, 0f, withAlpha(HDR_BG, alpha));
 
         // 面包屑返回按钮热区（仅在配置页模式下生效；卡片网格模式下置空）
         if (activeConfigModule != null) {

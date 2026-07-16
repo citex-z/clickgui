@@ -234,14 +234,9 @@ public class DynamicIslandRenderer {
             }
 
             // 计算内容尺寸：图标区 + 文字区(自适应文字长度)
-            // text.measure 返回的已经是缩放后的像素值，不需要再乘 s
             float titleW = text.measure(tc.title, 14f * s);
             float descW = text.measure(tc.description, 12f * s);
-            // 图标宽度（轮椅图标 + 间距）
-            float titleIconW = text.getAtlas().isIconFontLoaded()
-                    ? text.getAtlas().measureIcon("f", 13f * s) + 4f * s : 0f;
-            float textW = Math.max(titleW + titleIconW, descW);
-            // CONTENT_WIDTH_BASE 是图标区+padding，不乘 s（文字已经是像素值）
+            float textW = Math.max(titleW, descW);
             float contentW = CONTENT_WIDTH_BASE * s + textW + 8f * s; // 右侧8px padding
             // PROGRESS 类型需要额外高度给进度条
             float contentH = (tc.type == ContentType.PROGRESS ? 50f : CONTENT_HEIGHT) * s;
@@ -258,8 +253,11 @@ public class DynamicIslandRenderer {
             if (showPingOpt != null && showPingOpt.boolValue) defaultText.append(" | ").append(currentPing).append("ms");
             float nameW = text.measure(nameStr, 14f * s);
             float defW = defaultText.length() > 0 ? text.measure(defaultText.toString(), 12f * s) : 0f;
+            // 轮椅图标宽度
+            float defIconW = text.getAtlas().isIconFontLoaded()
+                    ? text.measureIcon('f', 16f * s) + 4f * s : 0f;
             // 不再双重缩放：文字已经是 *s 后的值，padding 只加一次
-            targetWidth = nameW + defW + DEFAULT_TEXT_PAD * s;
+            targetWidth = nameW + defW + defIconW + DEFAULT_TEXT_PAD * s;
             targetHeight = 20f * s; // 默认药丸高度
         } else {
             // 有内容：取最大宽度 + 总高度（不加额外 padding，原版直接用 getMaxWidth/getTotalHeight）
@@ -327,22 +325,33 @@ public class DynamicIslandRenderer {
             String def = defText.toString();
 
             // 原版：图标在 renderX，名称在 renderX+22，默认文字在 renderX+39
-            // 简化：不使用自定义字体图标，用文字 "R" 作为图标替代
             float fontSize = 14f * s;
             float defSize = 12f * s;
             float nameW = text.measure(nameStr, fontSize);
             float defW = def.length() > 0 ? text.measure(def, defSize) : 0f;
 
-            // 居中：文字总宽度居中，垂直也居中
-            float totalW = nameW + defW;
+            // 轮椅图标宽度
+            float iconSize = 16f * s;
+            float iconPad = 4f * s;
+            float iconW = text.getAtlas().isIconFontLoaded()
+                    ? text.measureIcon('f', iconSize) : 0f;
+
+            // 居中：图标 + 名称 + 默认文字
+            float totalW = iconW + iconPad + nameW + defW;
             float startX = islandX + (islandW - totalW) / 2f;
-            // 垂直居中：文字基线在中间偏下一点
+            // 垂直居中
             float textY = islandY + (islandH - fontSize) / 2f - 1f * s;
 
-            text.draw(nameStr, startX, textY, fontSize,
+            // 绘制轮椅图标
+            if (text.getAtlas().isIconFontLoaded()) {
+                text.drawIcon('f', startX, islandY + (islandH - iconSize) / 2f,
+                        iconSize, new float[]{0.7f, 0.7f, 0.7f, a}, sw, sh);
+            }
+            float nameStartX = startX + iconW + iconPad;
+            text.draw(nameStr, nameStartX, textY, fontSize,
                     new float[]{1f, 1f, 1f, a}, sw, sh);
             if (def.length() > 0) {
-                text.draw(def, startX + nameW, textY, defSize,
+                text.draw(def, nameStartX + nameW, textY, defSize,
                         new float[]{0.7f, 0.7f, 0.7f, a}, sw, sh);
             }
         } else {
@@ -526,17 +535,9 @@ public class DynamicIslandRenderer {
                     }
                 }
 
-                // ---- 标题：轮椅图标 + 标题文字 ----
+                // ---- 标题文字 ----
                 float titleFontSize = 14f * s;
                 float titleX = baseX + 38f * s;
-                // 轮椅图标 (Tenacity 'f') 绘制在标题左侧
-                float iconFontSize = 13f * s;
-                float[] titleIconColor = new float[]{0.7f, 0.7f, 0.7f, contentAlpha}; // 灰色图标
-                float iconDrawW = 0f;
-                if (text.getAtlas().isIconFontLoaded()) {
-                    iconDrawW = text.drawIcon('f', titleX, baseY + 9f * s, iconFontSize, titleIconColor, sw, sh);
-                    titleX += iconDrawW + 4f * s; // 图标后留间距
-                }
                 text.draw(tc.title, titleX, baseY + 9f * s, titleFontSize,
                         new float[]{1f, 1f, 1f, contentAlpha}, sw, sh);
 
