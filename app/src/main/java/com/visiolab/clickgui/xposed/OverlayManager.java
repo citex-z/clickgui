@@ -55,15 +55,17 @@ public class OverlayManager {
             setTouchPassthrough(!open);
         });
 
-        // 创建 GLSurfaceView
+        // 创建 GLSurfaceView（注意：EGL 配置必须在 setRenderer 之前）
         glView = new OverlayGLView(activity, renderer);
         glView.setEGLContextClientVersion(2);
         glView.setEGLConfigChooser(8, 8, 8, 8, 16, 0);
         glView.getHolder().setFormat(PixelFormat.TRANSLUCENT);
-        glView.setZOrderOnTop(true); // 确保 GL 在 Minecraft SurfaceView 之上
-        glView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
+        glView.setZOrderOnTop(true);
         glView.setFocusable(false);
         glView.setFocusableInTouchMode(false);
+        // setRenderer 必须在 EGL 配置之后调用
+        glView.setRenderer(renderer);
+        glView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
 
         // 用 FrameLayout 包裹，匹配父容器
         FrameLayout container = new FrameLayout(activity);
@@ -128,7 +130,7 @@ public class OverlayManager {
         public OverlayGLView(Context context, UIRenderer renderer) {
             super(context);
             this.renderer = renderer;
-            setRenderer(renderer);
+            // 注意：setRenderer 由外部在 EGL 配置后调用，不在构造函数中调用
         }
 
         void updateTouchMode(boolean passthrough) {
