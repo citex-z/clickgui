@@ -234,13 +234,15 @@ public class DynamicIslandRenderer {
             }
 
             // 计算内容尺寸：图标区 + 文字区(自适应文字长度)
+            // text.measure 返回的已经是缩放后的像素值，不需要再乘 s
             float titleW = text.measure(tc.title, 14f * s);
             float descW = text.measure(tc.description, 12f * s);
             // 图标宽度（轮椅图标 + 间距）
             float titleIconW = text.getAtlas().isIconFontLoaded()
                     ? text.getAtlas().measureIcon("f", 13f * s) + 4f * s : 0f;
             float textW = Math.max(titleW + titleIconW, descW);
-            float contentW = (CONTENT_WIDTH_BASE + textW) * s;
+            // CONTENT_WIDTH_BASE 是图标区+padding，不乘 s（文字已经是像素值）
+            float contentW = CONTENT_WIDTH_BASE * s + textW + 8f * s; // 右侧8px padding
             // PROGRESS 类型需要额外高度给进度条
             float contentH = (tc.type == ContentType.PROGRESS ? 50f : CONTENT_HEIGHT) * s;
             contents.add(new IslandContent(tc, contentW, contentH));
@@ -507,10 +509,10 @@ public class DynamicIslandRenderer {
                         // 进度条：贴在内容区底部，蓝色填充
                         float barPad = 4f * s;
                         float barX = baseX + barPad;
-                        float barY = baseY + ic.height - barPad - 4f * s; // 贴底
+                        float barY = baseY + ic.height - barPad - 6f * s; // 贴底
                         float barW = ic.width - barPad * 2f;
-                        float barH = 4f * s;
-                        float barR = 2f * s;
+                        float barH = 6f * s; // 加粗
+                        float barR = 3f * s;
                         // 背景轨道
                         quad.addRect(barX, barY, barW, barH, barR,
                                 new float[]{0.15f, 0.15f, 0.15f, contentAlpha * 0.8f});

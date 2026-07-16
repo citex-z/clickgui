@@ -137,9 +137,12 @@ public class FloatingHotkeyRenderer {
                         new float[]{0.22f, 0.22f, 0.22f, 0.90f * alpha});
             }
 
-            // 文字居中 — 偏移修正
+            // 文字居中 — 垂直居中于按钮
             float textX = x + (drawW - textW) / 2f;
-            float textY = y + (drawH - fontSize) / 2f - fontSize * 0.28f;
+            // text.draw 的 y 是字形 bitmap 顶部位置
+            // 要视觉居中：y = 按钮中心 - 字形bitmap高度/2
+            // 字形bitmap高度 ≈ fontSize * 1.3（包含 ascent/descent）
+            float textY = y + (drawH - fontSize * 1.3f) / 2f;
             // 文字颜色：开启=主题蓝亮色，关闭=灰
             float[] textColor = moduleEnabled
                     ? new float[]{0.35f, 0.70f, 0.85f, alpha}  // 亮蓝

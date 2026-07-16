@@ -41,12 +41,17 @@ public class GlyphAtlas {
     public void loadIconFont(android.content.res.AssetManager assets, String path) {
         try {
             iconTypeface = Typeface.createFromAsset(assets, path);
+            if (iconTypeface == null) {
+                android.util.Log.e("GlyphAtlas", "createFromAsset returned null for " + path);
+                return;
+            }
             iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             iconPaint.setTypeface(iconTypeface);
             iconPaint.setColor(Color.WHITE);
             iconFontLoaded = true;
+            android.util.Log.i("GlyphAtlas", "Icon font loaded: " + path);
         } catch (Exception e) {
-            // 字体加载失败，静默降级到默认字体
+            android.util.Log.e("GlyphAtlas", "Failed to load icon font " + path + ": " + e.getMessage(), e);
         }
     }
 

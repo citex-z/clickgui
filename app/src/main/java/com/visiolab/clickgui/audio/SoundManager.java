@@ -43,10 +43,18 @@ public class SoundManager {
                 .setMaxStreams(4)
                 .setAudioAttributes(attrs)
                 .build();
+        soundPool.setOnLoadCompleteListener((soundPool, sampleId, status) -> {
+            if (status == 0) {
+                Log.i("SoundManager", "Sound ready: id=" + sampleId);
+            } else {
+                Log.e("SoundManager", "Sound load failed: id=" + sampleId + " status=" + status);
+            }
+        });
         // 加载音效
         loadSound("toggle_on", "sfx/celestial_on.wav");
         loadSound("toggle_off", "sfx/celestial_off.wav");
         initialized = true;
+        Log.i("SoundManager", "Initialized, sounds loaded: " + soundMap.keySet());
     }
 
     private void loadSound(String key, String assetPath) {
@@ -55,8 +63,9 @@ public class SoundManager {
             int soundId = soundPool.load(afd, 1);
             soundMap.put(key, soundId);
             afd.close();
+            Log.i("SoundManager", "Loaded " + assetPath + " -> id=" + soundId);
         } catch (Exception e) {
-            Log.w("SoundManager", "Failed to load " + assetPath + ": " + e.getMessage());
+            Log.e("SoundManager", "Failed to load " + assetPath + ": " + e.getMessage());
         }
     }
 
