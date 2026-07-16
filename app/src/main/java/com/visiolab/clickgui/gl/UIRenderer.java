@@ -1421,6 +1421,49 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         GLES20.glClearColor(WORLD_BG[0], WORLD_BG[1], WORLD_BG[2], 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
+        // 面板关闭时：只画 HUD 元素，不画面板背景，透出游戏画面
+        // 面板打开时：画半透明遮罩 + 面板
+        if (t < 0.01f && !loginActive) {
+            // 面板完全关闭，只渲染 HUD
+            refreshHudModuleRefs();
+            if (dynamicIsland == null) {
+                dynamicIsland = new DynamicIslandRenderer(quad, text, blur, this::drawWorldScene);
+                com.visiolab.nativebridge.GameCallback.setDynamicIsland(dynamicIsland);
+            }
+            dynamicIsland.refreshModuleRefs(categories);
+            if (floatingHotkeys == null) {
+                floatingHotkeys = new FloatingHotkeyRenderer(quad, text);
+                floatingHotkeys.setOnHotkeyToggledListener(m -> {
+                    spawnModuleToast(m.name, m.enabled);
+                    com.visiolab.nativebridge.ModuleHook.onToggle(m);
+                    if (dynamicIsland != null) dynamicIsland.addModuleToggle(m.name, m.enabled);
+                    checkModuleConflicts(m.name);
+                    if (m.name.equals("Scaffold")) {
+                        if (m.enabled) {
+                            dynamicIsland.addProgress("Scaffold Toggled", "Placing blocks...", 0.3f);
+                        } else {
+                            dynamicIsland.removeProgress("Scaffold Toggled");
+                        }
+                    }
+                });
+            }
+            floatingHotkeys.setCategories(categories);
+            updateHudAnimations(dt);
+            drawArrayListHud();
+            drawWatermark();
+            drawKeystrokes();
+            if (dynamicIsland != null) dynamicIsland.update(frameDt, screenW, screenH, uiScale);
+            if (floatingHotkeys != null) floatingHotkeys.render(frameDt, screenW, screenH, uiScale);
+            drawToasts();
+            return; // 跳过面板渲染
+        }
+
+        // 面板打开时：画半透明遮罩让游戏变暗
+        if (t > 0.01f && !loginActive) {
+            quad.addRect(0, 0, screenW, screenH, 0, new float[]{0f, 0f, 0f, 0.4f * t});
+            quad.flush(screenW, screenH);
+        }
+
         panelX = screenW / 2f - panelW / 2f;
         panelY = screenH / 2f - panelH / 2f;
 
