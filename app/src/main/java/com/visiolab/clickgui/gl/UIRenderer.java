@@ -1405,6 +1405,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         refreshHudModuleRefs();
         if (dynamicIsland == null) {
             dynamicIsland = new DynamicIslandRenderer(quad, text, blur, this::drawWorldScene);
+            // 绑定游戏回调接口
+            com.visiolab.nativebridge.GameCallback.setDynamicIsland(dynamicIsland);
         }
         dynamicIsland.refreshModuleRefs(categories);
         // 悬浮快捷键初始化

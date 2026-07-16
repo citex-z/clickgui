@@ -53,6 +53,20 @@ public class DynamicIslandRenderer {
     // FPS/Ping 模拟值
     private int currentFps = 60;
     private int currentPing = 15;
+    private boolean fpsFromGame = false; // 是否使用游戏侧提供的FPS
+    private boolean pingFromGame = false;
+
+    /** 设置 FPS（供 native 层调用） */
+    public void setFps(int fps) {
+        this.currentFps = fps;
+        this.fpsFromGame = true;
+    }
+
+    /** 设置 Ping（供 native 层调用） */
+    public void setPing(int ping) {
+        this.currentPing = ping;
+        this.pingFromGame = true;
+    }
     private long lastFpsUpdate = 0;
     private int frameCount = 0;
 
@@ -177,14 +191,18 @@ public class DynamicIslandRenderer {
         // 更新 deltaTime（毫秒），供 smooth 使用
         animDelta = Math.max(1L, (long) (dt * 1000));
 
-        // FPS 计数
+        // FPS 计数（仅当游戏侧未提供时使用 UI 侧模拟值）
         frameCount++;
         long nowMs = System.currentTimeMillis();
         if (nowMs - lastFpsUpdate > 1000) {
-            currentFps = (int) (frameCount * 1000f / (nowMs - lastFpsUpdate));
+            if (!fpsFromGame) {
+                currentFps = (int) (frameCount * 1000f / (nowMs - lastFpsUpdate));
+            }
+            if (!pingFromGame) {
+                currentPing = 10 + (int) (Math.random() * 15);
+            }
             frameCount = 0;
             lastFpsUpdate = nowMs;
-            currentPing = 10 + (int) (Math.random() * 15);
         }
 
         float scale = scaleOpt != null ? (0.7f + scaleOpt.sliderValue * 0.8f) : 1f;

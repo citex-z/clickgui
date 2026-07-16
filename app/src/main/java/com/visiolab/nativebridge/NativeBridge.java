@@ -198,4 +198,20 @@ public class NativeBridge {
      * @param value 配置值
      */
     public static native void onConfigChanged(String moduleName, String configName, String value);
+
+    // ========== 游戏数据回调（native → Java） ==========
+    // 以下方法由 native 层主动调用，将游戏实时数据推送到 UI
+    // native 侧通过 JNI 调用 GameCallback 的静态方法即可
+
+    /**
+     * 请求 native 侧开始推送搭路进度。
+     * 搭路开始时调用，native 侧之后应定期调用 GameCallback.updateScaffoldProgress()
+     */
+    public static native void requestScaffoldProgressUpdates();
+
+    /**
+     * 请求 native 侧停止推送搭路进度。
+     * 搭路结束时调用。
+     */
+    public static native void stopScaffoldProgressUpdates();
 }
