@@ -273,6 +273,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         String text = moduleName + (enabled ? " enabled" : " disabled");
         pendingToastEnabled = enabled;
         spawnToast(text);
+        // 播放音效
+        com.visiolab.clickgui.audio.SoundManager.getInstance().playToggle(enabled);
     }
 
     /** 检查模块冲突，触发灵动岛警告。只在切换 KillAura 或 Scaffold 时调用 */
@@ -627,6 +629,8 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         text.init();
         blur.init();
         loginRenderer.init(quad, text, blur);
+        // 初始化音效
+        com.visiolab.clickgui.audio.SoundManager.getInstance().init(context);
         lastFrameNs = System.nanoTime();
 
         for (Category c : categories) {
@@ -890,6 +894,10 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             for (ModuleItem m : c.modules) {
                 m.hudAnim.setTarget(m.enabled ? 1f : 0f);
                 m.hudAnim.update(dt);
+                // 音效开关
+                if (m.name.equals("Sound Effects")) {
+                    com.visiolab.clickgui.audio.SoundManager.getInstance().setEnabled(m.enabled);
+                }
             }
         }
     }

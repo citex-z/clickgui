@@ -357,6 +357,7 @@ public class Category {
                 true, 0.9f, 0.3f, 1, "%"));
         preferences.add(new ModuleItem("Text Scale", "UI text size", false,
                 true, 1.0f, 0.5f, 2.0f, "x"));
+        preferences.add(new ModuleItem("Sound Effects", "Play toggle sounds", true));
         list.add(preferences);
 
         return list;
