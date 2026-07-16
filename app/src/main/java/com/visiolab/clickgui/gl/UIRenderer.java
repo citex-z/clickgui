@@ -393,6 +393,22 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     private final LoginRenderer loginRenderer;
     private boolean loginActive = true; // 启动时先显示登录界面
 
+    /** 面板状态变化回调（供悬浮窗模式使用） */
+    public interface PanelStateListener {
+        void onPanelStateChanged(boolean open);
+    }
+    private PanelStateListener panelStateListener;
+
+    public void setPanelStateListener(PanelStateListener listener) {
+        this.panelStateListener = listener;
+    }
+
+    private void onPanelStateChanged(boolean open) {
+        if (panelStateListener != null) {
+            panelStateListener.onPanelStateChanged(open);
+        }
+    }
+
     // ---- 软键盘输入：GLSurfaceView 不便直接接入 InputMethodManager，
     // 用一个隐藏的 1x1 EditText 承载输入，TextWatcher 再把文本回写到目标 ----
     private android.widget.EditText hiddenInput;
@@ -2628,6 +2644,11 @@ private void drawFloatingBall() {
 
     // ---------------- 触摸交互 ----------------
 
+    /** 面板是否打开（供悬浮窗切换触摸穿透用） */
+    public boolean isPanelOpen() {
+        return guiOpen && openness.get() > 0.5f;
+    }
+
     public void onTouch(MotionEvent event) {
         float ex = event.getX(), ey = event.getY();
         int action = event.getActionMasked();
@@ -2692,6 +2713,8 @@ private void drawFloatingBall() {
                         openElapsedSec = 0f; // 重新打开：错落进场动画从头开始播
                     }
                     openness.setTarget(guiOpen ? 1f : 0f);
+                    // 通知悬浮窗管理器更新触摸穿透
+                    onPanelStateChanged(guiOpen);
                 }
                 draggingBall = false;
             }

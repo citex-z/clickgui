@@ -9,10 +9,15 @@ android {
         minSdk 24
         targetSdk 33
         versionCode 1
-        versionName "1.0"
+        versionName "B1"
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+}
+
+dependencies {
+    // Xposed API (compileOnly: 不打包进 APK, 运行时由框架提供)
+    compileOnly 'de.robv.android.xposed:api:82'
 }
