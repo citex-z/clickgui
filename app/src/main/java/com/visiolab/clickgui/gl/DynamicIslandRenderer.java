@@ -348,7 +348,7 @@ public class DynamicIslandRenderer {
                         iconSize, new float[]{0.7f, 0.7f, 0.7f, a}, sw, sh);
             }
             float nameStartX = startX + iconW + iconPad;
-            text.draw(nameStr, nameStartX, textY, fontSize,
+            text.drawBold(nameStr, nameStartX, textY, fontSize,
                     new float[]{1f, 1f, 1f, a}, sw, sh);
             if (def.length() > 0) {
                 text.draw(def, nameStartX + nameW, textY, defSize,
@@ -538,7 +538,7 @@ public class DynamicIslandRenderer {
                 // ---- 标题文字 ----
                 float titleFontSize = 14f * s;
                 float titleX = baseX + 38f * s;
-                text.draw(tc.title, titleX, baseY + 9f * s, titleFontSize,
+                text.drawBold(tc.title, titleX, baseY + 9f * s, titleFontSize,
                         new float[]{1f, 1f, 1f, contentAlpha}, sw, sh);
 
                 // ---- 描述文字（原版 38, 24, regular 18）----

@@ -633,6 +633,9 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         com.visiolab.clickgui.audio.SoundManager.getInstance().init(context);
         // 加载图标字体
         text.getAtlas().loadIconFont(context.getAssets(), "fonts/Tenacity-Icons.ttf");
+        // 加载 Comfortaa 字体（Regular 用于普通文字，Bold 用于标题/强调）
+        text.getAtlas().loadMainFont(context.getAssets(),
+                "fonts/Comfortaa-Regular.ttf", "fonts/Comfortaa-Bold.ttf");
         lastFrameNs = System.nanoTime();
 
         for (Category c : categories) {
@@ -1001,7 +1004,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
                 float a = Math.max(0f, Math.min(1f, m.hudAnim.get()));
                 if (a <= 0.01f) { cumY += 0; continue; }
                 float rowY = cumY;
-                float tw = text.measure(shadowLines.get(i), sFontSize);
+                float tw = text.measureBold(shadowLines.get(i), sFontSize);
                 float slideOffset = (1f - Anim.backEaseOut(a)) * (m.enabled ? 24f : 120f) * uiScale;
                 float barW = tw + sTextPad * 2f;
                 float barX = screenW - sMarginRight - barW + slideOffset;
@@ -1029,7 +1032,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             float a = Math.max(0f, Math.min(1f, m.hudAnim.get()));
             if (a <= 0.01f) continue;
             float rowY = rowYs[i];
-            float tw = text.measure(sortedLines.get(i), fontSize);
+            float tw = text.measureBold(sortedLines.get(i), fontSize);
             // 退出时大幅右滑
             float slideOffset = (1f - Anim.backEaseOut(a)) * (m.enabled ? 24f : 120f) * uiScale;
             float barW = tw + textPad * 2f;
@@ -1078,13 +1081,13 @@ public class UIRenderer implements GLSurfaceView.Renderer {
 
             float rowY = rowYs[i];
             String line = sortedLines.get(i);
-            float tw = text.measure(line, fontSize);
+            float tw = text.measureBold(line, fontSize);
             float slideOffset = (1f - Anim.backEaseOut(a)) * (m.enabled ? 24f : 120f) * uiScale;
             float tx = screenW - marginRight - textPad - tw + slideOffset;
             float ty = rowY + (barH - fontSize) / 2f;
 
             float[] col = arrayListRowColor(i, sortedModules.size());
-            text.draw(line, tx, ty, fontSize, new float[]{col[0], col[1], col[2], a}, screenW, screenH);
+            text.drawBold(line, tx, ty, fontSize, new float[]{col[0], col[1], col[2], a}, screenW, screenH);
         }
     }
 
@@ -2197,12 +2200,12 @@ private void drawFloatingBall() {
         // ---- 标题栏文字 ----
         Category curCat = categories.get(currentCategoryIndex);
         if (activeConfigModule != null) {
-            // 配置页：显示面包屑导航 "← 分类名 > 模块名"，左侧返回箭头对应 configBackRect 热区
+            // 配置页：显示面包屑导航 "← 分类名 > 模块名"
             String breadcrumb = "\u2190 " + Category.localizedCategory(curCat.name, langZh) + " > " + Category.localizedName(activeConfigModule.name, langZh);
-            text.draw(breadcrumb, x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.5f,
+            text.drawBold(breadcrumb, x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.5f,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
         } else {
-            text.draw(t("Rlin", "Rlin") + " b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.5f,
+            text.drawBold(t("Rlin", "Rlin") + " b13", x + sbW + 14f * uiScale, y + hdrH / 2f - 13f * uiScale * 0.5f,
                     13f * uiScale, withAlpha(SOUTH_TEXT_WHITE, alpha), screenW, screenH);
             text.draw("\u2190 \u2192 " + Category.localizedCategory(curCat.name, langZh), x + sbW + 80f * uiScale, y + hdrH / 2f - 11f * uiScale * 0.5f,
                     11f * uiScale, withAlpha(SOUTH_TEXT_DIM2, alpha), screenW, screenH);
@@ -2244,7 +2247,7 @@ private void drawFloatingBall() {
                 String sectionLabel = c.section.equals("MOD CONFIG")
                         ? t("模组配置", "MOD CONFIG")
                         : t("个性化", "PERSONALIZATION");
-                text.draw(sectionLabel, x + btnPadX + 8f * uiScale,
+                text.drawBold(sectionLabel, x + btnPadX + 8f * uiScale,
                         curY - sectionLblH + 8f * uiScale * (h / panelH),
                         sectionLblSize, withAlpha(SOUTH_SECTION_LBL, alpha), screenW, screenH);
                 prevSection = c.section;

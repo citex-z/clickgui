@@ -33,9 +33,94 @@ public class GlyphAtlas {
 
     private final Map<String, Glyph> glyphs = new HashMap<>();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint boldPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Paint iconPaint; // 图标字体 Paint（Tenacity Icons）
     private Typeface iconTypeface;
     private boolean iconFontLoaded = false;
+    private boolean boldFontLoaded = false;
+
+    /** 加载主字体（Regular + Bold） */
+    public void loadMainFont(android.content.res.AssetManager assets, String regularPath, String boldPath) {
+        try {
+            Typeface regular = Typeface.createFromAsset(assets, regularPath);
+            if (regular != null) {
+                paint.setTypeface(regular);
+                android.util.Log.i("GlyphAtlas", "Main font loaded: " + regularPath);
+            }
+        } catch (Exception e) {
+            android.util.Log.e("GlyphAtlas", "Failed to load main font " + regularPath + ": " + e.getMessage());
+        }
+        try {
+            Typeface bold = Typeface.createFromAsset(assets, boldPath);
+            if (bold != null) {
+                boldPaint.setTypeface(bold);
+                boldFontLoaded = true;
+                android.util.Log.i("GlyphAtlas", "Bold font loaded: " + boldPath);
+            }
+        } catch (Exception e) {
+            android.util.Log.e("GlyphAtlas", "Failed to load bold font " + boldPath + ": " + e.getMessage());
+        }
+    }
+
+    /** 用 Bold 字体生成字形 */
+    public Glyph ensureBoldGlyph(char c, float sizePx) {
+        if (!boldFontLoaded) return ensureGlyph(c, sizePx); // 降级到 Regular
+        int sizeBucket = Math.round(sizePx / 4f) * 4;
+        if (sizeBucket < 4) sizeBucket = 4;
+        String key = "bold#" + c + "#" + sizeBucket;
+        Glyph g = glyphs.get(key);
+        if (g != null) return g;
+
+        boldPaint.setTextSize(sizeBucket);
+        boldPaint.setColor(Color.WHITE);
+        String s = String.valueOf(c);
+
+        Paint.FontMetrics fm = boldPaint.getFontMetrics();
+        int w = Math.max(1, (int) Math.ceil(boldPaint.measureText(s)) + 2);
+        int h = Math.max(1, (int) Math.ceil(fm.bottom - fm.top) + 2);
+        float advance = boldPaint.measureText(s);
+
+        if (shelfX + w + 2 > ATLAS_W) {
+            shelfX = 1;
+            shelfY += shelfRowHeight + 2;
+            shelfRowHeight = 0;
+        }
+        if (shelfY + h + 2 > ATLAS_H) {
+            resetAtlas();
+        }
+
+        Bitmap glyphBmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(glyphBmp);
+        canvas.drawText(s, 1, -fm.top + 1, boldPaint);
+
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
+        GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D, 0, shelfX, shelfY, glyphBmp);
+        glyphBmp.recycle();
+
+        float inset = 0.5f;
+        g = new Glyph();
+        g.u0 = (shelfX + inset) / (float) ATLAS_W;
+        g.v0 = (shelfY + inset) / (float) ATLAS_H;
+        g.u1 = (shelfX + w - inset) / (float) ATLAS_W;
+        g.v1 = (shelfY + h - inset) / (float) ATLAS_H;
+        g.width = w;
+        g.height = h;
+        g.advance = advance;
+        g.bearingY = -fm.top;
+
+        glyphs.put(key, g);
+        shelfX += w + 2;
+        shelfRowHeight = Math.max(shelfRowHeight, h);
+
+        return g;
+    }
+
+    /** 测量 Bold 文字宽度 */
+    public float measureBold(String text, float sizePx) {
+        if (!boldFontLoaded) return measure(text, sizePx);
+        boldPaint.setTextSize(sizePx);
+        return boldPaint.measureText(text);
+    }
 
     /** 加载图标字体（从 assets） */
     public void loadIconFont(android.content.res.AssetManager assets, String path) {
