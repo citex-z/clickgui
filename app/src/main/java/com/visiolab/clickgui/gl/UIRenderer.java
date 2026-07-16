@@ -1459,6 +1459,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
             if (dynamicIsland != null) dynamicIsland.update(frameDt, screenW, screenH, uiScale);
             if (floatingHotkeys != null) floatingHotkeys.render(frameDt, screenW, screenH, uiScale);
             drawToasts();
+            drawFloatingBall(); // 悬浮球必须画
             return; // 跳过面板渲染
         }
 

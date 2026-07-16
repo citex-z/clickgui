@@ -7,14 +7,22 @@ import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.util.Log;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 
 /**
  * 模块资源加载器。
  *
- * 在 Xposed 注入环境下，宿主 Context.getAssets() 返回的是 Minecraft 的 assets，
- * 不是我们模块的。这个类通过模块自己的 APK 路径创建独立的 AssetManager，
- * 从而正确加载模块的字体、图片等资源。
+ * 在 Xposed/LSPatch 注入环境下，宿主 Context.getAssets() 返回的是 Minecraft 的 assets，
+ * 不是我们模块的。这个类通过模块自己的 APK 路径创建独立的 AssetManager。
+ *
+ * APK 路径查找策略（按优先级）：
+ * 1. ClassLoader 来源 — 从模块类的 ProtectionDomain 获取 APK 路径（最可靠）
+ * 2. PackageManager 查找 — 通过模块包名查找（Local 模式下模块已安装）
+ * 3. LSPatch 嵌入路径 — 从宿主 assets/lspatch/modules/ 提取（Integrated 模式）
+ * 4. DexClassLoader 反射 — 从 ClassLoader 的 pathList.dexElements 获取
  */
 public class ModuleResourceLoader {
 
@@ -23,139 +31,226 @@ public class ModuleResourceLoader {
     private static Resources moduleResources = null;
     private static final String MODULE_PACKAGE = "com.visiolab.clickgui";
 
-    /**
-     * 初始化模块资源。
-     * 在 OverlayManager.attach 中调用，使用宿主 Context 查找模块 APK 路径。
-     */
     public static synchronized void init(Context hostContext) {
         if (moduleAssets != null) return;
 
-        try {
-            // 通过 PackageManager 查找模块 APK 路径
-            PackageManager pm = hostContext.getPackageManager();
-            ApplicationInfo appInfo = pm.getApplicationInfo(MODULE_PACKAGE, 0);
-            String apkPath = appInfo.sourceDir;
-            Log.i(TAG, "Module APK path: " + apkPath);
+        Log.i(TAG, "Initializing module resource loader...");
 
-            // 创建独立的 AssetManager
-            moduleAssets = AssetManager.class.newInstance();
-            // 反射调用 addAssetPath
-            java.lang.reflect.Method addAssetPath = AssetManager.class
-                .getDeclaredMethod("addAssetPath", String.class);
-            addAssetPath.setAccessible(true);
-            int result = (int) addAssetPath.invoke(moduleAssets, apkPath);
-            Log.i(TAG, "addAssetPath result: " + result);
-
-            // 创建 Resources
-            Resources hostRes = hostContext.getResources();
-            moduleResources = new Resources(
-                moduleAssets,
-                hostRes.getDisplayMetrics(),
-                hostRes.getConfiguration()
-            );
-
-            Log.i(TAG, "Module resources initialized successfully");
-
-        } catch (PackageManager.NameNotFoundException e) {
-            Log.e(TAG, "Module package not found: " + MODULE_PACKAGE, e);
-            // LSPatch Integrated 模式下，模块 APK 嵌入在宿主内
-            // 尝试从宿主的 assets/lspatch/modules/ 加载
-            initFromLSPatch(hostContext);
-        } catch (Throwable e) {
-            Log.e(TAG, "Failed to init module resources", e);
-            initFromLSPatch(hostContext);
+        // 策略1：从 ClassLoader 获取 APK 路径（最可靠）
+        String apkPath = getApkPathFromClassLoader();
+        if (apkPath != null) {
+            Log.i(TAG, "Strategy 1 (ClassLoader): " + apkPath);
+            if (tryLoad(apkPath, hostContext)) return;
         }
+
+        // 策略2：PackageManager 查找（Local 模式）
+        apkPath = getApkPathFromPackageManager(hostContext);
+        if (apkPath != null) {
+            Log.i(TAG, "Strategy 2 (PackageManager): " + apkPath);
+            if (tryLoad(apkPath, hostContext)) return;
+        }
+
+        // 策略3：LSPatch 嵌入路径（Integrated 模式）
+        apkPath = getApkPathFromLSPatch(hostContext);
+        if (apkPath != null) {
+            Log.i(TAG, "Strategy 3 (LSPatch embedded): " + apkPath);
+            if (tryLoad(apkPath, hostContext)) return;
+        }
+
+        // 策略4：从 DexClassLoader 反射获取
+        apkPath = getApkPathFromDexElements();
+        if (apkPath != null) {
+            Log.i(TAG, "Strategy 4 (DexElements): " + apkPath);
+            if (tryLoad(apkPath, hostContext)) return;
+        }
+
+        Log.e(TAG, "All strategies failed! Falling back to host assets.");
+        moduleAssets = hostContext.getAssets();
     }
 
-    /**
-     * LSPatch Integrated 模式下的备用加载方式。
-     * 模块 APK 嵌入在宿主的 assets/lspatch/modules/ 目录中。
-     */
-    private static void initFromLSPatch(Context hostContext) {
+    /** 策略1：从模块类的 ProtectionDomain 获取 APK 路径 */
+    private static String getApkPathFromClassLoader() {
         try {
-            // 尝试从 LSPatch 嵌入路径加载
-            AssetManager hostAssets = hostContext.getAssets();
-            String[] paths = {
-                "lspatch/modules/" + MODULE_PACKAGE + ".apk",
-                "lspatch/assets/modules/" + MODULE_PACKAGE + ".apk",
-            };
-
-            for (String path : paths) {
-                try {
-                    InputStream is = hostAssets.open(path);
-                    is.close();
-                    Log.i(TAG, "Found module APK at: " + path);
-
-                    // 提取到临时文件
-                    java.io.File tmpFile = new java.io.File(
-                        hostContext.getCacheDir(), "rlin_module.apk");
-                    is = hostAssets.open(path);
-                    java.io.FileOutputStream fos = new java.io.FileOutputStream(tmpFile);
-                    byte[] buf = new byte[8192];
-                    int len;
-                    while ((len = is.read(buf)) > 0) fos.write(buf, 0, len);
-                    fos.close();
-                    is.close();
-
-                    // 用临时文件创建 AssetManager
-                    moduleAssets = AssetManager.class.newInstance();
-                    java.lang.reflect.Method addAssetPath = AssetManager.class
-                        .getDeclaredMethod("addAssetPath", String.class);
-                    addAssetPath.setAccessible(true);
-                    addAssetPath.invoke(moduleAssets, tmpFile.getAbsolutePath());
-
-                    Resources hostRes = hostContext.getResources();
-                    moduleResources = new Resources(
-                        moduleAssets,
-                        hostRes.getDisplayMetrics(),
-                        hostRes.getConfiguration()
-                    );
-
-                    Log.i(TAG, "Module resources loaded from LSPatch: " + path);
-                    return;
-                } catch (Exception e) {
-                    // 继续尝试下一个路径
+            // 获取加载本类的 ClassLoader，找到其来源 APK
+            Class<?> clazz = null;
+            try {
+                clazz = Class.forName("com.visiolab.clickgui.xposed.RlinModule");
+            } catch (Throwable e) {
+                clazz = ModuleResourceLoader.class;
+            }
+            java.security.ProtectionDomain pd = clazz.getProtectionDomain();
+            if (pd != null && pd.getCodeSource() != null) {
+                String path = pd.getCodeSource().getLocation().getPath();
+                if (path != null && path.endsWith(".apk")) {
+                    // URL 编码的路径需要解码
+                    path = java.net.URLDecoder.decode(path, "UTF-8");
+                    if (new File(path).exists()) return path;
                 }
             }
-
-            // 最后兜底：直接用宿主 assets 尝试加载（如果模块资源被合并）
-            Log.w(TAG, "Falling back to host assets");
-            moduleAssets = hostAssets;
-
         } catch (Throwable e) {
-            Log.e(TAG, "LSPatch fallback also failed", e);
+            Log.w(TAG, "ClassLoader strategy failed: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /** 策略2：通过 PackageManager 查找模块 APK */
+    private static String getApkPathFromPackageManager(Context hostContext) {
+        try {
+            PackageManager pm = hostContext.getPackageManager();
+            ApplicationInfo appInfo = pm.getApplicationInfo(MODULE_PACKAGE, 0);
+            String path = appInfo.sourceDir;
+            if (path != null && new File(path).exists()) return path;
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.w(TAG, "Module package not found via PackageManager");
+        } catch (Throwable e) {
+            Log.w(TAG, "PackageManager strategy failed: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /** 策略3：从 LSPatch 嵌入路径提取 */
+    private static String getApkPathFromLSPatch(Context hostContext) {
+        String[] paths = {
+            "lspatch/modules/" + MODULE_PACKAGE + ".apk",
+            "lspatch/assets/modules/" + MODULE_PACKAGE + ".apk",
+        };
+        for (String path : paths) {
+            try {
+                InputStream is = hostContext.getAssets().open(path);
+                is.close();
+                // 提取到临时文件
+                File tmpFile = new File(hostContext.getCacheDir(), "rlin_module.apk");
+                is = hostContext.getAssets().open(path);
+                FileOutputStream fos = new FileOutputStream(tmpFile);
+                byte[] buf = new byte[8192];
+                int len;
+                while ((len = is.read(buf)) > 0) fos.write(buf, 0, len);
+                fos.close();
+                is.close();
+                return tmpFile.getAbsolutePath();
+            } catch (Exception e) {
+                // 继续尝试
+            }
+        }
+        return null;
+    }
+
+    /** 策略4：从 DexClassLoader 的 pathList.dexElements 反射获取 */
+    private static String getApkPathFromDexElements() {
+        try {
+            ClassLoader cl = ModuleResourceLoader.class.getClassLoader();
+            Class<?> baseDexClass = Class.forName("dalvik.system.BaseDexClassLoader");
+            java.lang.reflect.Field pathListField = baseDexClass.getDeclaredField("pathList");
+            pathListField.setAccessible(true);
+            Object pathList = pathListField.get(cl);
+            if (pathList == null) return null;
+
+            java.lang.reflect.Field dexElementsField = pathList.getClass().getDeclaredField("dexElements");
+            dexElementsField.setAccessible(true);
+            Object[] dexElements = (Object[]) dexElementsField.get(pathList);
+            if (dexElements == null || dexElements.length == 0) return null;
+
+            // 查找包含我们模块的 dex element
+            for (Object element : dexElements) {
+                try {
+                    java.lang.reflect.Field pathField = element.getClass().getDeclaredField("path");
+                    pathField.setAccessible(true);
+                    Object pathObj = pathField.get(element);
+                    if (pathObj != null) {
+                        String path = pathObj.toString();
+                        if (path.endsWith(".apk") && new File(path).exists()) {
+                            // 检查这个 APK 是否包含我们的类
+                            if (path.contains("rlin") || path.contains("visiolab") || path.contains("clickgui")) {
+                                return path;
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            // 如果没找到匹配的，返回第一个 APK
+            for (Object element : dexElements) {
+                try {
+                    java.lang.reflect.Field pathField = element.getClass().getDeclaredField("path");
+                    pathField.setAccessible(true);
+                    Object pathObj = pathField.get(element);
+                    if (pathObj != null) {
+                        String path = pathObj.toString();
+                        if (path.endsWith(".apk") && new File(path).exists()) {
+                            return path;
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable e) {
+            Log.w(TAG, "DexElements strategy failed: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /** 尝试用指定 APK 路径创建 AssetManager */
+    private static boolean tryLoad(String apkPath, Context hostContext) {
+        try {
+            AssetManager am = createAssetManager(apkPath);
+            if (am == null) return false;
+
+            Resources hostRes = hostContext.getResources();
+            moduleResources = new Resources(am, hostRes.getDisplayMetrics(), hostRes.getConfiguration());
+            moduleAssets = am;
+
+            // 验证：尝试打开一个已知资源
+            try {
+                InputStream test = am.open("fonts/Comfortaa-Regular.ttf");
+                test.close();
+                Log.i(TAG, "Resource verification OK: fonts/Comfortaa-Regular.ttf");
+            } catch (Exception e) {
+                Log.w(TAG, "Resource verification failed for " + apkPath + ", trying next strategy");
+                return false;
+            }
+
+            Log.i(TAG, "Module resources loaded successfully from: " + apkPath);
+            return true;
+        } catch (Throwable e) {
+            Log.w(TAG, "tryLoad failed for " + apkPath + ": " + e.getMessage());
+            return false;
         }
     }
 
-    /**
-     * 获取模块的 AssetManager。
-     * 如果初始化失败，返回 null（调用方应处理）。
-     */
-    public static AssetManager getAssets() {
-        return moduleAssets;
+    /** 创建独立的 AssetManager 并添加 APK 路径 */
+    private static AssetManager createAssetManager(String apkPath) {
+        try {
+            // Android 9+ 用无参构造
+            AssetManager am = AssetManager.class.getDeclaredConstructor().newInstance();
+            Method addAssetPath = AssetManager.class.getDeclaredMethod("addAssetPath", String.class);
+            addAssetPath.setAccessible(true);
+            int cookie = (int) addAssetPath.invoke(am, apkPath);
+            Log.i(TAG, "addAssetPath cookie: " + cookie + " for " + apkPath);
+            if (cookie == 0) {
+                Log.w(TAG, "addAssetPath returned 0");
+                return null;
+            }
+            return am;
+        } catch (Throwable e1) {
+            // 旧 API 用 newInstance()
+            try {
+                AssetManager am = AssetManager.class.newInstance();
+                Method addAssetPath = AssetManager.class.getDeclaredMethod("addAssetPath", String.class);
+                addAssetPath.setAccessible(true);
+                addAssetPath.invoke(am, apkPath);
+                return am;
+            } catch (Throwable e2) {
+                Log.e(TAG, "Failed to create AssetManager: " + e2.getMessage());
+                return null;
+            }
+        }
     }
 
-    /**
-     * 获取模块的 Resources。
-     */
-    public static Resources getResources() {
-        return moduleResources;
-    }
+    public static AssetManager getAssets() { return moduleAssets; }
+    public static Resources getResources() { return moduleResources; }
+    public static boolean isInitialized() { return moduleAssets != null; }
 
-    /**
-     * 是否已初始化。
-     */
-    public static boolean isInitialized() {
-        return moduleAssets != null;
-    }
-
-    /**
-     * 打开模块 assets 中的文件。
-     */
     public static InputStream openAsset(String path) throws java.io.IOException {
-        if (moduleAssets != null) {
-            return moduleAssets.open(path);
-        }
+        if (moduleAssets != null) return moduleAssets.open(path);
         throw new java.io.IOException("ModuleResourceLoader not initialized");
     }
 }
