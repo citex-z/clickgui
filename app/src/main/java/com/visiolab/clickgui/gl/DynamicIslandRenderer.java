@@ -35,7 +35,7 @@ public class DynamicIslandRenderer {
     // 原版常量
     private static final float ISLAND_Y = 15f;       // 距顶部偏移（原版固定值）
     private static final float CORNER_RADIUS = 10.5f; // 原版圆角
-    private static final float CONTENT_WIDTH_BASE = 38f; // 图标区基础宽度（收窄减少空余）
+    private static final float CONTENT_WIDTH_BASE = 34f; // 图标区+padding（收窄自适应）
     private static final float CONTENT_HEIGHT = 40f;  // 单条内容高度
     private static final float DEFAULT_TEXT_PAD = 16f; // 默认状态左右内边距
 
@@ -233,11 +233,14 @@ public class DynamicIslandRenderer {
                     break;
             }
 
-            // 计算内容尺寸（原版：50 + max(titleW, descW) × 1, height=40）
+            // 计算内容尺寸：图标区 + 文字区(自适应文字长度)
             float titleW = text.measure(tc.title, 14f * s);
             float descW = text.measure(tc.description, 12f * s);
-            float contentW = (CONTENT_WIDTH_BASE + Math.max(titleW, descW)) * s;
-            // 计算内容尺寸
+            // 图标宽度（轮椅图标 + 间距）
+            float titleIconW = text.getAtlas().isIconFontLoaded()
+                    ? text.getAtlas().measureIcon("f", 13f * s) + 4f * s : 0f;
+            float textW = Math.max(titleW + titleIconW, descW);
+            float contentW = (CONTENT_WIDTH_BASE + textW) * s;
             // PROGRESS 类型需要额外高度给进度条
             float contentH = (tc.type == ContentType.PROGRESS ? 50f : CONTENT_HEIGHT) * s;
             contents.add(new IslandContent(tc, contentW, contentH));
@@ -521,8 +524,18 @@ public class DynamicIslandRenderer {
                     }
                 }
 
-                // ---- 标题文字（原版 38, 9, bold 20）----
-                text.draw(tc.title, baseX + 38f * s, baseY + 9f * s, 14f * s,
+                // ---- 标题：轮椅图标 + 标题文字 ----
+                float titleFontSize = 14f * s;
+                float titleX = baseX + 38f * s;
+                // 轮椅图标 (Tenacity 'f') 绘制在标题左侧
+                float iconFontSize = 13f * s;
+                float[] titleIconColor = new float[]{0.7f, 0.7f, 0.7f, contentAlpha}; // 灰色图标
+                float iconDrawW = 0f;
+                if (text.getAtlas().isIconFontLoaded()) {
+                    iconDrawW = text.drawIcon('f', titleX, baseY + 9f * s, iconFontSize, titleIconColor, sw, sh);
+                    titleX += iconDrawW + 4f * s; // 图标后留间距
+                }
+                text.draw(tc.title, titleX, baseY + 9f * s, titleFontSize,
                         new float[]{1f, 1f, 1f, contentAlpha}, sw, sh);
 
                 // ---- 描述文字（原版 38, 24, regular 18）----
