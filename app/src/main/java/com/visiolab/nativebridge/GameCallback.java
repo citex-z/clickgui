@@ -102,6 +102,13 @@ public class GameCallback {
         }
     }
 
+    /** 显示目标玩家信息（Island 模式） */
+    public static void showTargetInfo(String name, float health, float distance) {
+        if (dynamicIsland != null) {
+            dynamicIsland.addTargetInfo(name, health, distance);
+        }
+    }
+
     // ========== 游戏数据 ==========
 
     /**

@@ -157,6 +157,24 @@ public class NativeBridge {
     /** 获取附近实体列表 */
     public static native Object[] getNearbyEntities(float range);
 
+    /** 获取当前药水效果列表（字符串数组，如 ["Speed 1:30", "Strength 0:45"]） */
+    public static native String[] getPotionEffects();
+
+    /** 获取目标玩家名称（最近攻击的目标） */
+    public static native String getTargetName();
+
+    /** 获取目标玩家血量 */
+    public static native float getTargetHealth();
+
+    /** 获取目标玩家距离 */
+    public static native float getTargetDistance();
+
+    /** 获取搭路剩余方块数 */
+    public static native int getScaffoldBlockCount();
+
+    /** 获取搭路速度（blocks/s） */
+    public static native float getScaffoldSpeed();
+
     // ========== 辅助功能 ==========
 
     /** 发送聊天消息 */

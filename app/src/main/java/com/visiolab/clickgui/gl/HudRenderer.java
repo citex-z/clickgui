@@ -127,7 +127,9 @@ public class HudRenderer implements GLSurfaceView.Renderer {
     private ModuleItem notificationToggle;    // Client / "Notifications"
     private ModuleItem soundEffectsToggle;   // Preferences / "Sound Effects"
     private ModuleItem arrayListToggle;       // Client / "ArrayList"
-    private ModuleItem watermarkToggle;       // Home  / "Watermark"
+    private ModuleItem watermarkToggle;       // (removed, kept for compat)
+    private ModuleItem potionHudToggle;       // Client / "PotionHUD"
+    private ModuleItem targetHudToggle;       // Client / "TargetHUD"
 
     // ---- HUD 编辑模式 ----
     private boolean editMode = false;
@@ -388,7 +390,8 @@ public class HudRenderer implements GLSurfaceView.Renderer {
                     if (m.name.equals("Gradient Speed")) globalGradientSpeedSlider = m;
                     if (m.name.equals("Notifications") || m.name.equals("Notification")) notificationToggle = m;
                     if (m.name.equals("ArrayList")) arrayListToggle = m;
-                    if (m.name.equals("Watermark")) watermarkToggle = m;
+                    if (m.name.equals("PotionHUD")) potionHudToggle = m;
+                    if (m.name.equals("TargetHUD")) targetHudToggle = m;
                 }
             }
             if (c.name.equals("Preferences") || c.name.equals("Home")) {
@@ -491,7 +494,8 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         // ---- 渲染 HUD 元素 ----
         drawToasts();          // 通知提示在底层
         drawArrayListHud();
-        drawWatermark();
+        drawPotionHud();       // 药水效果
+        drawTargetHud();        // Target HUD (Panel模式)
         drawKeystrokes();
         // 灵动岛：最上层
         if (dynamicIsland != null) {
@@ -1010,6 +1014,157 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         // 记录编辑模式边界框
         if (editMode) {
             wmBounds = new float[]{tx, ty, tw, fontSize};
+        }
+    }
+
+    // ================================================================
+    //  药水效果 HUD（左上角偏下）
+    // ================================================================
+
+    private void drawPotionHud() {
+        if (potionHudToggle == null || !potionHudToggle.enabled) return;
+        float a = Math.max(0f, Math.min(1f, potionHudToggle.hudAnim.get()));
+        if (a <= 0.01f) return;
+
+        // 获取药水效果数据（从 NativeBridge 拉取）
+        String[] effects = null;
+        try {
+            effects = com.visiolab.nativebridge.NativeBridge.getPotionEffects();
+        } catch (Throwable ignored) {}
+        if (effects == null || effects.length == 0) return;
+
+        float scaleMul = 1f;
+        boolean showBg = true;
+        // 从配置项读取
+        for (Category c : categories) {
+            if (!c.name.equals("Client")) continue;
+            for (ModuleItem m : c.modules) {
+                if (m.name.equals("PotionHUD")) {
+                    for (ConfigOption opt : m.options) {
+                        if (opt.label.equals("Scale")) scaleMul = 0.5f + opt.sliderValue * 1.5f;
+                        if (opt.label.equals("Background")) showBg = opt.boolValue;
+                    }
+                }
+            }
+        }
+
+        float fontSize = 12f * uiScale * scaleMul;
+        float rowH = fontSize + 4f * uiScale;
+        float padX = 8f * uiScale;
+        float padY = 4f * uiScale;
+        float startX = 10f * uiScale;
+        float startY = screenH / 8f + alOffsetY + 60f * uiScale; // 左上角偏下
+
+        int n = Math.min(effects.length, 8); // 最多显示8个
+        float maxW = 0;
+        for (int i = 0; i < n; i++) {
+            float w = text.measure(effects[i], fontSize) + padX * 2;
+            if (w > maxW) maxW = w;
+        }
+        float totalH = rowH * n + padY * 2;
+
+        // 背景
+        if (showBg) {
+            quad.addRect(startX, startY, maxW, totalH, 6f * uiScale,
+                    new float[]{0f, 0f, 0f, 0.4f * a});
+            quad.flush(screenW, screenH);
+        }
+
+        // 药水效果文字
+        for (int i = 0; i < n; i++) {
+            float ty = startY + padY + i * rowH;
+            text.draw(effects[i], startX + padX, ty, fontSize,
+                    new float[]{1f, 1f, 1f, a}, screenW, screenH);
+        }
+
+        // 记录编辑模式边界框
+        if (editMode) {
+            // potionBounds not tracked in edit mode for now
+        }
+    }
+
+    // ================================================================
+    //  Target HUD（Panel 模式：中右偏下）
+    // ================================================================
+
+    private void drawTargetHud() {
+        if (targetHudToggle == null || !targetHudToggle.enabled) return;
+
+        // 读取 Mode 配置
+        String mode = "Island";
+        float scaleMul = 1f;
+        for (Category c : categories) {
+            if (!c.name.equals("Client")) continue;
+            for (ModuleItem m : c.modules) {
+                if (m.name.equals("TargetHUD")) {
+                    for (ConfigOption opt : m.options) {
+                        if (opt.label.equals("Mode")) {
+                            String[] opts = opt.dropdownChoices;
+                            if (opts != null && opt.dropdownIndex < opts.length) {
+                                mode = opts[opt.dropdownIndex];
+                            }
+                        }
+                        if (opt.label.equals("Scale")) scaleMul = 0.5f + opt.sliderValue * 1.5f;
+                    }
+                }
+            }
+        }
+
+        // Island 模式：不在这里绘制，由动态岛处理
+        if (mode.equals("Island")) return;
+
+        float a = Math.max(0f, Math.min(1f, targetHudToggle.hudAnim.get()));
+        if (a <= 0.01f) return;
+
+        // 获取目标信息
+        String targetName = null;
+        float targetHealth = 0, targetDistance = 0;
+        try {
+            targetName = com.visiolab.nativebridge.NativeBridge.getTargetName();
+            targetHealth = com.visiolab.nativebridge.NativeBridge.getTargetHealth();
+            targetDistance = com.visiolab.nativebridge.NativeBridge.getTargetDistance();
+        } catch (Throwable ignored) {}
+        if (targetName == null || targetName.isEmpty()) return;
+
+        float s = uiScale * scaleMul;
+        float panelW = 140f * s;
+        float panelH = 60f * s;
+        float panelX = screenW - panelW - 20f * s;
+        float panelY = screenH * 0.5f + 40f * s;
+
+        // 背景
+        quad.addRect(panelX, panelY, panelW, panelH, 8f * s,
+                new float[]{0f, 0f, 0f, 0.5f * a});
+        quad.flush(screenW, screenH);
+
+        // 玩家名
+        float fontSize = 13f * s;
+        float nameY = panelY + 8f * s;
+        text.drawBold(targetName, panelX + 10f * s, nameY, fontSize,
+                new float[]{1f, 1f, 1f, a}, screenW, screenH);
+
+        // 血量条
+        float barX = panelX + 10f * s;
+        float barY = panelY + 28f * s;
+        float barW = panelW - 20f * s;
+        float barH = 6f * s;
+        quad.addRect(barX, barY, barW, barH, 3f * s,
+                new float[]{0.2f, 0.02f, 0.02f, 0.8f * a});
+        float healthFrac = Math.max(0f, Math.min(1f, targetHealth / 20f));
+        if (healthFrac > 0) {
+            quad.addRect(barX, barY, barW * healthFrac, barH, 3f * s,
+                    new float[]{0.8f, 0.15f, 0.15f, a});
+        }
+        quad.flush(screenW, screenH);
+
+        // 距离文字
+        String distStr = String.format("%.1f m", targetDistance);
+        text.draw(distStr, panelX + 10f * s, panelY + 40f * s, 11f * s,
+                new float[]{0.7f, 0.7f, 0.7f, a}, screenW, screenH);
+
+        // 记录编辑模式边界框
+        if (editMode) {
+            // targetBounds not tracked yet
         }
     }
 

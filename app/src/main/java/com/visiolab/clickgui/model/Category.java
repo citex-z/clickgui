@@ -28,9 +28,10 @@ public class Category {
             // Client
             case "ArrayList": return "模块列表";
             case "ClickGUI": return "点击界面";
-            case "Watermark": return "水印";
             case "Notifications": return "通知";
             case "Keystrokes": return "按键显示";
+            case "PotionHUD": return "药水效果";
+            case "TargetHUD": return "目标显示";
             case "Radar": return "雷达";
             case "HUD Editor": return "HUD编辑器";
             case "Cape": return "披风";
@@ -176,9 +177,6 @@ public class Category {
         client.add(new ModuleItem("ClickGUI", "Click GUI settings", true)
                 .addSwitch("Blur Background", true)
                 .addSlider("GUI Scale", 1, 0.5f, 2.0f, "x"));
-        client.add(new ModuleItem("Watermark", "Client watermark HUD", true)
-                .addSlider("Scale", 1, 0.5f, 2.0f, "x")
-        );
         client.add(new ModuleItem("Notifications", "Toast notifications", true)
                 .addSlider("Duration", 2, 1, 5, "s")
                 .addSwitch("Show in Chat", true)
@@ -191,9 +189,18 @@ public class Category {
         client.add(new ModuleItem("DynamicIsland", "Apple-style dynamic island HUD", true)
                 .addSwitch("Show FPS", true)
                 .addSwitch("Show Ping", true)
+                .addSwitch("Show Session Time", true)
                 .addSwitch("Blur Background", false)
                 .addSlider("Duration", 3, 2, 8, "s")
                 .addSlider("Scale", 1, 0.7f, 1.5f, "x")
+        );
+        client.add(new ModuleItem("PotionHUD", "Display active potion effects", false)
+                .addSlider("Scale", 1, 0.5f, 2.0f, "x")
+                .addSwitch("Background", true)
+        );
+        client.add(new ModuleItem("TargetHUD", "Display target player info", false)
+                .addDropdown("Mode", new String[]{"Island", "Panel"}, 0)
+                .addSlider("Scale", 1, 0.5f, 2.0f, "x")
         );
         client.add(new ModuleItem("Hotkeys", "Floating quick-toggle buttons", true)
                 .addButton("Edit Hotkeys...")

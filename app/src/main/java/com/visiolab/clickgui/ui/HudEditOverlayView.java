@@ -75,9 +75,10 @@ public class HudEditOverlayView extends FrameLayout {
         btnLp.rightMargin = dp(12);
         addView(finishBtn, btnLp);
 
-        // 让整个 View 可消费触摸
+        // 让整个 View 可消费触摸 + 能绘制
         setClickable(true);
         setFocusable(true);
+        setWillNotDraw(false); // FrameLayout 默认不调用 onDraw
     }
 
     @Override
@@ -92,10 +93,11 @@ public class HudEditOverlayView extends FrameLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        // 先检查是否点击了"完成"按钮区域（按钮自己处理点击）
         float ex = event.getRawX();
         float ey = event.getRawY();
-        if (finishBtn != null) {
+
+        // 检查是否点击了"完成"按钮区域
+        if (finishBtn != null && event.getAction() == MotionEvent.ACTION_DOWN) {
             int[] loc = new int[2];
             finishBtn.getLocationOnScreen(loc);
             if (ex >= loc[0] && ex <= loc[0] + finishBtn.getWidth()
@@ -104,13 +106,11 @@ public class HudEditOverlayView extends FrameLayout {
             }
         }
 
-        // 转发给 HudRenderer
+        // 转发给 HudRenderer，始终消费事件以保证收到完整触摸序列
         if (rendererRef != null) {
-            boolean consumed = rendererRef.onEditTouch(event.getAction(), ex, ey);
-            if (consumed) return true;
+            rendererRef.onEditTouch(event.getAction(), ex, ey);
         }
-
-        return super.onTouchEvent(event);
+        return true; // 始终消费，确保 MOVE/UP 事件能收到
     }
 
     private int dp(int v) {

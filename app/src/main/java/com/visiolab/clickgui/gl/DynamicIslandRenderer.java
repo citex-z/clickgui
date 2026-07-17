@@ -43,6 +43,8 @@ public class DynamicIslandRenderer {
     private float offsetX = 0, offsetY = 0;
     // 编辑模式边界框
     private float[] editBounds = null;
+    // 会话计时
+    private long sessionStartTime = System.currentTimeMillis();
 
     // 内容列表
     private final List<IslandContent> contents = new ArrayList<>();
@@ -50,7 +52,7 @@ public class DynamicIslandRenderer {
 
     // 模块引用
     private ModuleItem islandModule;
-    private ModuleItem.ConfigOption showFpsOpt, showPingOpt, durationOpt, scaleOpt, blurBgOpt;
+    private ModuleItem.ConfigOption showFpsOpt, showPingOpt, showSessionOpt, durationOpt, scaleOpt, blurBgOpt;
 
     // 世界场景绘制回调（用于背景模糊）
     private BlurPipeline.SceneDrawer worldSceneDrawer;
@@ -83,7 +85,8 @@ public class DynamicIslandRenderer {
         SUCCESS,
         WARNING,
         INFO,
-        PROGRESS
+        PROGRESS,
+        TARGET
     }
 
     public DynamicIslandRenderer(QuadBatch quad, TextRenderer text, BlurPipeline blur, BlurPipeline.SceneDrawer worldSceneDrawer) {
@@ -104,6 +107,7 @@ public class DynamicIslandRenderer {
                         switch (opt.label) {
                             case "Show FPS": showFpsOpt = opt; break;
                             case "Show Ping": showPingOpt = opt; break;
+                            case "Show Session Time": showSessionOpt = opt; break;
                             case "Duration": durationOpt = opt; break;
                             case "Scale": scaleOpt = opt; break;
                             case "Blur Background": blurBgOpt = opt; break;
@@ -146,6 +150,24 @@ public class DynamicIslandRenderer {
     }
 
     /** 添加进度条内容（如 Scaffold 搭路进度） */
+    /** 添加目标玩家信息（Island 模式） */
+    public void addTargetInfo(String name, float health, float distance) {
+        // 如果已有目标信息，更新
+        for (TimedContent tc : timedContents) {
+            if (tc.type == ContentType.TARGET) {
+                tc.title = name;
+                tc.description = String.format("%.1fm | %.0f HP", distance, health);
+                tc.progress = Math.max(0f, Math.min(1f, health / 20f));
+                tc.timer.reset();
+                return;
+            }
+        }
+        TimedContent tc = new TimedContent(ContentType.TARGET, name,
+                String.format("%.1fm | %.0f HP", distance, health), null, true, 3000);
+        tc.progress = Math.max(0f, Math.min(1f, health / 20f));
+        timedContents.add(tc);
+    }
+
     public void addProgress(String title, String description, float progress) {
         // 如果已有同标题的进度内容，更新进度
         for (TimedContent tc : timedContents) {
@@ -191,6 +213,16 @@ public class DynamicIslandRenderer {
 
     /** 获取编辑模式边界框 */
     public float[] getEditBounds() { return editBounds; }
+
+    /** 获取会话时长字符串（如 "12:34" 或 "1:23:45"） */
+    private String getSessionTime() {
+        long elapsed = (System.currentTimeMillis() - sessionStartTime) / 1000;
+        long h = elapsed / 3600;
+        long m = (elapsed % 3600) / 60;
+        long s = elapsed % 60;
+        if (h > 0) return String.format("%d:%02d:%02d", h, m, s);
+        return String.format("%02d:%02d", m, s);
+    }
 
     public void update(float dt, float screenW, float screenH, float uiScale) {
         if (islandModule == null) return;
@@ -256,6 +288,7 @@ public class DynamicIslandRenderer {
                 case SUCCESS:
                 case WARNING:
                 case INFO:
+                case TARGET:
                     if (elapsed >= tc.time - 200) {
                         tc.animation.setDirection(Direction.BACKWARDS);
                     }
@@ -275,7 +308,7 @@ public class DynamicIslandRenderer {
             float descW = text.measure(tc.description, 12f * s);
             float textW = Math.max(titleW, descW);
             float contentW = CONTENT_WIDTH_BASE * s + textW + 8f * s;
-            float contentH = (tc.type == ContentType.PROGRESS ? 50f : CONTENT_HEIGHT) * s;
+            float contentH = (tc.type == ContentType.PROGRESS || tc.type == ContentType.TARGET ? 50f : CONTENT_HEIGHT) * s;
             contents.add(new IslandContent(tc, contentW, contentH));
         }
         timedContents.removeAll(toRemove);
@@ -288,6 +321,7 @@ public class DynamicIslandRenderer {
             StringBuilder defaultText = new StringBuilder();
             if (showFpsOpt != null && showFpsOpt.boolValue) defaultText.append(" | ").append(currentFps).append("fps");
             if (showPingOpt != null && showPingOpt.boolValue) defaultText.append(" | ").append(currentPing).append("ms");
+            if (showSessionOpt != null && showSessionOpt.boolValue) defaultText.append(" | ").append(getSessionTime());
             float nameW = text.measure(nameStr, 14f * s);
             float defW = defaultText.length() > 0 ? text.measure(defaultText.toString(), 12f * s) : 0f;
             // 轮椅图标宽度
@@ -367,6 +401,7 @@ public class DynamicIslandRenderer {
             StringBuilder defText = new StringBuilder();
             if (showFpsOpt != null && showFpsOpt.boolValue) defText.append(" | ").append(currentFps).append("fps");
             if (showPingOpt != null && showPingOpt.boolValue) defText.append(" | ").append(currentPing).append("ms");
+            if (showSessionOpt != null && showSessionOpt.boolValue) defText.append(" | ").append(getSessionTime());
             String def = defText.toString();
 
             // 原版：图标在 renderX，名称在 renderX+22，默认文字在 renderX+39
@@ -440,10 +475,10 @@ public class DynamicIslandRenderer {
                         quad.addRect(trackX, trackY, trackW, trackH, trackR,
                                 new float[]{0.15f, 0.15f, 0.15f, contentAlpha}); // 深灰轨道
 
-                        // 内圈颜色：从 gray(64,64,64) → white(255,255,255)
-                        float r = (64f + 191f * animF) / 255f;
-                        float g = (64f + 191f * animF) / 255f;
-                        float b = (64f + 191f * animF) / 255f;
+                        // 内圈颜色：从 gray(64,64,64) → warm coral(200,85,75)
+                        float r = (64f + 136f * animF) / 255f;
+                        float g = (64f + 21f * animF) / 255f;
+                        float b = (64f + 11f * animF) / 255f;
                         float innerX = baseX + 7f * s;
                         float innerY = baseY + 14f * s;
                         float innerW = 24f * s;
@@ -576,6 +611,39 @@ public class DynamicIslandRenderer {
                         if (fillW > 0) {
                             quad.addRect(barX, barY, fillW, barH, barR,
                                     new float[]{1f, 1f, 1f, contentAlpha});
+                        }
+                        break;
+                    }
+
+                    case TARGET: {
+                        // 图标：暖红色圆形背景 + 白色人形图标
+                        float tr = 200f / 255f, tg = 85f / 255f, tb = 75f / 255f; // #C8554B
+                        quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
+                                new float[]{tr, tg, tb, (200f / 255f) * contentAlpha});
+                        // 简单人形图标（头+身体）
+                        float headSize = 6f * s;
+                        float headX = iconX + (iconSize - headSize) / 2f;
+                        float headY = iconY + 3f * s;
+                        quad.addRect(headX, headY, headSize, headSize, 3f * s,
+                                new float[]{1f, 1f, 1f, contentAlpha});
+                        float bodyW = 10f * s;
+                        float bodyH = 8f * s;
+                        quad.addRect(iconX + (iconSize - bodyW) / 2f, iconY + 10f * s, bodyW, bodyH, 2f * s,
+                                new float[]{1f, 1f, 1f, contentAlpha});
+
+                        // 血量条
+                        float barPad = 5f * s;
+                        float barX = baseX + barPad;
+                        float barH = 5f * s;
+                        float barY = baseY + ic.height - barPad - barH;
+                        float barW = ic.width - barPad * 2f;
+                        float barR = 2.5f * s;
+                        quad.addRect(barX, barY, barW, barH, barR,
+                                new float[]{0.3f, 0.05f, 0.05f, contentAlpha * 0.8f});
+                        float fillW = barW * tc.progress;
+                        if (fillW > 0) {
+                            quad.addRect(barX, barY, fillW, barH, barR,
+                                    new float[]{tr, tg, tb, contentAlpha});
                         }
                         break;
                     }
