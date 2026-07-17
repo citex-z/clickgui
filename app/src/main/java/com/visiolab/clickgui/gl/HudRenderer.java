@@ -31,7 +31,7 @@ import javax.microedition.khronos.opengles.GL10;
  *   - 水印 drawWatermark()
  *   - ArrayList HUD drawArrayListHud()
  *   - 灵动岛 dynamicIsland.update()
- *   - 快捷键 floatingHotkeys.render()
+ *   - 快捷键（已由原生 View FloatingHotkeyView 接管）
  *   - 按键显示 drawKeystrokes()
  *   - Toast drawToasts()
  *
@@ -293,7 +293,6 @@ public class HudRenderer implements GLSurfaceView.Renderer {
     private final TextRenderer text = new TextRenderer();
     private final BlurPipeline blur = new BlurPipeline();
     private DynamicIslandRenderer dynamicIsland;
-    private FloatingHotkeyRenderer floatingHotkeys;
 
     private float sceneTime = 0f;
     private float frameDt = 0.016f; // 当前帧的 deltaTime，供子方法使用
@@ -415,21 +414,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         dynamicIsland = new DynamicIslandRenderer(quad, text, blur, this::drawWorldScene);
         com.visiolab.nativebridge.GameCallback.setDynamicIsland(dynamicIsland);
 
-        // ---- 初始化悬浮快捷键 ----
-        floatingHotkeys = new FloatingHotkeyRenderer(quad, text);
-        floatingHotkeys.setOnHotkeyToggledListener(m -> {
-            spawnModuleToast(m.name, m.enabled);
-            com.visiolab.nativebridge.ModuleHook.onToggle(m);
-            if (dynamicIsland != null) dynamicIsland.addModuleToggle(m.name, m.enabled);
-            checkModuleConflicts(m.name);
-            if (m.name.equals("Scaffold")) {
-                if (m.enabled) {
-                    dynamicIsland.addProgress("Scaffold Toggled", "Placing blocks...", 0.3f);
-                } else {
-                    dynamicIsland.removeProgress("Scaffold Toggled");
-                }
-            }
-        });
+        // 注意：悬浮快捷键已由原生 View (FloatingHotkeyView) 接管，不再在 GL 层渲染
     }
 
     @Override
@@ -471,19 +456,6 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         if (dynamicIsland != null) {
             dynamicIsland.refreshModuleRefs(categories);
         }
-        if (floatingHotkeys != null) {
-            floatingHotkeys.setCategories(categories);
-            // 查找 Hotkeys 模块
-            for (Category c : categories) {
-                if (!c.name.equals("Client")) continue;
-                for (ModuleItem m : c.modules) {
-                    if (m.name.equals("Hotkeys")) {
-                        floatingHotkeys.setHotkeysModule(m);
-                        break;
-                    }
-                }
-            }
-        }
 
         // ---- HUD 动画更新 ----
         updateHudAnimations(dt);
@@ -497,10 +469,6 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         // 灵动岛：最上层
         if (dynamicIsland != null) {
             dynamicIsland.update(frameDt, screenW, screenH, uiScale);
-        }
-        // 悬浮快捷键：最上层
-        if (floatingHotkeys != null) {
-            floatingHotkeys.render(frameDt, screenW, screenH, uiScale);
         }
     }
 

@@ -11,13 +11,11 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 
 import com.visiolab.clickgui.gl.HudRenderer;
-import com.visiolab.clickgui.model.Category;
 import com.visiolab.clickgui.ui.FloatingBallView;
 import com.visiolab.clickgui.ui.FloatingHotkeyView;
 import com.visiolab.clickgui.ui.ClickGuiPanel;
 
 import java.lang.ref.WeakReference;
-import java.util.List;
 
 /**
  * 混合架构 Overlay 管理器。
@@ -113,23 +111,16 @@ public class OverlayManager {
         floatingBall.show();
         Log.i(TAG, "Floating ball attached");
 
-        // ---- 第3层：快捷键 ----
+        // ---- 第3层：快捷键（默认不显示，由 ClickGUI 面板中拖拽添加） ----
         hotkeyView = new FloatingHotkeyView(activity);
         hotkeyView.setOnHotkeyToggleListener((name, enabled) -> {
             Log.i(TAG, "Hotkey toggled: " + name + " → " + enabled);
-            // 通知 HUD 更新
             if (hudRenderer != null) {
                 hudRenderer.onModuleChanged(name, enabled);
             }
         });
-        // 从 categories 中提取所有 showToggle=true 的模块
-        java.util.List<Category> cats = Category.buildDefault();
-        int screenW = activity.getResources().getDisplayMetrics().widthPixels;
-        int screenH = activity.getResources().getDisplayMetrics().heightPixels;
-        for (Category cat : cats) {
-            hotkeyView.updateHotkeys(cat.modules, screenW, screenH);
-        }
-        Log.i(TAG, "Floating hotkeys attached");
+        // 不默认添加任何快捷键 — 用户在 ClickGUI 面板中拖拽模块到快捷键区域才会显示
+        Log.i(TAG, "Floating hotkey manager attached (empty by default)");
 
         attached = true;
         Log.i(TAG, "=== Overlay fully attached (hybrid mode) ===");

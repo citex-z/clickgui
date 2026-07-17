@@ -81,6 +81,42 @@ public class FloatingHotkeyView {
         }
     }
 
+    /** 添加单个快捷键（由 ClickGUI 面板拖拽触发） */
+    public void addHotkey(ModuleItem module, int screenW, int screenH) {
+        if (hotkeys.containsKey(module.name)) return; // 已存在
+        int btnW = dp(80);
+        int btnH = dp(36);
+        int gap = dp(8);
+        int count = hotkeys.size();
+        int x = screenW - btnW - dp(16);
+        int y = screenH - dp(100) - count * (btnH + gap);
+
+        HotkeyWindow hw = new HotkeyWindow(activity, module, font);
+        hw.setToggleListener((name, enabled) -> {
+            if (toggleListener != null) toggleListener.onToggle(name, enabled);
+        });
+        hw.show(x, y, btnW, btnH);
+        hotkeys.put(module.name, hw);
+        Log.d(TAG, "Added hotkey: " + module.name + " (total: " + hotkeys.size() + ")");
+    }
+
+    /** 移除单个快捷键 */
+    public void removeHotkey(String name) {
+        HotkeyWindow hw = hotkeys.remove(name);
+        if (hw != null) hw.remove();
+        Log.d(TAG, "Removed hotkey: " + name);
+    }
+
+    /** 检查快捷键是否已存在 */
+    public boolean hasHotkey(String name) {
+        return hotkeys.containsKey(name);
+    }
+
+    /** 获取快捷键数量 */
+    public int getHotkeyCount() {
+        return hotkeys.size();
+    }
+
     /** 显示所有快捷键 */
     public void showAll() {
         for (HotkeyWindow hw : hotkeys.values()) hw.show();
@@ -163,15 +199,14 @@ public class FloatingHotkeyView {
         }
 
         void updateState(boolean enabled) {
-            view.setEnabled(enabled);
-            view.postInvalidate();
+            view.setModuleEnabled(enabled);
         }
     }
 
     /** 快捷键按钮 View — Canvas 自绘 */
     private class HotkeyBtnView extends View {
         private final String text;
-        private boolean enabled;
+        private boolean moduleEnabled;
         private final Paint textPaint;
         private final Paint bgPaint;
         private final Typeface font;
@@ -180,7 +215,7 @@ public class FloatingHotkeyView {
         HotkeyBtnView(Context context, String text, boolean enabled, Typeface font) {
             super(context);
             this.text = text;
-            this.enabled = enabled;
+            this.moduleEnabled = enabled;
             this.font = font;
             setLayerType(LAYER_TYPE_SOFTWARE, null);
 
@@ -192,6 +227,11 @@ public class FloatingHotkeyView {
             bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         }
 
+        void setModuleEnabled(boolean enabled) {
+            this.moduleEnabled = enabled;
+            postInvalidate();
+        }
+
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
@@ -200,12 +240,12 @@ public class FloatingHotkeyView {
             float r = dp(8);
 
             // 背景
-            bgPaint.setColor(enabled ? COLOR_ON : COLOR_OFF);
-            bgPaint.setAlpha(enabled ? 200 : 180);
+            bgPaint.setColor(moduleEnabled ? COLOR_ON : COLOR_OFF);
+            bgPaint.setAlpha(moduleEnabled ? 200 : 180);
             canvas.drawRoundRect(0, 0, w, h, r, r, bgPaint);
 
             // 文字颜色：开启=白色，关闭=灰色
-            textPaint.setColor(enabled ? Color.WHITE : Color.parseColor("#888888"));
+            textPaint.setColor(moduleEnabled ? Color.WHITE : Color.parseColor("#888888"));
             canvas.drawText(text, w / 2f, h / 2f - (textPaint.descent() + textPaint.ascent()) / 2f, textPaint);
         }
 
@@ -218,10 +258,10 @@ public class FloatingHotkeyView {
                     return true;
                 case MotionEvent.ACTION_UP:
                     pressScale = 1f;
-                    enabled = !enabled;
+                    moduleEnabled = !moduleEnabled;
                     invalidate();
                     if (toggleListener != null) {
-                        toggleListener.onToggle(text, enabled);
+                        toggleListener.onToggle(text, moduleEnabled);
                     }
                     return true;
                 case MotionEvent.ACTION_CANCEL:
