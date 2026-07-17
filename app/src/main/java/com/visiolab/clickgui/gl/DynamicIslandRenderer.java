@@ -275,7 +275,7 @@ public class DynamicIslandRenderer {
             float descW = text.measure(tc.description, 12f * s);
             float textW = Math.max(titleW, descW);
             float contentW = CONTENT_WIDTH_BASE * s + textW + 8f * s;
-            float contentH = (tc.type == ContentType.PROGRESS ? 56f : CONTENT_HEIGHT) * s;
+            float contentH = (tc.type == ContentType.PROGRESS ? 50f : CONTENT_HEIGHT) * s;
             contents.add(new IslandContent(tc, contentW, contentH));
         }
         timedContents.removeAll(toRemove);
@@ -344,15 +344,15 @@ public class DynamicIslandRenderer {
             quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 1f});
             quad.flush(sw, sh);
         });
-        blur.drawGlow(new float[]{0f, 0f, 0f, 0.5f * a}, sw, sh);
+        blur.drawGlow(new float[]{0.08f, 0.08f, 0.08f, 0.5f * a}, sw, sh);
         blur.captureAndBlurTransparentTight(() -> {
             quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 1f});
             quad.flush(sw, sh);
         });
-        blur.drawGlow(new float[]{0f, 0f, 0f, 0.3f * a}, sw, sh);
+        blur.drawGlow(new float[]{0.08f, 0.08f, 0.08f, 0.3f * a}, sw, sh);
 
-        // 3. 黑色半透明背景（原版 new Color(0,0,0,130) ≈ 0.51 alpha）
-        quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 0.51f * a});
+        // 3. 深灰色半透明背景（#1C1C1E ≈ rgb(28,28,30)）
+        quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0.11f, 0.11f, 0.12f, 0.85f * a});
         quad.flush(sw, sh);
 
         // 4. 裁剪区域
@@ -438,14 +438,12 @@ public class DynamicIslandRenderer {
                         float trackH = 14f * s;
                         float trackR = 6.5f * s;
                         quad.addRect(trackX, trackY, trackW, trackH, trackR,
-                                new float[]{0.25f, 0.25f, 0.25f, contentAlpha}); // DARK_GRAY
+                                new float[]{0.15f, 0.15f, 0.15f, contentAlpha}); // 深灰轨道
 
-                        // 内圈颜色：从 gray(128,128,128) → blue(48,117,147)
-                        // 原版: Color((int)(128-80*a), (int)(128-11*a), (int)(128+19*a), 255)
-                        // animF=0: rgb(128,128,128) 灰色  animF=1: rgb(48,117,147) 蓝色
-                        float r = (128f - 80f * animF) / 255f;
-                        float g = (128f - 11f * animF) / 255f;
-                        float b = (128f + 19f * animF) / 255f;
+                        // 内圈颜色：从 gray(64,64,64) → white(255,255,255)
+                        float r = (64f + 191f * animF) / 255f;
+                        float g = (64f + 191f * animF) / 255f;
+                        float b = (64f + 191f * animF) / 255f;
                         float innerX = baseX + 7f * s;
                         float innerY = baseY + 14f * s;
                         float innerW = 24f * s;
@@ -454,13 +452,13 @@ public class DynamicIslandRenderer {
                         quad.addRect(innerX, innerY, innerW, innerH, innerR,
                                 new float[]{r, g, b, contentAlpha});
 
-                        // 开关旋钮：(8 + 12*animation, 15, 10, 10, 4.5, DARK_GRAY)
+                        // 开关旋钮：白色
                         float knobX = baseX + (8f + 12f * animF) * s;
                         float knobY = baseY + 15f * s;
                         float knobSize = 10f * s;
                         float knobR = 4.5f * s;
                         quad.addRect(knobX, knobY, knobSize, knobSize, knobR,
-                                new float[]{0.25f, 0.25f, 0.25f, contentAlpha});
+                                new float[]{1f, 1f, 1f, contentAlpha});
                         break;
                     }
                     case SUCCESS: {
@@ -540,10 +538,10 @@ public class DynamicIslandRenderer {
                         break;
                     }
                     case PROGRESS: {
-                        // 图标：蓝色圆形背景 + 白色感叹号（居中对齐）
-                        float pb_r = 48f / 255f, pb_g = 117f / 255f, pb_b = 147f / 255f;
+                        // 图标：深灰圆形背景 + 白色感叹号（居中对齐）
+                        float ico_r = 58f / 255f, ico_g = 58f / 255f, ico_b = 60f / 255f; // #3A3A3C
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
-                                new float[]{pb_r, pb_g, pb_b, (200f / 255f) * contentAlpha});
+                                new float[]{ico_r, ico_g, ico_b, (200f / 255f) * contentAlpha});
 
                         // 感叹号竖线（居中对齐，从上往下生长）
                         float exBarW = 2f * s;
@@ -563,21 +561,21 @@ public class DynamicIslandRenderer {
                                     new float[]{1f, 1f, 1f, contentAlpha * dotA});
                         }
 
-                        // 进度条：贴在内容区底部，蓝色填充（加粗加大）
+                        // 进度条：贴在内容区底部，白色填充（细条样式）
                         float barPad = 5f * s;
                         float barX = baseX + barPad;
-                        float barH = 10f * s; // 加粗到 10f
+                        float barH = 5f * s; // 细条
                         float barY = baseY + ic.height - barPad - barH; // 贴底
                         float barW = ic.width - barPad * 2f;
-                        float barR = 5f * s; // 圆角同步增大
-                        // 背景轨道
+                        float barR = 2.5f * s; // 圆角同步
+                        // 背景轨道：半透明白色
                         quad.addRect(barX, barY, barW, barH, barR,
-                                new float[]{0.15f, 0.15f, 0.15f, contentAlpha * 0.8f});
-                        // 填充
+                                new float[]{1f, 1f, 1f, 0.15f * contentAlpha});
+                        // 填充：纯白
                         float fillW = barW * tc.progress;
                         if (fillW > 0) {
                             quad.addRect(barX, barY, fillW, barH, barR,
-                                    new float[]{pb_r, pb_g, pb_b, contentAlpha});
+                                    new float[]{1f, 1f, 1f, contentAlpha});
                         }
                         break;
                     }

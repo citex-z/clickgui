@@ -33,7 +33,7 @@ public class GameCallback {
      */
     public static void updateScaffoldProgress(float progress) {
         if (dynamicIsland != null) {
-            dynamicIsland.addProgress("Scaffold Toggled", "Placing blocks...", progress);
+            dynamicIsland.addProgress("Scaffold", "Placing blocks...", progress);
         }
     }
 
@@ -41,18 +41,18 @@ public class GameCallback {
      * 更新搭路进度条（带自定义描述文字）。
      *
      * @param progress 当前进度 0.0~1.0
-     * @param description 描述文字，如 "Placing 3/5 blocks..."
+     * @param description 描述文字，如 "55 blocks left - 5.54 block/s"
      */
     public static void updateScaffoldProgress(float progress, String description) {
         if (dynamicIsland != null) {
-            dynamicIsland.addProgress("Scaffold Toggled", description, progress);
+            dynamicIsland.addProgress("Scaffold", description, progress);
         }
     }
 
     /** 搭路完成，移除进度条 */
     public static void finishScaffold() {
         if (dynamicIsland != null) {
-            dynamicIsland.removeProgress("Scaffold Toggled");
+            dynamicIsland.removeProgress("Scaffold");
         }
     }
 

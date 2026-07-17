@@ -1217,9 +1217,9 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         // Scaffold 搭路：开关时显示进度条提示
         if (name.equals("Scaffold") && dynamicIsland != null) {
             if (enabled) {
-                dynamicIsland.addProgress("Scaffold Toggled", "Placing blocks...", 0.3f);
+                dynamicIsland.addProgress("Scaffold", "0 blocks left - 0.00 block/s", 0f);
             } else {
-                dynamicIsland.removeProgress("Scaffold Toggled");
+                dynamicIsland.removeProgress("Scaffold");
             }
         }
     }
