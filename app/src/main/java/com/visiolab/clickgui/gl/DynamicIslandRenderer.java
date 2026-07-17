@@ -34,10 +34,10 @@ public class DynamicIslandRenderer {
 
     // 原版常量
     private static final float ISLAND_Y = 15f;       // 距顶部偏移（原版固定值）
-    private static final float CORNER_RADIUS = 10.5f; // 原版圆角
-    private static final float CONTENT_WIDTH_BASE = 34f; // 图标区+padding（收窄自适应）
-    private static final float CONTENT_HEIGHT = 40f;  // 单条内容高度
-    private static final float DEFAULT_TEXT_PAD = 24f; // 默认状态左右内边距（放大以完整笼罩文字和图标）
+    private static final float CORNER_RADIUS = 12f; // 圆角（调大）
+    private static final float CONTENT_WIDTH_BASE = 38f; // 图标区+padding（调大）
+    private static final float CONTENT_HEIGHT = 44f;  // 单条内容高度（调大）
+    private static final float DEFAULT_TEXT_PAD = 28f; // 默认状态左右内边距（调大）
 
     // 内容列表
     private final List<IslandContent> contents = new ArrayList<>();
@@ -284,7 +284,7 @@ public class DynamicIslandRenderer {
                     ? text.measureIcon('f', 16f * s) + 4f * s : 0f;
             // 不再双重缩放：文字已经是 *s 后的值，padding 只加一次
             targetWidth = nameW + defW + defIconW + DEFAULT_TEXT_PAD * s;
-            targetHeight = 26f * s; // 默认药丸高度（放大以完整笼罩文字和图标）
+            targetHeight = 30f * s; // 默认药丸高度（调大）
         } else {
             // 有内容：取最大宽度 + 总高度（退出时高度逐渐缩小，上方平滑跟随）
             float maxW = 0f;
