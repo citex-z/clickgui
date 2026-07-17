@@ -1000,7 +1000,8 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         spawnModuleToast(name, enabled);
         com.visiolab.nativebridge.ModuleHook.onToggle(target);
         if (dynamicIsland != null) dynamicIsland.addModuleToggle(name, enabled);
-        checkModuleConflicts(name);
+        // 冲突检测接口保留但暂不触发（用户要求去掉杀戮+搭路同时开的警告）
+        // checkModuleConflicts(name);
         // Scaffold 搭路：开关时显示进度条提示
         if (name.equals("Scaffold") && dynamicIsland != null) {
             if (enabled) {

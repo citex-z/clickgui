@@ -530,18 +530,27 @@ public class DynamicIslandRenderer {
                         break;
                     }
                     case PROGRESS: {
-                        // 图标：蓝色圆形背景 + Tenacity 'b' (th-list) 图标
+                        // 图标：蓝色圆形背景 + 白色感叹号（居中对齐）
                         float pb_r = 48f / 255f, pb_g = 117f / 255f, pb_b = 147f / 255f;
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
                                 new float[]{pb_r, pb_g, pb_b, (200f / 255f) * contentAlpha});
 
-                        // Tenacity 'b' 图标替代 3D 立方体
-                        if (text.getAtlas().isIconFontLoaded()) {
-                            float progIconSize = iconSize * 0.6f;
-                            float progIconX = iconX + (iconSize - progIconSize) / 2f;
-                            float progIconY = iconY + (iconSize - progIconSize) / 2f;
-                            text.drawIcon('b', progIconX, progIconY, progIconSize,
-                                    new float[]{1f, 1f, 1f, contentAlpha}, sw, sh);
+                        // 感叹号竖线（居中对齐，从上往下生长）
+                        float exBarW = 2f * s;
+                        float exBarH = 12f * s * animF;
+                        float exBarX = iconX + (iconSize - exBarW) / 2f; // 水平居中
+                        float exBarY = iconY + 3f * s;
+                        if (exBarH > 0) {
+                            quad.addRect(exBarX, exBarY, exBarW, exBarH, 1f * s,
+                                    new float[]{1f, 1f, 1f, contentAlpha});
+                        }
+                        // 感叹号底部圆点（居中）
+                        if (animF > 0.7f) {
+                            float dotA = (animF - 0.7f) / 0.3f;
+                            float dotSize = 3f * s;
+                            float dotX = iconX + (iconSize - dotSize) / 2f; // 水平居中
+                            quad.addRect(dotX, iconY + 17f * s, dotSize, dotSize, 1.5f * s,
+                                    new float[]{1f, 1f, 1f, contentAlpha * dotA});
                         }
 
                         // 进度条：贴在内容区底部，蓝色填充（加粗加大）
