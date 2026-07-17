@@ -2,6 +2,8 @@ package com.visiolab.clickgui.ui;
 
 import android.app.Activity;
 import android.graphics.Color;
+import android.graphics.Outline;
+import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -16,7 +18,6 @@ import android.view.animation.OvershootInterpolator;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -78,41 +79,43 @@ public class ClickGuiPanel {
     private static final int ACCENT_2           = Color.parseColor("#666666"); // 强调色2
 
     // ==================== 尺寸常量（dp 值，运行时转换）====================
-    // 缩放系数 0.85：减轻面板拥挤感
+    // 缩放系数 0.7：进一步减轻面板拥挤感
 
     private static final float PANEL_RATIO     = 600f / 960f;   // 面板高宽比 0.625
     private static final float SIDEBAR_RATIO   = 200f / 960f;   // 侧栏宽度占比 20.83%
     private static final int PANEL_CORNER      = 20;             // 面板圆角
-    private static final int HEADER_H          = (int)(72 * 0.85);  // Header 栏高度
-    private static final int TITLE_H           = (int)(30 * 0.85);  // 内容标题高度
-    private static final int CARD_H            = (int)(110 * 0.85); // 卡片高度
-    private static final int CARD_GAP          = (int)(16 * 0.85);  // 卡片间距
+    private static final int HEADER_H          = (int)(72 * 0.7);  // Header 栏高度
+    private static final int TITLE_H           = (int)(30 * 0.7);  // 内容标题高度
+    private static final int CARD_H            = (int)(110 * 0.7); // 卡片高度
+    private static final int CARD_GAP          = (int)(16 * 0.7);  // 卡片间距
     private static final int CARD_CORNER       = 12;             // 卡片圆角
-    private static final int CONFIG_BAR_H      = (int)(32 * 0.85);  // 配置栏高度（卡片下半）
-    private static final int CONFIG_ROW_H      = (int)(48 * 0.85);  // 配置行高度
-    private static final int CONFIG_ROW_GAP    = (int)(8 * 0.85);   // 配置行间距
+    private static final int CONFIG_BAR_H      = (int)(32 * 0.7);  // 配置栏高度（卡片下半）
+    private static final int CONFIG_ROW_H      = (int)(48 * 0.7);  // 配置行高度
+    private static final int CONFIG_ROW_GAP    = (int)(8 * 0.7);   // 配置行间距
     private static final int GROUP_CORNER      = 10;             // 分组容器圆角
-    private static final int SWITCH_W          = (int)(44 * 0.85);  // 开关宽度
-    private static final int SWITCH_H          = (int)(22 * 0.85);  // 开关高度
-    private static final int SIDEBAR_BTN_H     = (int)(36 * 0.85);  // 侧栏按钮高度
-    private static final int SIDEBAR_BTN_GAP   = (int)(4 * 0.85);   // 侧栏按钮间距
-    private static final int SEARCH_W          = (int)(160 * 0.85); // 搜索框宽度
-    private static final int SEARCH_H          = (int)(36 * 0.85);  // 搜索框高度
-    private static final int CLOSE_SIZE        = (int)(36 * 0.85);  // 关闭按钮尺寸
-    private static final int LANG_W            = (int)(52 * 0.85);  // 语言按钮宽度
-    private static final int LANG_H            = (int)(36 * 0.85);  // 语言按钮高度
+    private static final int SWITCH_W          = (int)(44 * 0.7);  // 开关宽度
+    private static final int SWITCH_H          = (int)(22 * 0.7);  // 开关高度
+    private static final int SIDEBAR_BTN_H     = (int)(36 * 0.7);  // 侧栏按钮高度
+    private static final int SIDEBAR_BTN_GAP   = (int)(4 * 0.7);   // 侧栏按钮间距
+    private static final int SEARCH_W          = (int)(160 * 0.7); // 搜索框宽度
+    private static final int SEARCH_H          = (int)(36 * 0.7);  // 搜索框高度
+    private static final int CLOSE_SIZE        = (int)(36 * 0.7);  // 关闭按钮尺寸
+    private static final int LANG_W            = (int)(52 * 0.7);  // 语言按钮宽度
+    private static final int LANG_H            = (int)(36 * 0.7);  // 语言按钮高度
     private static final int GRID_COLS         = 3;              // 卡片网格列数
-    private static final int BOTTOM_BTN_H      = (int)(36 * 0.85);  // 底部按钮高度
+    private static final int BOTTOM_BTN_H      = (int)(36 * 0.7);  // 底部按钮高度
     private static final int BOTTOM_BTN_CORNER = 8;              // 底部按钮圆角
 
     // ==================== 字段 ====================
 
     private final Activity activity;
-    private PopupWindow popup;
+    private View rootView;
+    private WindowManager wm;
+    private WindowManager.LayoutParams wmParams;
+    private boolean shown = false;
     private List<Category> categories;
     private int currentCategoryIndex = 0;
     private View panelView;
-    private View dimView; // 半透明遮罩
     private ModuleItem activeConfigModule = null;  // 当前打开配置页的模块（null=卡片网格模式）
     private String searchQuery = "";
     private boolean langZh = false;
@@ -197,60 +200,68 @@ public class ClickGuiPanel {
 
     public void show() {
         activity.runOnUiThread(() -> {
+            if (shown) return;
             View content = buildPanelView();
             int screenW = activity.getResources().getDisplayMetrics().widthPixels;
             int screenH = activity.getResources().getDisplayMetrics().heightPixels;
 
-            // 使用全屏 PopupWindow
-            popup = new PopupWindow(content, screenW, screenH, true);
-            popup.setClippingEnabled(false);
-            popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            popup.setOutsideTouchable(true);
-            popup.setFocusable(true);
-            popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NEEDED);
-            popup.setAnimationStyle(0);
+            wm = (WindowManager) activity.getSystemService(Context.WINDOW_SERVICE);
+            wmParams = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                PixelFormat.TRANSLUCENT
+            );
+            wmParams.gravity = Gravity.CENTER;
+            try {
+                wmParams.token = activity.getWindow().getAttributes().token;
+            } catch (Throwable ignored) {}
 
-            // 关键：让 PopupWindow 覆盖整个屏幕包括状态栏区域
-            // 不使用 MATCH_PARENT 的 PopupWindow，而是用 WindowManager 方式
-            // 避免 PopupWindow 顶出系统状态栏导致 GL 下移
-            content.setOnClickListener(v -> close());
-
-            popup.setOnDismissListener(() -> {
-                if (closeListener != null) closeListener.onClose();
-            });
-
-            View decor = activity.getWindow().getDecorView();
-            decor.post(() -> {
+            try {
+                wm.addView(content, wmParams);
+                shown = true;
+                rootView = content;
+                animateOpen();
+            } catch (Throwable e) {
+                Log.e(TAG, "WindowManager addView failed (TYPE_APPLICATION)", e);
                 try {
-                    // 使用 MATCH_PARENT 高度，覆盖状态栏
-                    popup.showAtLocation(decor, Gravity.CENTER, 0, 0);
-                    // 强制 PopupWindow 窗口铺满全屏（包括状态栏区域）
-                    View popupView = popup.getContentView().getRootView();
-                    popupView.setSystemUiVisibility(
-                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                    );
+                    wmParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_PANEL;
+                    wmParams.token = activity.getWindow().getDecorView().getWindowToken();
+                    wm.addView(content, wmParams);
+                    shown = true;
+                    rootView = content;
                     animateOpen();
-                } catch (Throwable e) {
-                    Log.e(TAG, "PopupWindow show 失败", e);
+                } catch (Throwable e2) {
+                    Log.e(TAG, "All window types failed", e2);
                 }
-            });
+            }
         });
     }
 
     public void dismiss() {
-        if (popup != null && popup.isShowing()) {
-            animateClose();
-        }
+        if (!shown) return;
+        animateClose();
     }
 
     public boolean isShowing() {
-        return popup != null && popup.isShowing();
+        return shown;
     }
 
     private void close() {
         dismiss();
+    }
+
+    private void removeFromWindow() {
+        if (rootView != null && wm != null) {
+            try { wm.removeView(rootView); } catch (Throwable ignored) {}
+        }
+        shown = false;
+        rootView = null;
+        if (closeListener != null) closeListener.onClose();
     }
 
     // ==================== 面板构建 ====================
@@ -271,17 +282,9 @@ public class ClickGuiPanel {
             panelW = panelH / PANEL_RATIO;
         }
 
-        // 根容器：全屏
+        // 根容器：全屏（无遮罩，面板背景本身就是不透明的）
         FrameLayout root = new FrameLayout(activity);
         root.setLayoutParams(new ViewGroup.LayoutParams(screenW, screenH));
-
-        // 半透明遮罩（点击关闭）— 原版无全屏遮罩，只用很浅的暗化
-        View dim = new View(activity);
-        dim.setBackgroundColor(Color.argb(60, 0, 0, 0)); // 24% 半透明，极浅
-        dim.setOnClickListener(v -> close());
-        dim.setAlpha(0f); // 初始透明，入场动画时淡入
-        root.addView(dim, new FrameLayout.LayoutParams(screenW, screenH));
-        this.dimView = dim;
 
         // 面板容器：居中，圆角+阴影
         FrameLayout panelContainer = new FrameLayout(activity);
@@ -291,9 +294,20 @@ public class ClickGuiPanel {
         panelBg.setCornerRadius(dp(PANEL_CORNER));
         panelContainer.setBackground(panelBg);
         panelContainer.setElevation(dp(20));
-        // 消费空白区域点击，避免穿透到遮罩导致误关闭
+        // 关键：裁剪子 View 到圆角范围内（修复直角问题）
+        panelContainer.setClipToOutline(true);
+        panelContainer.setClipChildren(true);
+        panelContainer.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(PANEL_CORNER));
+            }
+        });
+        // 消费空白区域点击，避免穿透导致误关闭
         panelContainer.setClickable(true);
         panelContainer.setFocusable(true);
+        // 点击面板外部空白区域关闭
+        root.setOnClickListener(v -> close());
         FrameLayout.LayoutParams panelLp = new FrameLayout.LayoutParams(
                 (int) panelW, (int) panelH);
         panelLp.gravity = Gravity.CENTER;
@@ -392,7 +406,7 @@ public class ClickGuiPanel {
         TextView btn = new TextView(activity);
         btn.setText(Category.localizedCategory(c.name, langZh));
         btn.setTextColor(SOUTH_TEXT_DIM2);
-        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(13*0.85));
+        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(13*0.7));
         btn.setGravity(Gravity.CENTER_VERTICAL);
         btn.setPadding(dp(16), 0, dp(8), 0);
         applyRegularFont(btn);
@@ -408,7 +422,28 @@ public class ClickGuiPanel {
             refreshSidebar();
             refreshContentTitle();
             updateHeader();
-            switchToModuleGridWithAnim();
+            // 平滑切换动画：卡片淡出 → 刷新 → 淡入
+            if (moduleScrollView != null) {
+                moduleScrollView.animate()
+                        .alpha(0f)
+                        .translationX(-dp(30))
+                        .setDuration(150)
+                        .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                        .withEndAction(() -> {
+                            switchToModuleGridWithAnim();
+                            moduleScrollView.setAlpha(0f);
+                            moduleScrollView.setTranslationX(dp(30));
+                            moduleScrollView.animate()
+                                    .alpha(1f)
+                                    .translationX(0f)
+                                    .setDuration(250)
+                                    .setInterpolator(new OvershootInterpolator(1.2f))
+                                    .start();
+                        })
+                        .start();
+            } else {
+                switchToModuleGridWithAnim();
+            }
         });
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -463,7 +498,7 @@ public class ClickGuiPanel {
                         : t("个性化", "PERSONALIZATION");
                 sectionLabel.setText(labelText);
                 sectionLabel.setTextColor(SOUTH_SECTION_LBL);
-                sectionLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(11*0.85));
+                sectionLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(11*0.7));
                 sectionLabel.setPadding(dp(8), dp(8), dp(8), dp(8));
                 applyBoldFont(sectionLabel);
                 LinearLayout.LayoutParams slLp = new LinearLayout.LayoutParams(
@@ -485,7 +520,7 @@ public class ClickGuiPanel {
         TextView btn = new TextView(activity);
         btn.setText(text);
         btn.setTextColor(SOUTH_TEXT_WHITE);
-        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(12*0.85));
+        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(12*0.7));
         btn.setGravity(Gravity.CENTER);
         applyRegularFont(btn);
         GradientDrawable bg = new GradientDrawable();
@@ -523,7 +558,7 @@ public class ClickGuiPanel {
 
         contentTitleText = new TextView(activity);
         contentTitleText.setTextColor(SOUTH_TEXT_WHITE);
-        contentTitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(14*0.85));
+        contentTitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(14*0.7));
         contentTitleText.setSingleLine(true);
         applyRegularFont(contentTitleText);
         titleBar.addView(contentTitleText, new LinearLayout.LayoutParams(
@@ -531,7 +566,7 @@ public class ClickGuiPanel {
 
         contentSubtitleText = new TextView(activity);
         contentSubtitleText.setTextColor(SOUTH_TEXT_DIM2);
-        contentSubtitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(11*0.85));
+        contentSubtitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(11*0.7));
         contentSubtitleText.setSingleLine(true);
         applyRegularFont(contentSubtitleText);
         titleBar.addView(contentSubtitleText, new LinearLayout.LayoutParams(
@@ -567,7 +602,7 @@ public class ClickGuiPanel {
         headerTitleText = new TextView(activity);
         headerTitleText.setText("Rlin B1");
         headerTitleText.setTextColor(SOUTH_TEXT_WHITE);
-        headerTitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(13*0.85));
+        headerTitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(13*0.7));
         headerTitleText.setSingleLine(true);
         applyBoldFont(headerTitleText);
         titleBox.addView(headerTitleText, new LinearLayout.LayoutParams(
@@ -575,7 +610,7 @@ public class ClickGuiPanel {
 
         headerSubtitleText = new TextView(activity);
         headerSubtitleText.setTextColor(SOUTH_TEXT_DIM2);
-        headerSubtitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(11*0.85));
+        headerSubtitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(11*0.7));
         headerSubtitleText.setSingleLine(true);
         applyRegularFont(headerSubtitleText);
         titleBox.addView(headerSubtitleText, new LinearLayout.LayoutParams(
@@ -596,7 +631,7 @@ public class ClickGuiPanel {
         TextView langBtn = new TextView(activity);
         langBtn.setText(langZh ? "中/EN" : "EN/中");
         langBtn.setTextColor(SOUTH_TEXT_WHITE);
-        langBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(11*0.85));
+        langBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(11*0.7));
         langBtn.setGravity(Gravity.CENTER);
         applyRegularFont(langBtn);
         GradientDrawable langBg = pillBackground(SOUTH_SEARCH_BG);
@@ -630,7 +665,7 @@ public class ClickGuiPanel {
         TextView closeBtn = new TextView(activity);
         closeBtn.setText("\u00D7"); // ×
         closeBtn.setTextColor(SOUTH_TEXT_DIM2);
-        closeBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(18*0.85));
+        closeBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(18*0.7));
         closeBtn.setGravity(Gravity.CENTER);
         applyRegularFont(closeBtn);
         GradientDrawable closeBg = new GradientDrawable();
@@ -647,7 +682,7 @@ public class ClickGuiPanel {
 
         // 搜索框 (160x36, 胶囊形)
         searchEditText = new EditText(activity);
-        searchEditText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(10*0.85));
+        searchEditText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(10*0.7));
         searchEditText.setTextColor(SOUTH_TEXT_DIM2);
         searchEditText.setHintTextColor(SOUTH_TEXT_DIM3);
         searchEditText.setHint(t("\u2315 搜索...", "\u2315 search..."));
@@ -826,7 +861,7 @@ public class ClickGuiPanel {
         TextView moduleName = new TextView(activity);
         moduleName.setText(Category.localizedName(module.name, langZh));
         moduleName.setTextColor(SOUTH_TEXT_WHITE);
-        moduleName.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(16*0.85));
+        moduleName.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(16*0.7));
         moduleName.setGravity(Gravity.CENTER);
         moduleName.setSingleLine(true);
         moduleName.setMaxWidth(dp(100));
@@ -872,7 +907,7 @@ public class ClickGuiPanel {
         TextView configText = new TextView(activity);
         configText.setText("\u2699 " + t("配置", "Configure"));
         configText.setTextColor(SOUTH_TEXT_DIM2);
-        configText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(11*0.85));
+        configText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(11*0.7));
         configText.setGravity(Gravity.CENTER);
         applyRegularFont(configText);
         FrameLayout.LayoutParams cfgTextLp = new FrameLayout.LayoutParams(
@@ -981,7 +1016,7 @@ public class ClickGuiPanel {
         TextView descLabel = new TextView(activity);
         descLabel.setText(t("描述", "Description"));
         descLabel.setTextColor(SOUTH_TEXT_DIM2);
-        descLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(12*0.85));
+        descLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(12*0.7));
         applyRegularFont(descLabel);
         descBox.addView(descLabel, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -989,7 +1024,7 @@ public class ClickGuiPanel {
         TextView descText = new TextView(activity);
         descText.setText(m.description);
         descText.setTextColor(SOUTH_TEXT_WHITE);
-        descText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(13*0.85));
+        descText.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(13*0.7));
         applyRegularFont(descText);
         LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1046,7 +1081,7 @@ public class ClickGuiPanel {
         TextView labelView = new TextView(activity);
         labelView.setText(label);
         labelView.setTextColor(SOUTH_TEXT_WHITE);
-        labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(14*0.85));
+        labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(14*0.7));
         applyRegularFont(labelView);
         row.addView(labelView, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -1074,7 +1109,7 @@ public class ClickGuiPanel {
         TextView labelView = new TextView(activity);
         labelView.setText(label);
         labelView.setTextColor(SOUTH_TEXT_WHITE);
-        labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(14*0.85));
+        labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(14*0.7));
         applyRegularFont(labelView);
         row.addView(labelView, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -1082,7 +1117,7 @@ public class ClickGuiPanel {
         // 数值显示
         TextView valueView = new TextView(activity);
         valueView.setTextColor(SOUTH_TEXT_DIM2);
-        valueView.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(13*0.85));
+        valueView.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(13*0.7));
         valueView.setSingleLine(true);
         applyRegularFont(valueView);
         String valStr = formatValue(value) + (suffix != null ? suffix : "");
@@ -1145,7 +1180,7 @@ public class ClickGuiPanel {
         TextView labelView = new TextView(activity);
         labelView.setText(Category.localizedName(opt.label, langZh));
         labelView.setTextColor(SOUTH_TEXT_WHITE);
-        labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(14*0.85));
+        labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(14*0.7));
         applyRegularFont(labelView);
         row.addView(labelView, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -1153,7 +1188,7 @@ public class ClickGuiPanel {
         // 当前选项显示框（可点击循环）
         TextView choiceView = new TextView(activity);
         choiceView.setTextColor(SOUTH_TEXT_DIM2);
-        choiceView.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(13*0.85));
+        choiceView.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(13*0.7));
         choiceView.setGravity(Gravity.CENTER);
         choiceView.setSingleLine(true);
         choiceView.setPadding(dp(12), dp(6), dp(12), dp(6));
@@ -1193,7 +1228,7 @@ public class ClickGuiPanel {
         TextView btn = new TextView(activity);
         btn.setText(Category.localizedName(opt.label, langZh));
         btn.setTextColor(SOUTH_TEXT_WHITE);
-        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(14*0.85));
+        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(14*0.7));
         btn.setGravity(Gravity.CENTER);
         applyRegularFont(btn);
         GradientDrawable bg = new GradientDrawable();
@@ -1261,9 +1296,6 @@ public class ClickGuiPanel {
         panelView.setPivotX(panelView.getWidth() / 2f);
         panelView.setPivotY(panelView.getHeight() / 2f);
 
-        // 遮罩淡入
-        if (dimView != null) dimView.setAlpha(0f);
-
         panelView.post(() -> {
             panelView.setPivotX(panelView.getWidth() / 2f);
             panelView.setPivotY(panelView.getHeight() / 2f);
@@ -1274,19 +1306,12 @@ public class ClickGuiPanel {
                     .setDuration(300)
                     .setInterpolator(new OvershootInterpolator(1.2f))
                     .start();
-            // 遮罩同步淡入
-            if (dimView != null) {
-                dimView.animate().alpha(1f).setDuration(300).start();
-            }
         });
     }
 
     /** 面板退场动画 */
     private void animateClose() {
-        if (panelView == null) {
-            if (popup != null) popup.dismiss();
-            return;
-        }
+        if (panelView == null) { removeFromWindow(); return; }
         panelView.animate()
                 .alpha(0f)
                 .scaleX(0.85f)
@@ -1294,15 +1319,9 @@ public class ClickGuiPanel {
                 .setDuration(180)
                 .setInterpolator(new android.view.animation.AccelerateInterpolator())
                 .withEndAction(() -> {
-                    if (popup != null) popup.dismiss();
+                    removeFromWindow();
                 })
                 .start();
-        // 遮罩同步淡出
-        if (dimView != null) {
-            dimView.animate().alpha(0f).setDuration(180)
-                    .setInterpolator(new android.view.animation.AccelerateInterpolator())
-                    .start();
-        }
     }
 
     // ==================== 工具方法 ====================
