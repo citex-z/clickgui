@@ -53,8 +53,8 @@ public class FloatingHotkeyView {
         void onToggle(String moduleName, boolean enabled);
     }
 
-    interface OnDragListener { void onDrag(int x, int y); }
-    interface OnToggleListener { void onToggle(boolean enabled); }
+    interface DragCallback { void onDrag(int x, int y); }
+    interface ToggleCallback { void onToggle(boolean enabled); }
 
     public FloatingHotkeyView(Activity activity) {
         this.activity = activity;
@@ -119,7 +119,7 @@ public class FloatingHotkeyView {
             this.activity = activity;
             this.module = module;
             this.view = new HotkeyBtnView(activity, module.name, module.enabled, font);
-            this.view.setOnDragListener((newX, newY) -> {
+            this.view.setDragCallback((newX, newY) -> {
                 curX = newX;
                 curY = newY;
                 if (shown && params != null) {
@@ -128,7 +128,7 @@ public class FloatingHotkeyView {
                     try { wm.updateViewLayout(view, params); } catch (Throwable ignored) {}
                 }
             });
-            this.view.setOnToggleListener((enabled) -> {
+            this.view.setToggleCallback((enabled) -> {
                 module.enabled = enabled;
                 if (FloatingHotkeyView.this.toggleListener != null) {
                     FloatingHotkeyView.this.toggleListener.onToggle(module.name, enabled);
@@ -200,8 +200,8 @@ public class FloatingHotkeyView {
         private float targetScale = 1f;
 
         // 拖拽
-        private OnDragListener dragListener;
-        private OnToggleListener toggleListener;
+        private DragCallback dragListener;
+        private ToggleCallback toggleListener;
         private float downX, downY;
         private long downTime;
         private boolean isDragging = false;
@@ -223,8 +223,8 @@ public class FloatingHotkeyView {
             bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         }
 
-        void setOnDragListener(OnDragListener listener) { this.dragListener = listener; }
-        void setOnToggleListener(OnToggleListener listener) { this.toggleListener = listener; }
+        void setDragCallback(DragCallback listener) { this.dragListener = listener; }
+        void setToggleCallback(ToggleCallback listener) { this.toggleListener = listener; }
 
         void setModuleEnabled(boolean enabled) {
             this.moduleEnabled = enabled;
