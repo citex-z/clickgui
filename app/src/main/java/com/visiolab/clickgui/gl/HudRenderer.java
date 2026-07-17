@@ -129,6 +129,23 @@ public class HudRenderer implements GLSurfaceView.Renderer {
     private ModuleItem arrayListToggle;       // Client / "ArrayList"
     private ModuleItem watermarkToggle;       // Home  / "Watermark"
 
+    // ---- HUD 编辑模式 ----
+    private boolean editMode = false;
+    // 各元素的偏移量（从 HudPositionManager 加载，拖拽时实时更新）
+    private float alOffsetX = 0, alOffsetY = 0;   // ArrayList
+    private float wmOffsetX = 0, wmOffsetY = 0;   // Watermark
+    private float ksOffsetX = 0, ksOffsetY = 0;   // Keystrokes
+    private float ilOffsetX = 0, ilOffsetY = 0;   // Dynamic Island
+    // 编辑模式：各元素的当前边界框（屏幕坐标，供 hitTest 使用）
+    private float[] alBounds = null;  // {x, y, w, h}
+    private float[] wmBounds = null;
+    private float[] ksBounds = null;
+    private float[] ilBounds = null;
+    // 拖拽状态
+    private String draggingElement = null;
+    private float dragStartX = 0, dragStartY = 0;
+    private float dragStartOffX = 0, dragStartOffY = 0;
+
     // ---- ArrayList 自定义配置项（不放进 Category，只在 HUD 渲染时读取） ----
     private ModuleItem arrayListGlassToggle, arrayListSortToggle;
     private ModuleItem arrayListFontSizeSlider, arrayListBgOpacitySlider, arrayListShadowSizeSlider;
@@ -461,6 +478,8 @@ public class HudRenderer implements GLSurfaceView.Renderer {
 
         // ---- 刷新模块引用 ----
         refreshHudModuleRefs();
+        // 加载 HUD 位置（非编辑模式下也加载，让保存的位置生效）
+        loadPositions();
         if (dynamicIsland != null) {
             dynamicIsland.refreshModuleRefs(categories);
         }
@@ -476,8 +495,174 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         drawKeystrokes();
         // 灵动岛：最上层
         if (dynamicIsland != null) {
+            dynamicIsland.setEditOffset(ilOffsetX, ilOffsetY);
             dynamicIsland.update(frameDt, screenW, screenH, uiScale);
+            if (editMode) {
+                ilBounds = dynamicIsland.getEditBounds();
+            }
         }
+
+        // 编辑模式：绘制边界框
+        if (editMode) {
+            drawEditOverlay();
+        }
+    }
+
+    // ================================================================
+    //  HUD 编辑模式
+    // ================================================================
+
+    /** 设置编辑模式开关 */
+    public void setEditMode(boolean on) {
+        editMode = on;
+        if (on) {
+            loadPositions();
+        } else {
+            // 清空边界框
+            alBounds = null;
+            wmBounds = null;
+            ksBounds = null;
+            ilBounds = null;
+            draggingElement = null;
+        }
+    }
+
+    public boolean isEditMode() { return editMode; }
+
+    /** 从 HudPositionManager 加载位置 */
+    private void loadPositions() {
+        try {
+            alOffsetX = com.visiolab.clickgui.hud.HudPositionManager.getOffsetX(com.visiolab.clickgui.hud.HudPositionManager.ELEMENT_ARRAYLIST);
+            alOffsetY = com.visiolab.clickgui.hud.HudPositionManager.getOffsetY(com.visiolab.clickgui.hud.HudPositionManager.ELEMENT_ARRAYLIST);
+            wmOffsetX = com.visiolab.clickgui.hud.HudPositionManager.getOffsetX(com.visiolab.clickgui.hud.HudPositionManager.ELEMENT_WATERMARK);
+            wmOffsetY = com.visiolab.clickgui.hud.HudPositionManager.getOffsetY(com.visiolab.clickgui.hud.HudPositionManager.ELEMENT_WATERMARK);
+            ksOffsetX = com.visiolab.clickgui.hud.HudPositionManager.getOffsetX(com.visiolab.clickgui.hud.HudPositionManager.ELEMENT_KEYSTROKES);
+            ksOffsetY = com.visiolab.clickgui.hud.HudPositionManager.getOffsetY(com.visiolab.clickgui.hud.HudPositionManager.ELEMENT_KEYSTROKES);
+            ilOffsetX = com.visiolab.clickgui.hud.HudPositionManager.getOffsetX(com.visiolab.clickgui.hud.HudPositionManager.ELEMENT_ISLAND);
+            ilOffsetY = com.visiolab.clickgui.hud.HudPositionManager.getOffsetY(com.visiolab.clickgui.hud.HudPositionManager.ELEMENT_ISLAND);
+        } catch (Throwable ignored) {}
+    }
+
+    /** 保存当前位置到持久化 */
+    private void savePosition(String element, float ox, float oy) {
+        try {
+            com.visiolab.clickgui.hud.HudPositionManager.setOffset(element, ox, oy);
+        } catch (Throwable ignored) {}
+    }
+
+    /**
+     * 处理编辑模式触摸事件。
+     * 坐标为屏幕像素坐标（从左上角，Y 朝下）。
+     * @param action MotionEvent.ACTION_DOWN / MOVE / UP
+     * @param x 屏幕 X（像素）
+     * @param y 屏幕 Y（像素，从顶部）
+     * @return true 消费事件
+     */
+    public boolean onEditTouch(int action, float x, float y) {
+        // GL 坐标 Y 从底部，View 坐标 Y 从顶部
+        float glY = screenH - y;
+
+        switch (action) {
+            case 0: // ACTION_DOWN
+                draggingElement = hitTest(x, y);
+                if (draggingElement != null) {
+                    dragStartX = x;
+                    dragStartY = y;
+                    switch (draggingElement) {
+                        case "arraylist": dragStartOffX = alOffsetX; dragStartOffY = alOffsetY; break;
+                        case "watermark": dragStartOffX = wmOffsetX; dragStartOffY = wmOffsetY; break;
+                        case "keystrokes": dragStartOffX = ksOffsetX; dragStartOffY = ksOffsetY; break;
+                        case "island": dragStartOffX = ilOffsetX; dragStartOffY = ilOffsetY; break;
+                    }
+                    return true;
+                }
+                return false;
+
+            case 2: // ACTION_MOVE
+                if (draggingElement != null) {
+                    float dx = x - dragStartX;
+                    float dy = y - dragStartY; // View 坐标 Y 朝下
+                    // GL 渲染中 Y 朝上，所以偏移量 Y 需要取反
+                    float newOffX = dragStartOffX + dx;
+                    float newOffY = dragStartOffY - dy; // 取反：手指下移 = Y偏移减小
+                    switch (draggingElement) {
+                        case "arraylist": alOffsetX = newOffX; alOffsetY = newOffY; break;
+                        case "watermark": wmOffsetX = newOffX; wmOffsetY = newOffY; break;
+                        case "keystrokes": ksOffsetX = newOffX; ksOffsetY = newOffY; break;
+                        case "island": ilOffsetX = newOffX; ilOffsetY = newOffY; break;
+                    }
+                    return true;
+                }
+                return false;
+
+            case 1: // ACTION_UP
+            case 3: // ACTION_CANCEL
+                if (draggingElement != null) {
+                    // 保存位置
+                    switch (draggingElement) {
+                        case "arraylist": savePosition("arraylist", alOffsetX, alOffsetY); break;
+                        case "watermark": savePosition("watermark", wmOffsetX, wmOffsetY); break;
+                        case "keystrokes": savePosition("keystrokes", ksOffsetX, ksOffsetY); break;
+                        case "island": savePosition("island", ilOffsetX, ilOffsetY); break;
+                    }
+                    draggingElement = null;
+                    return true;
+                }
+                return false;
+        }
+        return false;
+    }
+
+    /** 命中测试：返回被点击的元素名，或 null */
+    private String hitTest(float viewX, float viewY) {
+        // viewY 从顶部，bounds 用 GL 坐标（Y 从底部）
+        float glY = screenH - viewY;
+        if (hitBounds(viewX, glY, alBounds)) return "arraylist";
+        if (hitBounds(viewX, glY, wmBounds)) return "watermark";
+        if (hitBounds(viewX, glY, ksBounds)) return "keystrokes";
+        if (hitBounds(viewX, glY, ilBounds)) return "island";
+        return null;
+    }
+
+    private boolean hitBounds(float x, float glY, float[] bounds) {
+        if (bounds == null) return false;
+        // bounds = {x, y, w, h}，GL 坐标 y 从底部
+        return x >= bounds[0] && x <= bounds[0] + bounds[2]
+                && glY >= bounds[1] && glY <= bounds[1] + bounds[3];
+    }
+
+    /** 编辑模式：绘制各元素边界框 + 标签 */
+    private void drawEditOverlay() {
+        float a = 0.8f;
+        float dashColor[] = new float[]{0.4f, 0.8f, 1f, a}; // 青色虚线
+        float labelColor[] = new float[]{1f, 1f, 1f, a};
+
+        // ArrayList 边界框
+        if (alBounds != null) drawEditBox(alBounds, "ArrayList", dashColor, labelColor);
+        // Watermark 边界框
+        if (wmBounds != null) drawEditBox(wmBounds, "Watermark", dashColor, labelColor);
+        // Keystrokes 边界框
+        if (ksBounds != null) drawEditBox(ksBounds, "Keystrokes", dashColor, labelColor);
+        // Island 边界框
+        if (ilBounds != null) drawEditBox(ilBounds, "Island", dashColor, labelColor);
+    }
+
+    private void drawEditBox(float[] b, String label, float[] boxColor, float[] textColor) {
+        float pad = 4f * uiScale;
+        float x = b[0] - pad, y = b[1] - pad;
+        float w = b[2] + pad * 2, h = b[3] + pad * 2;
+        float r = 4f * uiScale;
+        // 虚线框（用实线矩形 + 透明度模拟）
+        quad.addRect(x, y, w, h, r, new float[]{boxColor[0], boxColor[1], boxColor[2], boxColor[3] * 0.15f});
+        quad.addRect(x, y, w, 1.5f * uiScale, 0f, boxColor); // 顶边
+        quad.addRect(x, y + h - 1.5f * uiScale, w, 1.5f * uiScale, 0f, boxColor); // 底边
+        quad.addRect(x, y, 1.5f * uiScale, h, 0f, boxColor); // 左边
+        quad.addRect(x + w - 1.5f * uiScale, y, 1.5f * uiScale, h, 0f, boxColor); // 右边
+        quad.flush(screenW, screenH);
+        // 标签
+        float fontSize = 11f * uiScale;
+        float tw = text.measure(label, fontSize);
+        text.draw(label, x + w / 2f - tw / 2f, y + h + 2f * uiScale, fontSize, textColor, screenW, screenH);
     }
 
     // ================================================================
@@ -598,7 +783,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         float heightScale = arrayListHeightOpt != null ? (0.5f + arrayListHeightOpt.sliderValue * 1.5f) : 1f;
         float barH = (fontSize + 10f * uiScale * userScale) * heightScale;
         float rowH = barH;
-        float marginTop = screenH / 8f;
+        float marginTop = screenH / 8f + alOffsetY; // +编辑偏移
         boolean showLine = arrayListLineToggle == null || arrayListLineToggle.enabled;
         float lineW = 2.5f * uiScale * userScale;
         float marginRight = showLine ? (3f * uiScale + lineW) : 3f * uiScale;
@@ -677,7 +862,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
             float tw = text.measureBold(sortedLines.get(i), fontSize);
             float slideOffset = (1f - Anim.backEaseOut(a)) * (m.enabled ? 24f : 120f) * uiScale;
             float barW = tw + textPad * 2f;
-            float barX = screenW - marginRight - barW + slideOffset;
+            float barX = screenW - marginRight - barW + slideOffset + alOffsetX; // +编辑偏移
 
             if (glassMode) {
                 GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
@@ -696,7 +881,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
             float lineTop = marginTop;
             float lineBottom = cumY;
             if (lineBottom > lineTop) {
-                float lineX = screenW - marginRight;
+                float lineX = screenW - marginRight + alOffsetX;
                 float lineH = Math.max(2f * uiScale, lineBottom - lineTop);
                 int visCount = 0;
                 for (int i = 0; i < sortedModules.size(); i++) {
@@ -724,11 +909,30 @@ public class HudRenderer implements GLSurfaceView.Renderer {
             String line = sortedLines.get(i);
             float tw = text.measureBold(line, fontSize);
             float slideOffset = (1f - Anim.backEaseOut(a)) * (m.enabled ? 24f : 120f) * uiScale;
-            float tx = screenW - marginRight - textPad - tw + slideOffset;
+            float tx = screenW - marginRight - textPad - tw + slideOffset + alOffsetX;
             float ty = rowY + (barH - fontSize) / 2f;
 
             float[] col = arrayListRowColor(i, sortedModules.size());
             text.drawBold(line, tx, ty, fontSize, new float[]{col[0], col[1], col[2], a}, screenW, screenH);
+        }
+
+        // 记录编辑模式边界框
+        if (editMode && sortedModules.size() > 0) {
+            float maxBarW = 0;
+            for (int i = 0; i < sortedModules.size(); i++) {
+                ModuleItem m = sortedModules.get(i);
+                float a = Math.max(0f, Math.min(1f, m.hudAnim.get()));
+                if (a <= 0.01f) continue;
+                float tw = text.measureBold(sortedLines.get(i), fontSize);
+                float bw = tw + 10f * uiScale * 2f;
+                if (bw > maxBarW) maxBarW = bw;
+            }
+            alBounds = new float[]{
+                screenW - marginRight - maxBarW + alOffsetX,
+                marginTop,
+                maxBarW,
+                cumY - marginTop
+            };
         }
     }
 
@@ -744,8 +948,8 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         String text2 = "Rlin B1";
         float wmFontBase = 20f + (watermarkFontSizeSlider != null ? watermarkFontSizeSlider.sliderValue : 0.5f) * 28f;
         float fontSize = wmFontBase * uiScale * (wmScaleOpt != null ? (0.5f + wmScaleOpt.sliderValue * 1.5f) : 1f);
-        float tx = (watermarkXSlider != null ? watermarkXSlider.sliderValue : 0.1f) * (screenW * 0.4f);
-        float ty = (watermarkYSlider != null ? watermarkYSlider.sliderValue : 0.1f) * (screenH * 0.3f);
+        float tx = (watermarkXSlider != null ? watermarkXSlider.sliderValue : 0.1f) * (screenW * 0.4f) + wmOffsetX;
+        float ty = (watermarkYSlider != null ? watermarkYSlider.sliderValue : 0.1f) * (screenH * 0.3f) + wmOffsetY;
 
         boolean useGradient = watermarkSyncToggle != null && watermarkSyncToggle.enabled;
         float[] defaultWhite = new float[]{1f, 1f, 1f, a};
@@ -802,11 +1006,12 @@ public class HudRenderer implements GLSurfaceView.Renderer {
             }
             quad.flush(screenW, screenH);
         }
-    }
 
-    // ================================================================
-    //  Keystrokes HUD
-    // ================================================================
+        // 记录编辑模式边界框
+        if (editMode) {
+            wmBounds = new float[]{tx, ty, tw, fontSize};
+        }
+    }
 
     private void drawKeystrokes() {
         ModuleItem ksModule = null;
@@ -826,8 +1031,8 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         float gap = 3f * uiScale * sizeMul;
         float fontSize = 12f * uiScale * sizeMul;
 
-        float startX = 20f * uiScale;
-        float startY = screenH - keySize * 4 - gap * 3 - 20f * uiScale;
+        float startX = 20f * uiScale + ksOffsetX;
+        float startY = screenH - keySize * 4 - gap * 3 - 20f * uiScale + ksOffsetY;
 
         // W
         drawKey(startX + keySize + gap, startY, keySize, keySize, "W", false, a, fontSize);
@@ -839,6 +1044,13 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         if (showMouse) {
             drawKey(startX, startY + (keySize + gap) * 2f, keySize * 1.5f, keySize, "LMB", false, a, fontSize);
             drawKey(startX + keySize * 1.5f + gap, startY + (keySize + gap) * 2f, keySize * 1.5f, keySize, "RMB", false, a, fontSize);
+        }
+
+        // 记录编辑模式边界框
+        if (editMode) {
+            float totalW = showMouse ? keySize * 3f + gap * 2f : keySize * 3f + gap * 2f;
+            float totalH = showMouse ? (keySize + gap) * 3f : (keySize + gap) * 2f;
+            ksBounds = new float[]{startX, startY, totalW, totalH};
         }
     }
 

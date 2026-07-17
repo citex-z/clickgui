@@ -11,9 +11,11 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 
 import com.visiolab.clickgui.gl.HudRenderer;
+import com.visiolab.clickgui.hud.HudPositionManager;
 import com.visiolab.clickgui.ui.FloatingBallView;
 import com.visiolab.clickgui.ui.FloatingHotkeyView;
 import com.visiolab.clickgui.ui.ClickGuiPanel;
+import com.visiolab.clickgui.ui.HudEditOverlayView;
 
 import java.lang.ref.WeakReference;
 
@@ -42,6 +44,10 @@ public class OverlayManager {
     private static WindowManager windowManager;
     private static boolean attached = false;
 
+    // ---- HUD 编辑模式 ----
+    private static HudEditOverlayView editOverlayView;
+    private static boolean editMode = false;
+
     /** 模块状态回调：面板中切换模块时通知 HUD 更新 */
     public interface OnModuleChangedListener {
         void onModuleChanged(String name, boolean enabled);
@@ -59,6 +65,8 @@ public class OverlayManager {
 
         // 初始化模块资源
         ModuleResourceLoader.init(activity);
+        // 初始化 HUD 位置持久化
+        HudPositionManager.init(activity);
 
         // ---- 第1层：HUD GL (永远穿透) ----
         hudRenderer = new HudRenderer(activity);
@@ -156,6 +164,10 @@ public class OverlayManager {
                 hudRenderer.setLangZh(zh);
             }
         });
+        guiPanel.setOnEditHudListener(() -> {
+            // 进入 HUD 编辑模式
+            setEditMode(true);
+        });
         guiPanel.setOnAddHotkeyListener((moduleName) -> {
             // 从 categories 中找到对应模块并添加为快捷键
             if (hotkeyView != null) {
@@ -180,7 +192,71 @@ public class OverlayManager {
         guiPanel.show();
     }
 
+    /** 进入/退出 HUD 编辑模式 */
+    public static synchronized void setEditMode(boolean on) {
+        if (on == editMode) return;
+        editMode = on;
+        Activity activity = activityRef != null ? activityRef.get() : null;
+        if (activity == null || windowManager == null) return;
+
+        activity.runOnUiThread(() -> {
+            if (on) {
+                // 进入编辑：隐藏其他层，添加编辑拦截层
+                if (floatingBall != null) floatingBall.hide();
+                if (hotkeyView != null) hotkeyView.hideAll();
+                if (hudRenderer != null) hudRenderer.setEditMode(true);
+
+                editOverlayView = new HudEditOverlayView(activity,
+                    (action, x, y) -> {
+                        if (hudRenderer != null) return hudRenderer.onEditTouch(action, x, y);
+                        return false;
+                    },
+                    () -> setEditMode(false)
+                );
+
+                WindowManager.LayoutParams editParams = new WindowManager.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.TYPE_APPLICATION,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                    PixelFormat.TRANSLUCENT
+                );
+                try { editParams.token = activity.getWindow().getAttributes().token; } catch (Throwable ignored) {}
+                try {
+                    windowManager.addView(editOverlayView, editParams);
+                } catch (Throwable e) {
+                    try {
+                        editParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_PANEL;
+                        editParams.token = activity.getWindow().getDecorView().getWindowToken();
+                        windowManager.addView(editOverlayView, editParams);
+                    } catch (Throwable e2) {
+                        Log.e(TAG, "Failed to add edit overlay", e2);
+                    }
+                }
+            } else {
+                // 退出编辑：移除拦截层，恢复其他层
+                if (editOverlayView != null) {
+                    try { windowManager.removeView(editOverlayView); } catch (Throwable ignored) {}
+                    editOverlayView = null;
+                }
+                if (hudRenderer != null) hudRenderer.setEditMode(false);
+                if (floatingBall != null) floatingBall.show();
+                if (hotkeyView != null) hotkeyView.showAll();
+            }
+        });
+    }
+
+    public static boolean isEditMode() { return editMode; }
+
     public static synchronized void detach() {
+        // 清理编辑模式
+        if (editOverlayView != null) {
+            try { windowManager.removeView(editOverlayView); } catch (Throwable ignored) {}
+            editOverlayView = null;
+        }
+        editMode = false;
         if (guiPanel != null) { guiPanel.dismiss(); guiPanel = null; }
         if (hotkeyView != null) { hotkeyView.removeAll(); hotkeyView = null; }
         if (floatingBall != null) { floatingBall.hide(); floatingBall = null; }

@@ -146,6 +146,7 @@ public class ClickGuiPanel {
     private OnModuleChangedListener moduleChangedListener;
     private OnLangChangedListener langChangedListener;
     private OnAddHotkeyListener addHotkeyListener;
+    private OnEditHudListener editHudListener;
 
     // ==================== 接口 ====================
 
@@ -163,6 +164,10 @@ public class ClickGuiPanel {
 
     public interface OnAddHotkeyListener {
         void onAddHotkey(String moduleName);
+    }
+
+    public interface OnEditHudListener {
+        void onEditHud();
     }
 
     // ==================== 构造 ====================
@@ -200,6 +205,10 @@ public class ClickGuiPanel {
 
     public void setOnAddHotkeyListener(OnAddHotkeyListener listener) {
         this.addHotkeyListener = listener;
+    }
+
+    public void setOnEditHudListener(OnEditHudListener listener) {
+        this.editHudListener = listener;
     }
 
     // ==================== 字体加载 ====================
@@ -409,8 +418,8 @@ public class ClickGuiPanel {
         // EditHUD 按钮
         editHudBtn = createBottomButton(t("编辑HUD", "Edit HUD"));
         editHudBtn.setOnClickListener(v -> {
-            // 暂无实现：可通过回调通知宿主
-            Log.i(TAG, "EditHUD clicked");
+            if (editHudListener != null) editHudListener.onEditHud();
+            close();
         });
         LinearLayout.LayoutParams ehLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(BOTTOM_BTN_H));

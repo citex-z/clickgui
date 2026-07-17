@@ -39,6 +39,11 @@ public class DynamicIslandRenderer {
     private static final float CONTENT_HEIGHT = 44f;  // 单条内容高度（调大）
     private static final float DEFAULT_TEXT_PAD = 28f; // 默认状态左右内边距（调大）
 
+    // 编辑模式偏移量
+    private float offsetX = 0, offsetY = 0;
+    // 编辑模式边界框
+    private float[] editBounds = null;
+
     // 内容列表
     private final List<IslandContent> contents = new ArrayList<>();
     private final List<TimedContent> timedContents = new ArrayList<>();
@@ -181,6 +186,12 @@ public class DynamicIslandRenderer {
     }
 
     /** 每帧更新和渲染 */
+    /** 设置编辑偏移量 */
+    public void setEditOffset(float x, float y) { this.offsetX = x; this.offsetY = y; }
+
+    /** 获取编辑模式边界框 */
+    public float[] getEditBounds() { return editBounds; }
+
     public void update(float dt, float screenW, float screenH, float uiScale) {
         if (islandModule == null) return;
         float a = Math.max(0f, Math.min(1f, islandModule.hudAnim.get()));
@@ -309,13 +320,13 @@ public class DynamicIslandRenderer {
         currentWidth = smooth(currentWidth, targetWidth, 0.2f);
         currentHeight = smooth(currentHeight, targetHeight, 0.2f);
 
-        // 位置居中（原版 AnimationUtil.smooth）
-        float targetX = (screenW - currentWidth) / 2f;
+        // 位置居中（原版 AnimationUtil.smooth）+ 编辑偏移
+        float targetX = (screenW - currentWidth) / 2f + offsetX;
         renderX = smooth(renderX, targetX, 0.2f);
 
         // ---- 渲染（原版三层结构）----
         float islandX = renderX;
-        float islandY = ISLAND_Y * s;
+        float islandY = ISLAND_Y * s + offsetY;
         float islandW = currentWidth;
         float islandH = currentHeight;
         float cornerR = CORNER_RADIUS * s;
@@ -608,6 +619,9 @@ public class DynamicIslandRenderer {
 
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         quad.flush(sw, sh);
+
+        // 记录编辑模式边界框
+        editBounds = new float[]{islandX, islandY, islandW, islandH};
     }
 
     // ---- 原版 AnimationUtil.smooth 精确还原 ----
