@@ -125,6 +125,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
     private ModuleItem blurEnabledToggle;     // Setting / "Blur Background"
     private ModuleItem globalGradientSpeedSlider; // Setting / "Gradient Speed"
     private ModuleItem notificationToggle;    // Client / "Notifications"
+    private ModuleItem soundEffectsToggle;   // Preferences / "Sound Effects"
     private ModuleItem arrayListToggle;       // Client / "ArrayList"
     private ModuleItem watermarkToggle;       // Home  / "Watermark"
 
@@ -364,18 +365,21 @@ public class HudRenderer implements GLSurfaceView.Renderer {
 
         // ---- 查找 Category 中既有的 HUD 模块引用 ----
         for (Category c : categories) {
-            if (c.name.equals("Setting")) {
+            if (c.name.equals("Client") || c.name.equals("Setting")) {
+                for (ModuleItem m : c.modules) {
+                    if (m.name.equals("Blur Background")) blurEnabledToggle = m;
+                    if (m.name.equals("Gradient Speed")) globalGradientSpeedSlider = m;
+                    if (m.name.equals("Notifications") || m.name.equals("Notification")) notificationToggle = m;
+                    if (m.name.equals("ArrayList")) arrayListToggle = m;
+                    if (m.name.equals("Watermark")) watermarkToggle = m;
+                }
+            }
+            if (c.name.equals("Preferences") || c.name.equals("Home")) {
                 for (ModuleItem m : c.modules) {
                     if (m.name.equals("Dark Theme")) darkThemeToggle = m;
                     if (m.name.equals("Blur Background")) blurEnabledToggle = m;
                     if (m.name.equals("Gradient Speed")) globalGradientSpeedSlider = m;
-                    if (m.name.equals("Notification")) notificationToggle = m;
-                    if (m.name.equals("ArrayList")) arrayListToggle = m;
-                }
-            }
-            if (c.name.equals("Home")) {
-                for (ModuleItem m : c.modules) {
-                    if (m.name.equals("Watermark")) watermarkToggle = m;
+                    if (m.name.equals("Sound Effects")) soundEffectsToggle = m;
                 }
             }
         }

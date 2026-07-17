@@ -241,14 +241,10 @@ public class FloatingHotkeyView {
 
             float w = getWidth();
             float h = getHeight();
-            float cx = w / 2f;
-            float cy = h / 2f;
-
-            canvas.save();
-            canvas.scale(scale, scale, cx, cy);
-
             float r = dp(6);
 
+            // 直接绘制，不使用 canvas.scale（避免缩放后圆角变直角）
+            // 通过 setScaleX/Y 实现缩放反馈（View 级别缩放，不影响绘制内容形状）
             // 背景
             bgPaint.setColor(moduleEnabled ? COLOR_ON : COLOR_OFF);
             bgPaint.setAlpha(moduleEnabled ? 210 : 200);
@@ -256,9 +252,9 @@ public class FloatingHotkeyView {
 
             // 文字
             textPaint.setColor(moduleEnabled ? Color.WHITE : Color.parseColor("#888888"));
+            float cx = w / 2f;
+            float cy = h / 2f;
             canvas.drawText(text, cx, cy - (textPaint.descent() + textPaint.ascent()) / 2f, textPaint);
-
-            canvas.restore();
         }
 
         @Override
@@ -270,13 +266,12 @@ public class FloatingHotkeyView {
                     downTime = System.currentTimeMillis();
                     isDragging = false;
                     isLongPress = false;
-                    targetScale = 0.92f; // 按下缩小反馈
-                    postInvalidate();
-                    // 记录触摸点相对于窗口的偏移
-                    int[] location = new int[2];
-                    getLocationOnScreen(location);
-                    offsetX = (int) (downX - location[0]);
-                    offsetY = (int) (downY - location[1]);
+                    // 用 View 级别缩放做反馈（不影响绘制内容的圆角形状）
+                    setScaleX(0.92f);
+                    setScaleY(0.92f);
+                    // 记录触摸点相对于窗口的偏移（用 getX/Y 而非 raw 坐标计算偏移更准确）
+                    offsetX = (int) event.getX();
+                    offsetY = (int) event.getY();
                     return true;
 
                 case MotionEvent.ACTION_MOVE:
@@ -288,11 +283,12 @@ public class FloatingHotkeyView {
                             && (Math.abs(mx - downX) > DRAG_THRESHOLD || Math.abs(my - downY) > DRAG_THRESHOLD)) {
                         isDragging = true;
                         isLongPress = true;
-                        targetScale = 1.1f; // 长按拖拽放大反馈
-                        postInvalidate();
+                        setScaleX(1.1f);
+                        setScaleY(1.1f);
                     }
 
                     if (isDragging && dragListener != null) {
+                        // newX/Y = 手指 raw 坐标 - 触摸点在 View 内的偏移
                         int newX = (int) (mx - offsetX);
                         int newY = (int) (my - offsetY);
                         dragListener.onDrag(newX, newY);
@@ -301,8 +297,8 @@ public class FloatingHotkeyView {
 
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
-                    targetScale = 1f;
-                    postInvalidate();
+                    setScaleX(1f);
+                    setScaleY(1f);
 
                     if (!isLongPress) {
                         // 短按 = 切换开关

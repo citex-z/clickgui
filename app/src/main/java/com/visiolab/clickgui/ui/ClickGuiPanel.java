@@ -70,7 +70,7 @@ public class ClickGuiPanel {
     private static final int SOUTH_CARD_BORDER_SEL = Color.parseColor("#808080"); // 选中边框
     private static final int SOUTH_SEARCH_BG    = Color.parseColor("#E0E0E0"); // 搜索框背景
     private static final int SOUTH_MODULE_BG    = Color.parseColor("#E6E6E6"); // 配置行背景
-    private static final int SOUTH_TOGGLE_ON    = Color.parseColor("#4A90D9"); // 开关开启：柔和蓝色，搭配浅色面板
+    private static final int SOUTH_TOGGLE_ON    = Color.parseColor("#9E9E9E"); // 开关开启：调亮的中灰
     private static final int SOUTH_TOGGLE_OFF   = Color.parseColor("#D5D5D5"); // 开关关闭：浅灰
     private static final int SOUTH_SLIDER_TRACK = Color.parseColor("#D9D9D9"); // 滑块轨道
     private static final int KNOB_COLOR         = Color.parseColor("#FFFFFF"); // 旋钮/滑块圆点
@@ -79,8 +79,8 @@ public class ClickGuiPanel {
     private static final int SOUTH_TEXT_DIM3    = Color.argb(97, 20, 20, 20);  // #141414 38%
     private static final int SOUTH_SECTION_LBL  = Color.parseColor("#737373"); // 分组标签
     private static final int SOUTH_DIVIDER      = Color.argb(128, 153, 153, 153); // #999999 50%
-    private static final int ACCENT_1       = Color.parseColor("#4A90D9"); // 强调色1：蓝色
-    private static final int ACCENT_2       = Color.parseColor("#357ABD"); // 强调色2：深蓝
+    private static final int ACCENT_1       = Color.parseColor("#9E9E9E"); // 强调色1：调亮灰色
+    private static final int ACCENT_2       = Color.parseColor("#757575"); // 强调色2：深灰
 
     // ==================== 尺寸常量（dp 值，运行时转换）====================
     // 缩放系数 0.7：进一步减轻面板拥挤感
