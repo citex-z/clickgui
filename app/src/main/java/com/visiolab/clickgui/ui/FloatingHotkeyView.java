@@ -53,6 +53,9 @@ public class FloatingHotkeyView {
         void onToggle(String moduleName, boolean enabled);
     }
 
+    interface OnDragListener { void onDrag(int x, int y); }
+    interface OnToggleListener { void onToggle(boolean enabled); }
+
     public FloatingHotkeyView(Activity activity) {
         this.activity = activity;
         this.wm = (WindowManager) activity.getSystemService(Context.WINDOW_SERVICE);
@@ -204,9 +207,6 @@ public class FloatingHotkeyView {
         private boolean isDragging = false;
         private boolean isLongPress = false;
         private int offsetX, offsetY;
-
-        interface OnDragListener { void onDrag(int x, int y); }
-        interface OnToggleListener { void onToggle(boolean enabled); }
 
         HotkeyBtnView(Context context, String text, boolean enabled, Typeface font) {
             super(context);
