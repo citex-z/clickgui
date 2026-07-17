@@ -295,13 +295,19 @@ public class ClickGuiPanel {
         int screenW = activity.getResources().getDisplayMetrics().widthPixels;
         int screenH = activity.getResources().getDisplayMetrics().heightPixels;
 
+        // 读取 GUI Scale 配置（从 Client 分类的 ClickGUI 模块）
+        float guiScaleMul = getGuiScaleMultiplier();
+
         // 计算面板尺寸：宽 = min(屏宽*0.92, 屏高*1.6)，高 = 宽 * 0.625
-        float panelW = Math.min(screenW * 0.92f, screenH * 1.6f);
-        float panelH = panelW * PANEL_RATIO;
-        if (panelH > screenH * 0.9f) {
-            panelH = screenH * 0.9f;
-            panelW = panelH / PANEL_RATIO;
+        float basePanelW = Math.min(screenW * 0.92f, screenH * 1.6f);
+        float basePanelH = basePanelW * PANEL_RATIO;
+        if (basePanelH > screenH * 0.9f) {
+            basePanelH = screenH * 0.9f;
+            basePanelW = basePanelH / PANEL_RATIO;
         }
+        // 应用 GUI Scale（0.5x ~ 2.0x）
+        float panelW = basePanelW * guiScaleMul;
+        float panelH = basePanelH * guiScaleMul;
 
         // 根容器：全屏（无遮罩，面板背景本身就是不透明的）
         FrameLayout root = new FrameLayout(activity);
@@ -1015,6 +1021,33 @@ public class ClickGuiPanel {
                 });
         groupContainer.addView(enabledRow, configRowParams());
 
+        // --- "添加到快捷键" 按钮（紧接开关下方） ---
+        TextView hotkeyBtn = new TextView(activity);
+        hotkeyBtn.setText(t("添加到快捷键", "Add to Hotkeys"));
+        hotkeyBtn.setTextColor(SOUTH_TEXT_WHITE);
+        hotkeyBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(12*0.7));
+        hotkeyBtn.setGravity(Gravity.CENTER);
+        hotkeyBtn.setSingleLine(true);
+        applyRegularFont(hotkeyBtn);
+        GradientDrawable hkBg = new GradientDrawable();
+        hkBg.setColor(ACCENT_1);
+        hkBg.setCornerRadius(dp(BOTTOM_BTN_CORNER));
+        hotkeyBtn.setBackground(hkBg);
+        hotkeyBtn.setOnClickListener(v -> {
+            if (addHotkeyListener != null) {
+                addHotkeyListener.onAddHotkey(m.name);
+            }
+            hotkeyBtn.setText(t("已添加/移除", "Added/Removed"));
+            hotkeyBtn.postDelayed(() -> {
+                hotkeyBtn.setText(t("添加到快捷键", "Add to Hotkeys"));
+            }, 1000);
+        });
+        LinearLayout.LayoutParams hkLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(BOTTOM_BTN_H));
+        hkLp.topMargin = dp(8);
+        hkLp.bottomMargin = dp(4);
+        groupContainer.addView(hotkeyBtn, hkLp);
+
         // --- 模块额外配置项 ---
         for (ModuleItem.ConfigOption opt : m.options) {
             View optRow = createConfigOptionRow(opt);
@@ -1074,33 +1107,6 @@ public class ClickGuiPanel {
 
         pageContainer.addView(groupContainer, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        // --- "添加到快捷键" 按钮 ---
-        TextView hotkeyBtn = new TextView(activity);
-        hotkeyBtn.setText(t("添加到快捷键", "Add to Hotkeys"));
-        hotkeyBtn.setTextColor(SOUTH_TEXT_WHITE);
-        hotkeyBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(12*0.7));
-        hotkeyBtn.setGravity(Gravity.CENTER);
-        hotkeyBtn.setSingleLine(true);
-        applyRegularFont(hotkeyBtn);
-        GradientDrawable hkBg = new GradientDrawable();
-        hkBg.setColor(ACCENT_1);
-        hkBg.setCornerRadius(dp(BOTTOM_BTN_CORNER));
-        hotkeyBtn.setBackground(hkBg);
-        hotkeyBtn.setOnClickListener(v -> {
-            if (addHotkeyListener != null) {
-                addHotkeyListener.onAddHotkey(m.name);
-            }
-            // 更新按钮文字反馈
-            hotkeyBtn.setText(t("已添加/移除", "Added/Removed"));
-            hotkeyBtn.postDelayed(() -> {
-                hotkeyBtn.setText(t("添加到快捷键", "Add to Hotkeys"));
-            }, 1000);
-        });
-        LinearLayout.LayoutParams hkLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(BOTTOM_BTN_H));
-        hkLp.topMargin = dp(12);
-        pageContainer.addView(hotkeyBtn, hkLp);
 
         configScrollView.addView(pageContainer);
         contentBody.addView(configScrollView, new FrameLayout.LayoutParams(
@@ -1383,6 +1389,24 @@ public class ClickGuiPanel {
     /** dp 转 px */
     private int dp(int v) {
         return (int) (v * activity.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    /** 从 Client 分类的 ClickGUI 模块读取 GUI Scale 配置 */
+    private float getGuiScaleMultiplier() {
+        if (categories == null) return 1f;
+        for (Category cat : categories) {
+            if (!cat.name.equals("Client")) continue;
+            for (ModuleItem m : cat.modules) {
+                if (!m.name.equals("ClickGUI")) continue;
+                for (ModuleItem.ConfigOption opt : m.options) {
+                    if (opt.label.equals("GUI Scale")) {
+                        // sliderValue 是 0..1，映射到 0.5x~2.0x
+                        return 0.5f + opt.sliderValue * 1.5f;
+                    }
+                }
+            }
+        }
+        return 1f;
     }
 
     /** 应用 Comfortaa-Regular 字体 */
