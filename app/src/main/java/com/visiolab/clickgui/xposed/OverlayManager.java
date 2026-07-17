@@ -11,10 +11,13 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 
 import com.visiolab.clickgui.gl.HudRenderer;
+import com.visiolab.clickgui.model.Category;
 import com.visiolab.clickgui.ui.FloatingBallView;
+import com.visiolab.clickgui.ui.FloatingHotkeyView;
 import com.visiolab.clickgui.ui.ClickGuiPanel;
 
 import java.lang.ref.WeakReference;
+import java.util.List;
 
 /**
  * 混合架构 Overlay 管理器。
@@ -36,6 +39,7 @@ public class OverlayManager {
     private static GLSurfaceView hudGlView;
     private static HudRenderer hudRenderer;
     private static FloatingBallView floatingBall;
+    private static FloatingHotkeyView hotkeyView;
     private static ClickGuiPanel guiPanel;
     private static WindowManager windowManager;
     private static boolean attached = false;
@@ -109,6 +113,24 @@ public class OverlayManager {
         floatingBall.show();
         Log.i(TAG, "Floating ball attached");
 
+        // ---- 第3层：快捷键 ----
+        hotkeyView = new FloatingHotkeyView(activity);
+        hotkeyView.setOnHotkeyToggleListener((name, enabled) -> {
+            Log.i(TAG, "Hotkey toggled: " + name + " → " + enabled);
+            // 通知 HUD 更新
+            if (hudRenderer != null) {
+                hudRenderer.onModuleChanged(name, enabled);
+            }
+        });
+        // 从 categories 中提取所有 showToggle=true 的模块
+        java.util.List<Category> cats = Category.buildDefault();
+        int screenW = activity.getResources().getDisplayMetrics().widthPixels;
+        int screenH = activity.getResources().getDisplayMetrics().heightPixels;
+        for (Category cat : cats) {
+            hotkeyView.updateHotkeys(cat.modules, screenW, screenH);
+        }
+        Log.i(TAG, "Floating hotkeys attached");
+
         attached = true;
         Log.i(TAG, "=== Overlay fully attached (hybrid mode) ===");
     }
@@ -117,14 +139,16 @@ public class OverlayManager {
     private static void openGuiPanel(Activity activity) {
         if (guiPanel != null && guiPanel.isShowing()) return;
 
-        // 隐藏悬浮球
+        // 隐藏悬浮球和快捷键
         floatingBall.hide();
+        if (hotkeyView != null) hotkeyView.hideAll();
 
         guiPanel = new ClickGuiPanel(activity);
         guiPanel.setOnCloseListener(() -> {
             Log.i(TAG, "GUI panel closed → showing floating ball");
             guiPanel = null;
             floatingBall.show();
+            if (hotkeyView != null) hotkeyView.showAll();
         });
         guiPanel.setOnModuleChangedListener((name, enabled) -> {
             // 通知 HUD 层更新
@@ -137,6 +161,7 @@ public class OverlayManager {
 
     public static synchronized void detach() {
         if (guiPanel != null) { guiPanel.dismiss(); guiPanel = null; }
+        if (hotkeyView != null) { hotkeyView.removeAll(); hotkeyView = null; }
         if (floatingBall != null) { floatingBall.hide(); floatingBall = null; }
         if (hudGlView != null) {
             hudGlView.onPause();

@@ -13,53 +13,64 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.widget.PopupWindow;
 
 /**
- * 悬浮球 — 原生 View + Canvas 自绘。
+ * 悬浮球 — WindowManager + Canvas 自绘。
+ *
+ * 使用 WindowManager.addView 而非 PopupWindow，
+ * 确保在 GL SurfaceView 之上（添加顺序决定 z-order）。
  *
  * 功能：
  * - 单击：打开 ClickGUI 面板
  * - 长按拖拽：移动位置
  * - 渐变色圆形 + 阴影
- *
- * 实现：PopupWindow 包裹自定义 View
  */
 public class FloatingBallView {
 
     private static final String TAG = "FloatingBall";
     private final Activity activity;
-    private PopupWindow popup;
     private BallView ballView;
+    private WindowManager wm;
+    private WindowManager.LayoutParams params;
     private int ballSize;
     private int posX, posY;
     private OnBallClickListener clickListener;
+    private boolean shown = false;
 
     // 阻尼拖拽
-    private boolean dragging = false;
     private float downX, downY;
     private boolean moved = false;
-    private static final float DAMPING = 0.2f; // 阻尼系数
+    private static final float DAMPING = 0.2f;
 
-    // 颜色（跟主题一致）
-    private static final int COLOR_START = Color.parseColor("#1A73E8"); // 蓝
-    private static final int COLOR_END = Color.parseColor("#00BCD4");   // 青
+    // 主题色
+    private static final int COLOR_START = Color.parseColor("#1A73E8");
+    private static final int COLOR_END = Color.parseColor("#00BCD4");
 
-    public interface OnBallClickListener {
-        void onBallClick();
-    }
+    public interface OnBallClickListener { void onBallClick(); }
 
     public FloatingBallView(Activity activity) {
         this.activity = activity;
-        this.ballSize = dp(activity, 48); // 48dp
+        this.wm = (WindowManager) activity.getSystemService(Context.WINDOW_SERVICE);
+        this.ballSize = dp(activity, 48);
         this.posX = dp(activity, 16);
         this.posY = dp(activity, 100);
 
         ballView = new BallView(activity);
-        popup = new PopupWindow(ballView, ballSize, ballSize);
-        popup.setClippingEnabled(false);
-        popup.setBackgroundDrawable(null);
-        popup.setOutsideTouchable(false);
+        params = new WindowManager.LayoutParams(
+            ballSize, ballSize,
+            WindowManager.LayoutParams.TYPE_APPLICATION,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            PixelFormat.TRANSLUCENT
+        );
+        params.gravity = Gravity.TOP | Gravity.START;
+        params.x = posX;
+        params.y = posY;
+        try {
+            params.token = activity.getWindow().getAttributes().token;
+        } catch (Throwable ignored) {}
     }
 
     public void setOnBallClickListener(OnBallClickListener listener) {
@@ -67,58 +78,56 @@ public class FloatingBallView {
     }
 
     public void show() {
-        if (popup != null && !popup.isShowing()) {
-            activity.runOnUiThread(() -> {
+        if (shown) return;
+        activity.runOnUiThread(() -> {
+            try {
+                // 尝试 TYPE_APPLICATION
                 try {
-                    popup.showAtLocation(
-                        activity.getWindow().getDecorView(),
-                        Gravity.TOP | Gravity.START,
-                        posX, posY
-                    );
-                    Log.d(TAG, "Ball shown at (" + posX + "," + posY + ")");
-                } catch (Exception e) {
-                    Log.e(TAG, "show failed", e);
+                    wm.addView(ballView, params);
+                } catch (Throwable e) {
+                    Log.w(TAG, "TYPE_APPLICATION failed, trying PANEL", e);
+                    params.type = WindowManager.LayoutParams.TYPE_APPLICATION_PANEL;
+                    params.token = activity.getWindow().getDecorView().getWindowToken();
+                    wm.addView(ballView, params);
                 }
-            });
-        }
+                shown = true;
+                Log.i(TAG, "Ball shown at (" + posX + "," + posY + ")");
+            } catch (Throwable e) {
+                Log.e(TAG, "Ball show failed", e);
+            }
+        });
     }
 
     public void hide() {
-        if (popup != null && popup.isShowing()) {
-            popup.dismiss();
-        }
+        if (!shown) return;
+        try { wm.removeView(ballView); } catch (Throwable ignored) {}
+        shown = false;
     }
 
-    public boolean isShowing() {
-        return popup != null && popup.isShowing();
+    public boolean isShowing() { return shown; }
+
+    private void updatePosition() {
+        if (!shown) return;
+        params.x = posX;
+        params.y = posY;
+        try { wm.updateViewLayout(ballView, params); } catch (Throwable ignored) {}
     }
 
-    /** 自绘悬浮球 View */
+    /** 自绘悬浮球 */
     private class BallView extends View {
-        private final Paint circlePaint;
-        private final Paint shadowPaint;
         private final Paint dotPaint;
         private float pulseScale = 1f;
 
         public BallView(Context context) {
             super(context);
-            // 渐变圆球
-            GradientDrawable ballDrawable = new GradientDrawable(
+            GradientDrawable bg = new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 new int[]{COLOR_START, COLOR_END}
             );
-            ballDrawable.setShape(GradientDrawable.OVAL);
-            ballDrawable.setBounds(0, 0, ballSize, ballSize);
-            setBackground(ballDrawable);
-
-            circlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            circlePaint.setColor(Color.WHITE);
-            circlePaint.setAlpha(200);
-
-            shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            shadowPaint.setColor(0x40000000);
-            shadowPaint.setShadowLayer(dp(context, 6), 0, dp(context, 3), 0x66000000);
-            setLayerType(LAYER_TYPE_SOFTWARE, shadowPaint);
+            bg.setShape(GradientDrawable.OVAL);
+            bg.setCornerRadius(ballSize);
+            setBackground(bg);
+            setLayerType(LAYER_TYPE_SOFTWARE, null);
 
             dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             dotPaint.setColor(Color.WHITE);
@@ -130,8 +139,6 @@ public class FloatingBallView {
             super.onDraw(canvas);
             float cx = getWidth() / 2f;
             float cy = getHeight() / 2f;
-
-            // 内部装饰：小圆点（类似加载图标）
             float dotR = dp(getContext(), 4) * pulseScale;
             canvas.drawCircle(cx, cy - dp(getContext(), 6), dotR, dotPaint);
             canvas.drawCircle(cx - dp(getContext(), 7), cy + dp(getContext(), 4), dotR, dotPaint);
@@ -155,16 +162,11 @@ public class FloatingBallView {
                     if (Math.abs(event.getRawX() - downX) > dp(getContext(), 8) ||
                         Math.abs(event.getRawY() - downY) > dp(getContext(), 8)) {
                         moved = true;
-                        int newX = posX + (int) dx;
-                        int newY = posY + (int) dy;
-                        // 边界检测
                         int screenW = getResources().getDisplayMetrics().widthPixels;
                         int screenH = getResources().getDisplayMetrics().heightPixels;
-                        newX = Math.max(0, Math.min(newX, screenW - ballSize));
-                        newY = Math.max(0, Math.min(newY, screenH - ballSize));
-                        posX = newX;
-                        posY = newY;
-                        popup.update(posX, posY, -1, -1);
+                        posX = Math.max(0, Math.min(posX + (int) dx, screenW - ballSize));
+                        posY = Math.max(0, Math.min(posY + (int) dy, screenH - ballSize));
+                        updatePosition();
                         downX = event.getRawX();
                         downY = event.getRawY();
                     }
