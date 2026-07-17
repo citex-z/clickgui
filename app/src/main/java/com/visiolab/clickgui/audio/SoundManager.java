@@ -58,8 +58,10 @@ public class SoundManager {
     }
 
     private void loadSound(String key, String assetPath) {
+        // 优先使用模块资源加载器（Xposed 注入模式）
+        android.content.res.AssetManager am = getModuleAssets();
         try {
-            AssetFileDescriptor afd = context.getAssets().openFd(assetPath);
+            AssetFileDescriptor afd = am.openFd(assetPath);
             int soundId = soundPool.load(afd, 1);
             soundMap.put(key, soundId);
             afd.close();
@@ -67,6 +69,20 @@ public class SoundManager {
         } catch (Exception e) {
             Log.e("SoundManager", "Failed to load " + assetPath + ": " + e.getMessage());
         }
+    }
+
+    /** 获取模块 AssetManager（Xposed 注入模式下使用 ModuleResourceLoader） */
+    private android.content.res.AssetManager getModuleAssets() {
+        try {
+            Class<?> mrl = Class.forName("com.visiolab.clickgui.xposed.ModuleResourceLoader");
+            java.lang.reflect.Method getAssets = mrl.getMethod("getAssets");
+            java.lang.reflect.Method isInit = mrl.getMethod("isInitialized");
+            if ((boolean) isInit.invoke(null)) {
+                android.content.res.AssetManager am = (android.content.res.AssetManager) getAssets.invoke(null);
+                if (am != null) return am;
+            }
+        } catch (Throwable e) { /* 非注入模式 */ }
+        return context.getAssets();
     }
 
     /** 播放开启音效 */
