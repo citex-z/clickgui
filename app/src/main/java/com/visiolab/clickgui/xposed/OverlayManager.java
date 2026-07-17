@@ -134,7 +134,10 @@ public class OverlayManager {
         floatingBall.hide();
         if (hotkeyView != null) hotkeyView.hideAll();
 
-        guiPanel = new ClickGuiPanel(activity);
+        // 共享同一份 categories 实例，实现数据双向同步
+        java.util.List<com.visiolab.clickgui.model.Category> sharedCats =
+            hudRenderer != null ? hudRenderer.getCategories() : com.visiolab.clickgui.model.Category.buildDefault();
+        guiPanel = new ClickGuiPanel(activity, sharedCats);
         guiPanel.setOnCloseListener(() -> {
             Log.i(TAG, "GUI panel closed → showing floating ball");
             guiPanel = null;
@@ -142,7 +145,7 @@ public class OverlayManager {
             if (hotkeyView != null) hotkeyView.showAll();
         });
         guiPanel.setOnModuleChangedListener((name, enabled) -> {
-            // 通知 HUD 层更新
+            // 数据已在共享 categories 中同步，这里只通知 HUD 触发视觉反馈
             if (hudRenderer != null) {
                 hudRenderer.onModuleChanged(name, enabled);
             }

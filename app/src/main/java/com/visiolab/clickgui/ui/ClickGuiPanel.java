@@ -1,15 +1,19 @@
 package com.visiolab.clickgui.ui;
 
 import android.app.Activity;
-import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.OvershootInterpolator;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
@@ -18,79 +22,176 @@ import android.widget.TextView;
 
 import com.visiolab.clickgui.model.Category;
 import com.visiolab.clickgui.model.ModuleItem;
-import com.visiolab.clickgui.ui.widget.SwitchView;
 import com.visiolab.clickgui.ui.widget.SliderView;
+import com.visiolab.clickgui.ui.widget.SwitchView;
+import com.visiolab.clickgui.xposed.ModuleResourceLoader;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ClickGUI 面板 — 原生 View 实现。
+ * ClickGUI 面板 — 原生 View 实现，1:1 还原原始 GL 面板的视觉规范。
+ *
+ * 浅色主题（白底黑字），参考南方客户端的 GL UIRenderer 配色：
+ * - 面板背景: #F5F5F5
+ * - 侧栏背景: #EBEBEB
+ * - 卡片/模块行背景: #EBEBEB / #E6E6E6
+ * - 主文字: #141414 (87% alpha)
  *
  * 布局结构：
- * ┌──────────────────────────────────────────┐
- * │  半透明遮罩 (长按关闭)                      │
- * │  ┌──────────────────────────────────────┐ │
- * │  │  主面板 (圆角+渐变背景+elevation)      │ │
- * │  │ ┌──────────────┐ ┌──────────────────┐ │ │
- * │  │ │  模块列表     │ │  分类导航         │ │ │
- * │  │ │  ScrollView  │ │  Combat          │ │ │
- * │  │ │  [Module]    │ │  Movement        │ │ │
- * │  │ │  [Module]    │ │  Player          │ │ │
- * │  │ │  ...         │ │  Visual          │ │ │
- * │  │ │              │ │  Misc            │ │ │
- * │  │ └──────────────┘ └──────────────────┘ │ │
- * │  └──────────────────────────────────────┘ │
- * └──────────────────────────────────────────┘
+ * ┌──────────┬──────────────────────────────────────┐
+ * │          │  Header 栏 (72dp)                     │
+ * │          │  [品牌名]  [语言][×][搜索框]            │
+ * │  侧栏    ├──────────────────────────────────────┤
+ * │ (20.83%) │  内容标题 (30dp) "Xxx Modules"        │
+ * │          ├──────────────────────────────────────┤
+ * │  分类    │  内容区 (3列卡片网格 / 配置页)          │
+ * │  按钮    │  (ScrollView滚动)                     │
+ * │          │                                        │
+ * │ [EditHUD]│                                        │
+ * │ [Close]  │                                        │
+ * └──────────┴──────────────────────────────────────┘
  */
 public class ClickGuiPanel {
 
     private static final String TAG = "ClickGuiPanel";
 
-    // 主题色
-    private static final int ACCENT_1 = Color.parseColor("#1A73E8");
-    private static final int ACCENT_2 = Color.parseColor("#00BCD4");
-    private static final int PANEL_BG = Color.parseColor("#1C1B1F");
-    private static final int CARD_BG = Color.parseColor("#2A292E");
-    private static final int TEXT_PRIMARY = Color.parseColor("#FFFFFF");
-    private static final int TEXT_SECONDARY = Color.parseColor("#9AA0A6");
+    // ==================== 颜色常量（浅色主题，来自 GL UIRenderer）====================
+
+    private static final int SOUTH_PANEL_BG     = Color.parseColor("#F5F5F5"); // 面板背景
+    private static final int SOUTH_SIDEBAR_BG   = Color.parseColor("#EBEBEB"); // 侧栏背景
+    private static final int SOUTH_CARD_BG      = Color.parseColor("#EBEBEB"); // 卡片背景
+    private static final int SOUTH_CARD_BORDER  = Color.parseColor("#CCCCCC"); // 卡片边框
+    private static final int SOUTH_CARD_BORDER_SEL = Color.parseColor("#808080"); // 选中边框
+    private static final int SOUTH_SEARCH_BG    = Color.parseColor("#E0E0E0"); // 搜索框背景
+    private static final int SOUTH_MODULE_BG    = Color.parseColor("#E6E6E6"); // 配置行背景
+    private static final int SOUTH_TOGGLE_ON    = Color.parseColor("#808080"); // 开关开启
+    private static final int SOUTH_TOGGLE_OFF   = Color.parseColor("#CCCCCC"); // 开关关闭
+    private static final int SOUTH_SLIDER_TRACK = Color.parseColor("#D9D9D9"); // 滑块轨道
+    private static final int KNOB_COLOR         = Color.parseColor("#FFFFFF"); // 旋钮/滑块圆点
+    private static final int SOUTH_TEXT_WHITE   = Color.argb(222, 20, 20, 20); // #141414 87%
+    private static final int SOUTH_TEXT_DIM2    = Color.argb(153, 20, 20, 20); // #141414 60%
+    private static final int SOUTH_TEXT_DIM3    = Color.argb(97, 20, 20, 20);  // #141414 38%
+    private static final int SOUTH_SECTION_LBL  = Color.parseColor("#737373"); // 分组标签
+    private static final int SOUTH_DIVIDER      = Color.argb(128, 153, 153, 153); // #999999 50%
+    private static final int ACCENT_1           = Color.parseColor("#808080"); // 强调色1
+    private static final int ACCENT_2           = Color.parseColor("#666666"); // 强调色2
+
+    // ==================== 尺寸常量（dp 值，运行时转换）====================
+
+    private static final float PANEL_RATIO     = 600f / 960f;   // 面板高宽比 0.625
+    private static final float SIDEBAR_RATIO   = 200f / 960f;   // 侧栏宽度占比 20.83%
+    private static final int PANEL_CORNER      = 20;             // 面板圆角
+    private static final int HEADER_H          = 72;             // Header 栏高度
+    private static final int TITLE_H           = 30;             // 内容标题高度
+    private static final int CARD_H            = 110;            // 卡片高度
+    private static final int CARD_GAP          = 16;             // 卡片间距
+    private static final int CARD_CORNER       = 12;             // 卡片圆角
+    private static final int CONFIG_BAR_H      = 32;             // 配置栏高度（卡片下半）
+    private static final int CONFIG_ROW_H      = 48;             // 配置行高度
+    private static final int CONFIG_ROW_GAP    = 8;              // 配置行间距
+    private static final int GROUP_CORNER      = 10;             // 分组容器圆角
+    private static final int SWITCH_W          = 44;             // 开关宽度
+    private static final int SWITCH_H          = 22;             // 开关高度
+    private static final int SIDEBAR_BTN_H     = 36;             // 侧栏按钮高度
+    private static final int SIDEBAR_BTN_GAP   = 4;              // 侧栏按钮间距
+    private static final int SEARCH_W          = 160;            // 搜索框宽度
+    private static final int SEARCH_H          = 36;             // 搜索框高度
+    private static final int CLOSE_SIZE        = 36;             // 关闭按钮尺寸
+    private static final int LANG_W            = 52;             // 语言按钮宽度
+    private static final int LANG_H            = 36;             // 语言按钮高度
+    private static final int GRID_COLS         = 3;              // 卡片网格列数
+    private static final int BOTTOM_BTN_H      = 36;             // 底部按钮高度
+    private static final int BOTTOM_BTN_CORNER = 8;              // 底部按钮圆角
+
+    // ==================== 字段 ====================
 
     private final Activity activity;
     private PopupWindow popup;
-    private List<Category> categories;
+    private final List<Category> categories;
     private int currentCategoryIndex = 0;
+    private ModuleItem activeConfigModule = null;  // 当前打开配置页的模块（null=卡片网格模式）
+    private String searchQuery = "";
+    private boolean langZh = false;
 
-    private OnCloseListener closeListener;
-    private OnModuleChangedListener moduleChangedListener;
+    // 动态更新的视图引用
+    private View panelView;                  // 面板容器（用于入场/退场动画）
+    private FrameLayout contentBody;          // 内容主体（卡片网格 / 配置页切换）
+    private TextView contentTitleText;        // 内容区标题 "Xxx Modules"
+    private TextView contentSubtitleText;     // 内容区副标题 "N modules · M enabled"
+    private TextView headerTitleText;         // Header 标题（品牌名 / 面包屑）
+    private TextView headerSubtitleText;      // Header 副标题（分类指示）
+    private EditText searchEditText;          // 搜索框
+    private LinearLayout sidebarBtnsContainer;   // 侧栏按钮容器
+    private ScrollView moduleScrollView;      // 模块卡片 ScrollView
+    private ScrollView configScrollView;      // 配置页 ScrollView
+    private TextView editHudBtn;              // 侧栏底部 EditHUD 按钮
+    private TextView closeSideBtn;            // 侧栏底部 Close 按钮
 
     // 字体
     private Typeface comfortaaRegular;
     private Typeface comfortaaBold;
 
-    public interface OnCloseListener { void onClose(); }
-    public interface OnModuleChangedListener { void onModuleChanged(String name, boolean enabled); }
+    // 监听器
+    private OnCloseListener closeListener;
+    private OnModuleChangedListener moduleChangedListener;
 
+    // ==================== 接口 ====================
+
+    public interface OnCloseListener {
+        void onClose();
+    }
+
+    public interface OnModuleChangedListener {
+        void onModuleChanged(String name, boolean enabled);
+    }
+
+    // ==================== 构造 ====================
+
+    /**
+     * 构造 ClickGUI 面板，使用默认分类数据。
+     */
     public ClickGuiPanel(Activity activity) {
-        this.activity = activity;
-        this.categories = Category.buildDefault();
+        this(activity, null);
+    }
 
-        // 加载字体
+    /**
+     * 构造 ClickGUI 面板，接收外部传入的分类数据（与 GL 共享）。
+     *
+     * @param activity   宿主 Activity
+     * @param categories 分类数据列表，若为 null 则使用 Category.buildDefault()
+     */
+    public ClickGuiPanel(Activity activity, List<Category> categories) {
+        this.activity = activity;
+        this.categories = categories != null ? categories : Category.buildDefault();
+        loadFonts();
+    }
+
+    public void setOnCloseListener(OnCloseListener listener) {
+        this.closeListener = listener;
+    }
+
+    public void setOnModuleChangedListener(OnModuleChangedListener listener) {
+        this.moduleChangedListener = listener;
+    }
+
+    // ==================== 字体加载 ====================
+
+    /** 通过 ModuleResourceLoader 加载 Comfortaa 字体（Xposed 环境下需要独立 AssetManager） */
+    private void loadFonts() {
         try {
-            java.lang.reflect.Method getAssets = Class.forName("com.visiolab.clickgui.xposed.ModuleResourceLoader")
-                .getMethod("getAssets");
-            java.lang.reflect.Method isInit = Class.forName("com.visiolab.clickgui.xposed.ModuleResourceLoader")
-                .getMethod("isInitialized");
-            if ((boolean) isInit.invoke(null)) {
-                android.content.res.AssetManager am = (android.content.res.AssetManager) getAssets.invoke(null);
-                comfortaaRegular = Typeface.createFromAsset(am, "fonts/Comfortaa-Regular.ttf");
-                comfortaaBold = Typeface.createFromAsset(am, "fonts/Comfortaa-Bold.ttf");
+            if (ModuleResourceLoader.isInitialized()) {
+                comfortaaRegular = Typeface.createFromAsset(
+                        ModuleResourceLoader.getAssets(), "fonts/Comfortaa-Regular.ttf");
+                comfortaaBold = Typeface.createFromAsset(
+                        ModuleResourceLoader.getAssets(), "fonts/Comfortaa-Bold.ttf");
             }
         } catch (Throwable e) {
-            Log.w(TAG, "Font loading via ModuleResourceLoader failed, using default", e);
+            Log.w(TAG, "字体加载失败，使用默认字体", e);
         }
     }
 
-    public void setOnCloseListener(OnCloseListener listener) { this.closeListener = listener; }
-    public void setOnModuleChangedListener(OnModuleChangedListener listener) { this.moduleChangedListener = listener; }
+    // ==================== 显示 / 关闭 ====================
 
     public void show() {
         activity.runOnUiThread(() -> {
@@ -98,30 +199,47 @@ public class ClickGuiPanel {
             int screenW = activity.getResources().getDisplayMetrics().widthPixels;
             int screenH = activity.getResources().getDisplayMetrics().heightPixels;
 
+            // 使用全屏 PopupWindow
             popup = new PopupWindow(content, screenW, screenH, true);
             popup.setClippingEnabled(false);
-            popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             popup.setOutsideTouchable(true);
             popup.setFocusable(true);
-            popup.setAnimationStyle(0); // 无系统动画，自己做
+            popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NEEDED);
+            popup.setAnimationStyle(0);
 
-            // 点击外部关闭
+            // 关键：让 PopupWindow 覆盖整个屏幕包括状态栏区域
+            // 不使用 MATCH_PARENT 的 PopupWindow，而是用 WindowManager 方式
+            // 避免 PopupWindow 顶出系统状态栏导致 GL 下移
             content.setOnClickListener(v -> close());
 
             popup.setOnDismissListener(() -> {
                 if (closeListener != null) closeListener.onClose();
             });
 
-            popup.showAtLocation(activity.getWindow().getDecorView(), Gravity.CENTER, 0, 0);
-
-            // 入场动画
-            animateOpen(content);
+            View decor = activity.getWindow().getDecorView();
+            decor.post(() -> {
+                try {
+                    // 使用 MATCH_PARENT 高度，覆盖状态栏
+                    popup.showAtLocation(decor, Gravity.CENTER, 0, 0);
+                    // 强制 PopupWindow 窗口铺满全屏（包括状态栏区域）
+                    View popupView = popup.getContentView().getRootView();
+                    popupView.setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    );
+                    animateOpen();
+                } catch (Throwable e) {
+                    Log.e(TAG, "PopupWindow show 失败", e);
+                }
+            });
         });
     }
 
     public void dismiss() {
         if (popup != null && popup.isShowing()) {
-            animateClose(popup.getContentView());
+            animateClose();
         }
     }
 
@@ -133,384 +251,1082 @@ public class ClickGuiPanel {
         dismiss();
     }
 
-    // ==================== 构建面板 ====================
+    // ==================== 面板构建 ====================
 
+    /**
+     * 构建整个面板视图。
+     * 根容器全屏 → 半透明遮罩 → 居中面板。
+     */
     private View buildPanelView() {
         int screenW = activity.getResources().getDisplayMetrics().widthPixels;
         int screenH = activity.getResources().getDisplayMetrics().heightPixels;
 
-        // 根容器：全屏，点击空白关闭
+        // 计算面板尺寸：宽 = min(屏宽*0.92, 屏高*1.6)，高 = 宽 * 0.625
+        float panelW = Math.min(screenW * 0.92f, screenH * 1.6f);
+        float panelH = panelW * PANEL_RATIO;
+        if (panelH > screenH * 0.9f) {
+            panelH = screenH * 0.9f;
+            panelW = panelH / PANEL_RATIO;
+        }
+
+        // 根容器：全屏
         FrameLayout root = new FrameLayout(activity);
         root.setLayoutParams(new ViewGroup.LayoutParams(screenW, screenH));
 
-        // 半透明背景遮罩
+        // 半透明遮罩（点击关闭）
         View dim = new View(activity);
         dim.setBackgroundColor(Color.argb(140, 0, 0, 0));
         dim.setOnClickListener(v -> close());
         root.addView(dim, new FrameLayout.LayoutParams(screenW, screenH));
 
-        // 主面板容器
-        int panelW = (int) (screenW * 0.82);
-        int panelH = (int) (screenH * 0.82);
+        // 面板容器：居中，圆角+阴影
         FrameLayout panelContainer = new FrameLayout(activity);
-        FrameLayout.LayoutParams panelLp = new FrameLayout.LayoutParams(panelW, panelH);
-        panelLp.gravity = Gravity.CENTER;
-        panelContainer.setLayoutParams(panelLp);
-
-        // 面板背景：圆角+渐变+阴影
-        GradientDrawable panelBg = new GradientDrawable(
-            GradientDrawable.Orientation.TL_BR,
-            new int[]{Color.parseColor("#1E1D22"), Color.parseColor("#252329")}
-        );
-        panelBg.setCornerRadius(dp(16));
-        panelBg.setStroke(dp(1), Color.parseColor("#33312E"));
+        panelContainer.setTag("panelContainer");
+        GradientDrawable panelBg = new GradientDrawable();
+        panelBg.setColor(SOUTH_PANEL_BG);
+        panelBg.setCornerRadius(dp(PANEL_CORNER));
         panelContainer.setBackground(panelBg);
         panelContainer.setElevation(dp(20));
+        // 消费空白区域点击，避免穿透到遮罩导致误关闭
+        panelContainer.setClickable(true);
+        panelContainer.setFocusable(true);
+        FrameLayout.LayoutParams panelLp = new FrameLayout.LayoutParams(
+                (int) panelW, (int) panelH);
+        panelLp.gravity = Gravity.CENTER;
+        panelContainer.setLayoutParams(panelLp);
+        this.panelView = panelContainer;
 
-        // 左右分栏
+        // 主布局：左右分栏（侧栏 + 内容区）
         LinearLayout mainLayout = new LinearLayout(activity);
         mainLayout.setOrientation(LinearLayout.HORIZONTAL);
-        mainLayout.setPadding(dp(16), dp(16), dp(16), dp(16));
+        mainLayout.setClickable(true); // 同样消费点击，避免穿透
 
-        // 左侧：模块列表
-        View leftPanel = buildModuleList(panelW, panelH);
-        mainLayout.addView(leftPanel, new LinearLayout.LayoutParams(
-            (int)(panelW * 0.60), ViewGroup.LayoutParams.MATCH_PARENT, 1f
-        ));
+        // ---- 左侧栏 ----
+        int sidebarWidth = (int) (panelW * SIDEBAR_RATIO);
+        View sidebar = buildSidebar(sidebarWidth, (int) panelH);
+        mainLayout.addView(sidebar, new LinearLayout.LayoutParams(
+                sidebarWidth, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        // 分割线
+        // 侧栏与内容区之间的分隔线
         View divider = new View(activity);
-        divider.setBackgroundColor(Color.parseColor("#33312E"));
-        LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(dp(1), ViewGroup.LayoutParams.MATCH_PARENT);
-        divLp.setMarginEnd(dp(12));
-        mainLayout.addView(divider, divLp);
+        divider.setBackgroundColor(SOUTH_CARD_BORDER);
+        mainLayout.addView(divider, new LinearLayout.LayoutParams(
+                dp(1), ViewGroup.LayoutParams.MATCH_PARENT));
 
-        // 右侧：分类导航
-        View rightPanel = buildCategoryNav(panelW);
-        mainLayout.addView(rightPanel, new LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.MATCH_PARENT, 1f
-        ));
+        // ---- 右侧内容区 ----
+        View contentArea = buildContentArea((int) (panelW - sidebarWidth - dp(1)), (int) panelH);
+        mainLayout.addView(contentArea, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
 
-        panelContainer.addView(mainLayout);
+        panelContainer.addView(mainLayout, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         root.addView(panelContainer);
+
+        // 初始化内容
+        refreshSidebar();
+        refreshContentTitle();
+        showModuleGrid();
+
         return root;
     }
 
-    /** 构建模块列表区域 */
-    private View buildModuleList(int panelW, int panelH) {
-        LinearLayout container = new LinearLayout(activity);
-        container.setOrientation(LinearLayout.VERTICAL);
+    // ==================== 侧栏 ====================
 
-        // 标题
-        TextView title = new TextView(activity);
-        title.setText("Modules");
-        title.setTextColor(TEXT_PRIMARY);
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        if (comfortaaBold != null) title.setTypeface(comfortaaBold);
-        title.setPadding(dp(4), dp(4), dp(4), dp(8));
-        container.addView(title);
+    /**
+     * 构建左侧栏：分类按钮（按 section 分组）+ 底部 EditHUD/Close 按钮。
+     */
+    private View buildSidebar(int width, int height) {
+        LinearLayout sidebar = new LinearLayout(activity);
+        sidebar.setOrientation(LinearLayout.VERTICAL);
+        sidebar.setBackgroundColor(SOUTH_SIDEBAR_BG);
+        sidebar.setPadding(dp(8), dp(16), dp(8), dp(16));
 
-        // ScrollView 包裹模块卡片
-        ScrollView scrollView = new ScrollView(activity);
-        scrollView.setVerticalScrollBarEnabled(false);
-        scrollView.setFillViewport(true);
+        // 侧栏按钮容器（可滚动区域）
+        ScrollView sidebarScroll = new ScrollView(activity);
+        sidebarScroll.setVerticalScrollBarEnabled(false);
+        sidebarScroll.setFillViewport(true);
 
-        LinearLayout moduleList = new LinearLayout(activity);
-        moduleList.setOrientation(LinearLayout.VERTICAL);
+        sidebarBtnsContainer = new LinearLayout(activity);
+        sidebarBtnsContainer.setOrientation(LinearLayout.VERTICAL);
 
-        // 添加当前分类的模块
-        refreshModuleList(moduleList);
+        // 按分组填充分类按钮
+        populateSidebarButtons();
 
-        scrollView.addView(moduleList);
-        container.addView(scrollView, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
-        ));
+        sidebarScroll.addView(sidebarBtnsContainer);
+        sidebar.addView(sidebarScroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        // 标记 tag 用于刷新
-        moduleList.setTag("moduleList");
-        container.setTag("moduleListContainer");
+        // 底部按钮区域
+        LinearLayout bottomBar = new LinearLayout(activity);
+        bottomBar.setOrientation(LinearLayout.VERTICAL);
 
-        return container;
+        // EditHUD 按钮
+        editHudBtn = createBottomButton(t("编辑HUD", "Edit HUD"));
+        editHudBtn.setOnClickListener(v -> {
+            // 暂无实现：可通过回调通知宿主
+            Log.i(TAG, "EditHUD clicked");
+        });
+        LinearLayout.LayoutParams ehLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(BOTTOM_BTN_H));
+        ehLp.bottomMargin = dp(SIDEBAR_BTN_GAP);
+        bottomBar.addView(editHudBtn, ehLp);
+
+        // Close 按钮
+        closeSideBtn = createBottomButton(t("关闭", "Close"));
+        closeSideBtn.setOnClickListener(v -> close());
+        bottomBar.addView(closeSideBtn, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(BOTTOM_BTN_H)));
+
+        sidebar.addView(bottomBar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        return sidebar;
     }
 
-    /** 刷新模块列表 */
-    private void refreshModuleList(LinearLayout moduleList) {
-        moduleList.removeAllViews();
-        if (currentCategoryIndex < 0 || currentCategoryIndex >= categories.size()) return;
+    /** 创建单个分类按钮 */
+    private TextView createCategoryButton(Category c, int idx) {
+        TextView btn = new TextView(activity);
+        btn.setText(Category.localizedCategory(c.name, langZh));
+        btn.setTextColor(SOUTH_TEXT_DIM2);
+        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        btn.setGravity(Gravity.CENTER_VERTICAL);
+        btn.setPadding(dp(16), 0, dp(8), 0);
+        applyRegularFont(btn);
+        btn.setMinimumHeight(dp(SIDEBAR_BTN_H));
 
-        Category cat = categories.get(currentCategoryIndex);
-        for (ModuleItem module : cat.modules) {
-            moduleList.addView(createModuleCard(module));
+        // 选中高亮背景
+        updateCategoryButtonBg(btn, idx == currentCategoryIndex);
+
+        btn.setOnClickListener(v -> {
+            if (currentCategoryIndex == idx && activeConfigModule == null) return;
+            activeConfigModule = null;
+            currentCategoryIndex = idx;
+            refreshSidebar();
+            refreshContentTitle();
+            updateHeader();
+            switchToModuleGridWithAnim();
+        });
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(SIDEBAR_BTN_H));
+        lp.bottomMargin = dp(SIDEBAR_BTN_GAP);
+        btn.setLayoutParams(lp);
+        btn.setTag(idx);
+        return btn;
+    }
+
+    /** 更新分类按钮的背景和文字颜色（选中高亮） */
+    private void updateCategoryButtonBg(TextView btn, boolean selected) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(12));
+        if (selected) {
+            // 选中高亮：#808080 15% alpha
+            bg.setColor(Color.argb(38, 128, 128, 128));
+            btn.setTextColor(SOUTH_TEXT_WHITE);
+        } else {
+            bg.setColor(Color.TRANSPARENT);
+            btn.setTextColor(SOUTH_TEXT_DIM2);
+        }
+        btn.setBackground(bg);
+    }
+
+    /** 刷新所有分类按钮的选中状态 */
+    private void refreshSidebar() {
+        if (sidebarBtnsContainer == null) return;
+        // 重建按钮（同时更新文字语言和选中状态）
+        populateSidebarButtons();
+    }
+
+    /** 按分组填充/重建侧栏分类按钮 */
+    private void populateSidebarButtons() {
+        if (sidebarBtnsContainer == null) return;
+        sidebarBtnsContainer.removeAllViews();
+
+        String prevSection = null;
+        for (int i = 0; i < categories.size(); i++) {
+            Category c = categories.get(i);
+            // 新分组标签
+            if (prevSection == null || !c.section.equals(prevSection)) {
+                if (prevSection != null) {
+                    // 分组间距
+                    View gap = new View(activity);
+                    sidebarBtnsContainer.addView(gap, new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, dp(12)));
+                }
+                TextView sectionLabel = new TextView(activity);
+                String labelText = c.section.equals("MOD CONFIG")
+                        ? t("模组配置", "MOD CONFIG")
+                        : t("个性化", "PERSONALIZATION");
+                sectionLabel.setText(labelText);
+                sectionLabel.setTextColor(SOUTH_SECTION_LBL);
+                sectionLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+                sectionLabel.setPadding(dp(8), dp(8), dp(8), dp(8));
+                applyBoldFont(sectionLabel);
+                LinearLayout.LayoutParams slLp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(24));
+                slLp.bottomMargin = dp(4);
+                sidebarBtnsContainer.addView(sectionLabel, slLp);
+                prevSection = c.section;
+            }
+
+            // 分类按钮
+            final int idx = i;
+            TextView btn = createCategoryButton(c, idx);
+            sidebarBtnsContainer.addView(btn);
         }
     }
 
-    /** 创建单个模块卡片 */
-    private View createModuleCard(ModuleItem module) {
-        LinearLayout card = new LinearLayout(activity);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+    /** 创建底部按钮（EditHUD / Close） */
+    private TextView createBottomButton(String text) {
+        TextView btn = new TextView(activity);
+        btn.setText(text);
+        btn.setTextColor(SOUTH_TEXT_WHITE);
+        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        btn.setGravity(Gravity.CENTER);
+        applyRegularFont(btn);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(SOUTH_MODULE_BG);
+        bg.setCornerRadius(dp(BOTTOM_BTN_CORNER));
+        btn.setBackground(bg);
+        return btn;
+    }
 
-        // 卡片背景
-        GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setCornerRadius(dp(10));
-        cardBg.setColor(CARD_BG);
-        card.setBackground(cardBg);
+    // ==================== 内容区（Header + 标题 + 主体）====================
 
-        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        cardLp.bottomMargin = dp(6);
-        card.setLayoutParams(cardLp);
+    /**
+     * 构建右侧内容区：Header 栏 + 内容标题 + 内容主体。
+     */
+    private View buildContentArea(int width, int height) {
+        LinearLayout content = new LinearLayout(activity);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setBackgroundColor(SOUTH_PANEL_BG);
 
-        // 标题行：模块名 + Switch
+        // ---- Header 栏 (72dp) ----
+        View header = buildHeaderBar();
+        content.addView(header, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(HEADER_H)));
+
+        // Header 下方分隔线
+        View hdrDivider = new View(activity);
+        hdrDivider.setBackgroundColor(SOUTH_CARD_BORDER);
+        content.addView(hdrDivider, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
+
+        // ---- 内容标题 (30dp) ----
+        LinearLayout titleBar = new LinearLayout(activity);
+        titleBar.setOrientation(LinearLayout.VERTICAL);
+        titleBar.setPadding(dp(16), dp(6), dp(16), dp(4));
+
+        contentTitleText = new TextView(activity);
+        contentTitleText.setTextColor(SOUTH_TEXT_WHITE);
+        contentTitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        contentTitleText.setSingleLine(true);
+        applyRegularFont(contentTitleText);
+        titleBar.addView(contentTitleText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        contentSubtitleText = new TextView(activity);
+        contentSubtitleText.setTextColor(SOUTH_TEXT_DIM2);
+        contentSubtitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        contentSubtitleText.setSingleLine(true);
+        applyRegularFont(contentSubtitleText);
+        titleBar.addView(contentSubtitleText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        content.addView(titleBar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(TITLE_H)));
+
+        // ---- 内容主体（卡片网格 / 配置页切换）----
+        contentBody = new FrameLayout(activity);
+        content.addView(contentBody, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        return content;
+    }
+
+    // ==================== Header 栏 ====================
+
+    /**
+     * 构建 Header 栏：品牌名/面包屑 + 语言按钮 + 关闭按钮 + 搜索框。
+     */
+    private View buildHeaderBar() {
         LinearLayout header = new LinearLayout(activity);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setBackgroundColor(SOUTH_PANEL_BG);
+        header.setPadding(dp(14), 0, dp(16), 0);
 
-        TextView name = new TextView(activity);
-        name.setText(module.name);
-        name.setTextColor(TEXT_PRIMARY);
-        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        if (comfortaaRegular != null) name.setTypeface(comfortaaRegular);
-        header.addView(name, new LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-        ));
+        // 左侧：品牌名/面包屑（点击可返回）
+        LinearLayout titleBox = new LinearLayout(activity);
+        titleBox.setOrientation(LinearLayout.VERTICAL);
 
-        // Switch
-        SwitchView sw = new SwitchView(activity, module.enabled);
-        sw.setOnCheckedChangedListener((v, checked) -> {
-            module.enabled = checked;
-            // 更新卡片背景色
-            GradientDrawable bg = new GradientDrawable();
-            bg.setCornerRadius(dp(10));
-            bg.setColor(checked ? Color.parseColor("#2D3B4A") : CARD_BG);
-            card.setBackground(bg);
-            // 通知监听器
-            if (moduleChangedListener != null) {
-                moduleChangedListener.onModuleChanged(module.name, checked);
+        headerTitleText = new TextView(activity);
+        headerTitleText.setText("Rlin B1");
+        headerTitleText.setTextColor(SOUTH_TEXT_WHITE);
+        headerTitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        headerTitleText.setSingleLine(true);
+        applyBoldFont(headerTitleText);
+        titleBox.addView(headerTitleText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        headerSubtitleText = new TextView(activity);
+        headerSubtitleText.setTextColor(SOUTH_TEXT_DIM2);
+        headerSubtitleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        headerSubtitleText.setSingleLine(true);
+        applyRegularFont(headerSubtitleText);
+        titleBox.addView(headerSubtitleText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // 点击面包屑返回卡片网格
+        titleBox.setOnClickListener(v -> {
+            if (activeConfigModule != null) {
+                switchToModuleGridWithAnim();
             }
         });
-        LinearLayout.LayoutParams swLp = new LinearLayout.LayoutParams(dp(48), dp(24));
-        swLp.setMarginStart(dp(8));
-        header.addView(sw, swLp);
 
-        card.addView(header);
+        header.addView(titleBox, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        // 设置项（遍历 ConfigOption 列表）
-        if (module.options != null && !module.options.isEmpty()) {
-            for (ModuleItem.ConfigOption opt : module.options) {
-                if (opt.type == ModuleItem.ConfigOption.TYPE_SWITCH) {
-                    addSettingRow(card, opt.label, opt.boolValue, (checked) -> {
-                        opt.boolValue = checked;
-                    });
-                } else if (opt.type == ModuleItem.ConfigOption.TYPE_SLIDER) {
-                    addSliderRow(card, opt.label, opt.sliderMin, opt.sliderMax,
-                        opt.getRealSliderValue(), opt.sliderUnit != null ? opt.sliderUnit : "",
-                        (val) -> {
-                            opt.sliderValue = (val - opt.sliderMin) / (opt.sliderMax - opt.sliderMin);
-                        });
+        // 右侧按钮区：语言 + 关闭 + 搜索
+        // 语言切换按钮 (52x36, 胶囊形)
+        TextView langBtn = new TextView(activity);
+        langBtn.setText(langZh ? "中/EN" : "EN/中");
+        langBtn.setTextColor(SOUTH_TEXT_WHITE);
+        langBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        langBtn.setGravity(Gravity.CENTER);
+        applyRegularFont(langBtn);
+        GradientDrawable langBg = pillBackground(SOUTH_SEARCH_BG);
+        langBtn.setBackground(langBg);
+        langBtn.setOnClickListener(v -> {
+            langZh = !langZh;
+            langBtn.setText(langZh ? "中/EN" : "EN/中");
+            // 更新所有语言相关的文字
+            refreshSidebar();
+            refreshContentTitle();
+            updateHeader();
+            if (editHudBtn != null) editHudBtn.setText(t("编辑HUD", "Edit HUD"));
+            if (closeSideBtn != null) closeSideBtn.setText(t("关闭", "Close"));
+            if (searchEditText != null) {
+                searchEditText.setHint(t("\u2315 搜索...", "\u2315 search..."));
+            }
+            if (activeConfigModule == null) {
+                showModuleGrid();
+            } else {
+                showConfigPage();
+            }
+        });
+        header.addView(langBtn, new LinearLayout.LayoutParams(
+                dp(LANG_W), dp(LANG_H)));
+
+        // 间距
+        View gap1 = new View(activity);
+        header.addView(gap1, new LinearLayout.LayoutParams(dp(8), 1));
+
+        // 关闭按钮 × (36x36, 圆形)
+        TextView closeBtn = new TextView(activity);
+        closeBtn.setText("\u00D7"); // ×
+        closeBtn.setTextColor(SOUTH_TEXT_DIM2);
+        closeBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        closeBtn.setGravity(Gravity.CENTER);
+        applyRegularFont(closeBtn);
+        GradientDrawable closeBg = new GradientDrawable();
+        closeBg.setShape(GradientDrawable.OVAL);
+        closeBg.setColor(SOUTH_SEARCH_BG);
+        closeBtn.setBackground(closeBg);
+        closeBtn.setOnClickListener(v -> close());
+        header.addView(closeBtn, new LinearLayout.LayoutParams(
+                dp(CLOSE_SIZE), dp(CLOSE_SIZE)));
+
+        // 间距
+        View gap2 = new View(activity);
+        header.addView(gap2, new LinearLayout.LayoutParams(dp(8), 1));
+
+        // 搜索框 (160x36, 胶囊形)
+        searchEditText = new EditText(activity);
+        searchEditText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        searchEditText.setTextColor(SOUTH_TEXT_DIM2);
+        searchEditText.setHintTextColor(SOUTH_TEXT_DIM3);
+        searchEditText.setHint(t("\u2315 搜索...", "\u2315 search..."));
+        searchEditText.setSingleLine(true);
+        searchEditText.setPadding(dp(12), 0, dp(12), 0);
+        searchEditText.setGravity(Gravity.CENTER_VERTICAL);
+        applyRegularFont(searchEditText);
+        searchEditText.setBackground(pillBackground(SOUTH_SEARCH_BG));
+        searchEditText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                searchQuery = s.toString().trim();
+                if (activeConfigModule == null) {
+                    showModuleGrid();
                 }
             }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+        // 阻止点击事件冒泡到根容器（避免点击搜索框关闭面板）
+        searchEditText.setOnClickListener(v -> v.requestFocus());
+        header.addView(searchEditText, new LinearLayout.LayoutParams(
+                dp(SEARCH_W), dp(SEARCH_H)));
+
+        return header;
+    }
+
+    /** 更新 Header 标题（品牌名 vs 面包屑） */
+    private void updateHeader() {
+        if (headerTitleText == null) return;
+        if (activeConfigModule != null) {
+            // 配置页：面包屑导航 "← 分类 > 模块"
+            Category curCat = categories.get(currentCategoryIndex);
+            String breadcrumb = "\u2190 " + Category.localizedCategory(curCat.name, langZh)
+                    + " > " + Category.localizedName(activeConfigModule.name, langZh);
+            headerTitleText.setText(breadcrumb);
+            headerSubtitleText.setText("");
+        } else {
+            // 卡片网格：品牌名 + 分类指示
+            headerTitleText.setText("Rlin B1");
+            Category curCat = categories.get(currentCategoryIndex);
+            headerSubtitleText.setText("\u2190 \u2192 " + Category.localizedCategory(curCat.name, langZh));
         }
-        // 模块自身的滑块
-        if (module.hasSlider) {
-            addSliderRow(card, "Intensity", module.sliderMin, module.sliderMax,
-                module.getRealValue(), module.sliderUnit != null ? module.sliderUnit : "",
-                (val) -> { module.sliderValue = (val - module.sliderMin) / (module.sliderMax - module.sliderMin); });
+    }
+
+    // ==================== 内容标题 ====================
+
+    /** 刷新内容区标题 "Xxx Modules" + "N modules · M enabled" */
+    private void refreshContentTitle() {
+        if (contentTitleText == null || currentCategoryIndex >= categories.size()) return;
+        Category cat = categories.get(currentCategoryIndex);
+        contentTitleText.setText(cat.name + " Modules");
+
+        int enabledCount = 0;
+        for (ModuleItem m : cat.modules) {
+            if (m.enabled) enabledCount++;
         }
+        contentSubtitleText.setText(cat.modules.size() + " modules \u00B7 "
+                + enabledCount + " enabled");
+    }
+
+    // ==================== 内容主体切换 ====================
+
+    /** 显示模块卡片网格 */
+    private void showModuleGrid() {
+        if (contentBody == null) return;
+        contentBody.removeAllViews();
+
+        if (moduleScrollView == null) {
+            moduleScrollView = new ScrollView(activity);
+            moduleScrollView.setVerticalScrollBarEnabled(false);
+            moduleScrollView.setFillViewport(true);
+        } else {
+            moduleScrollView.removeAllViews();
+        }
+
+        // 卡片网格容器
+        LinearLayout gridContainer = new LinearLayout(activity);
+        gridContainer.setOrientation(LinearLayout.VERTICAL);
+        gridContainer.setPadding(dp(16), dp(4), dp(16), dp(16));
+
+        // 获取过滤后的模块列表
+        List<ModuleItem> visibleModules = getFilteredModules();
+
+        // 按行填充卡片（每行 3 列）
+        int totalRows = (int) Math.ceil(visibleModules.size() / (float) GRID_COLS);
+        for (int row = 0; row < totalRows; row++) {
+            LinearLayout rowLayout = new LinearLayout(activity);
+            rowLayout.setOrientation(LinearLayout.HORIZONTAL);
+
+            for (int col = 0; col < GRID_COLS; col++) {
+                int idx = row * GRID_COLS + col;
+                if (idx < visibleModules.size()) {
+                    ModuleItem m = visibleModules.get(idx);
+                    View card = createModuleCard(m);
+                    LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
+                            0, dp(CARD_H), 1f);
+                    if (col < GRID_COLS - 1) {
+                        cardLp.setMarginEnd(dp(CARD_GAP));
+                    }
+                    rowLayout.addView(card, cardLp);
+                } else {
+                    // 空占位
+                    View placeholder = new View(activity);
+                    LinearLayout.LayoutParams phLp = new LinearLayout.LayoutParams(
+                            0, dp(CARD_H), 1f);
+                    if (col < GRID_COLS - 1) {
+                        phLp.setMarginEnd(dp(CARD_GAP));
+                    }
+                    rowLayout.addView(placeholder, phLp);
+                }
+            }
+
+            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rowLp.bottomMargin = dp(CARD_GAP);
+            gridContainer.addView(rowLayout, rowLp);
+        }
+
+        moduleScrollView.addView(gridContainer);
+        contentBody.addView(moduleScrollView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // 错落进场动画：每行延迟 55ms，260ms 动画
+        animateStaggerEntrance(gridContainer, totalRows);
+    }
+
+    /** 获取搜索过滤后的模块列表 */
+    private List<ModuleItem> getFilteredModules() {
+        Category cat = categories.get(currentCategoryIndex);
+        List<ModuleItem> result = new ArrayList<>();
+        String query = searchQuery.toLowerCase();
+        for (ModuleItem m : cat.modules) {
+            if (query.isEmpty()
+                    || m.name.toLowerCase().contains(query)
+                    || m.description.toLowerCase().contains(query)) {
+                result.add(m);
+            }
+        }
+        return result;
+    }
+
+    // ==================== 模块卡片 ====================
+
+    /**
+     * 创建单个模块卡片。
+     * 上半部分(78dp)：开关区，点击切换 enabled，背景色随状态动画
+     * 下半部分(32dp)：配置栏，点击打开配置页
+     */
+    private View createModuleCard(ModuleItem module) {
+        LinearLayout card = new LinearLayout(activity);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(CARD_H)));
+
+        int iconAreaH = CARD_H - CONFIG_BAR_H; // 78dp
+
+        // ---- 上半部分：开关区 ----
+        FrameLayout toggleArea = new FrameLayout(activity);
+        toggleArea.setTag("toggleArea");
+
+        // 开关区背景（随 enabled 状态变色）
+        GradientDrawable toggleBg = new GradientDrawable();
+        // 设置圆角：上圆下直
+        float corner = dp(CARD_CORNER);
+        toggleBg.setCornerRadii(new float[]{
+                corner, corner, corner, corner, 0, 0, 0, 0});
+        toggleBg.setColor(module.enabled ? SOUTH_TOGGLE_ON : SOUTH_TOGGLE_OFF);
+        toggleArea.setBackground(toggleBg);
+
+        // 模块名（居中）
+        TextView moduleName = new TextView(activity);
+        moduleName.setText(Category.localizedName(module.name, langZh));
+        moduleName.setTextColor(SOUTH_TEXT_WHITE);
+        moduleName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        moduleName.setGravity(Gravity.CENTER);
+        moduleName.setSingleLine(true);
+        moduleName.setMaxWidth(dp(100));
+        applyRegularFont(moduleName);
+        FrameLayout.LayoutParams nameLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        nameLp.gravity = Gravity.CENTER;
+        toggleArea.addView(moduleName, nameLp);
+
+        // 点击切换开关
+        toggleArea.setOnClickListener(v -> {
+            module.enabled = !module.enabled;
+            // 颜色动画
+            animateToggleColor(toggleArea, module.enabled);
+            // 通知监听器
+            if (moduleChangedListener != null) {
+                moduleChangedListener.onModuleChanged(module.name, module.enabled);
+            }
+            // 刷新副标题
+            refreshContentTitle();
+        });
+
+        card.addView(toggleArea, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(iconAreaH)));
+
+        // ---- 下半部分：配置栏 ----
+        FrameLayout configBar = new FrameLayout(activity);
+        GradientDrawable configBg = new GradientDrawable();
+        // 设置圆角：上直下圆
+        configBg.setCornerRadii(new float[]{
+                0, 0, 0, 0, corner, corner, corner, corner});
+        configBg.setColor(SOUTH_MODULE_BG);
+        configBar.setBackground(configBg);
+
+        // 顶部分隔线（2dp, #999999 50% alpha）
+        View divider = new View(activity);
+        divider.setBackgroundColor(SOUTH_DIVIDER);
+        configBar.addView(divider, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(2),
+                Gravity.TOP));
+
+        // "⚙ 配置" 文字（居中）
+        TextView configText = new TextView(activity);
+        configText.setText("\u2699 " + t("配置", "Configure"));
+        configText.setTextColor(SOUTH_TEXT_DIM2);
+        configText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        configText.setGravity(Gravity.CENTER);
+        applyRegularFont(configText);
+        FrameLayout.LayoutParams cfgTextLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        cfgTextLp.gravity = Gravity.CENTER;
+        configBar.addView(configText, cfgTextLp);
+
+        // 点击打开配置页
+        configBar.setOnClickListener(v -> {
+            activeConfigModule = module;
+            updateHeader();
+            showConfigPage();
+        });
+
+        card.addView(configBar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(CONFIG_BAR_H)));
 
         return card;
     }
 
-    /** 添加布尔设置行 */
-    private void addSettingRow(LinearLayout parent, String name,
-                                boolean initialValue,
-                                java.util.function.Consumer<Boolean> setter) {
+    /** 开关区背景色动画（#CCCCCC ↔ #808080） */
+    private void animateToggleColor(View toggleArea, boolean enabled) {
+        int fromColor = enabled ? SOUTH_TOGGLE_OFF : SOUTH_TOGGLE_ON;
+        int toColor = enabled ? SOUTH_TOGGLE_ON : SOUTH_TOGGLE_OFF;
+        android.animation.ValueAnimator anim = android.animation.ValueAnimator.ofArgb(fromColor, toColor);
+        anim.setDuration(260);
+        anim.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        anim.addUpdateListener(animation -> {
+            int color = (int) animation.getAnimatedValue();
+            GradientDrawable bg = new GradientDrawable();
+            float corner = dp(CARD_CORNER);
+            bg.setCornerRadii(new float[]{
+                    corner, corner, corner, corner, 0, 0, 0, 0});
+            bg.setColor(color);
+            toggleArea.setBackground(bg);
+        });
+        anim.start();
+    }
+
+    // ==================== 配置页 ====================
+
+    /** 显示配置页（当前 activeConfigModule 的配置选项） */
+    private void showConfigPage() {
+        if (contentBody == null || activeConfigModule == null) return;
+        contentBody.removeAllViews();
+
+        if (configScrollView == null) {
+            configScrollView = new ScrollView(activity);
+            configScrollView.setVerticalScrollBarEnabled(false);
+            configScrollView.setFillViewport(true);
+        } else {
+            configScrollView.removeAllViews();
+        }
+
+        ModuleItem m = activeConfigModule;
+
+        LinearLayout pageContainer = new LinearLayout(activity);
+        pageContainer.setOrientation(LinearLayout.VERTICAL);
+        pageContainer.setPadding(dp(16), dp(4), dp(16), dp(16));
+
+        // ---- 分组容器（大圆角矩形，包含所有配置项）----
+        LinearLayout groupContainer = new LinearLayout(activity);
+        groupContainer.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable groupBg = new GradientDrawable();
+        groupBg.setColor(SOUTH_MODULE_BG);
+        groupBg.setCornerRadius(dp(GROUP_CORNER));
+        groupContainer.setBackground(groupBg);
+        groupContainer.setPadding(dp(16), dp(8), dp(16), 0);
+
+        // --- "Enabled" 开关行 ---
+        View enabledRow = createConfigSwitchRow(
+                t("启用", "Enabled"), m.enabled, (checked) -> {
+                    m.enabled = checked;
+                    if (moduleChangedListener != null) {
+                        moduleChangedListener.onModuleChanged(m.name, checked);
+                    }
+                    refreshContentTitle();
+                });
+        groupContainer.addView(enabledRow, configRowParams());
+
+        // --- 模块额外配置项 ---
+        for (ModuleItem.ConfigOption opt : m.options) {
+            View optRow = createConfigOptionRow(opt);
+            if (optRow != null) {
+                groupContainer.addView(optRow, configRowParams());
+            }
+        }
+
+        // --- 模块自身的滑块（Intensity 等）---
+        if (m.hasSlider) {
+            View sliderRow = createConfigSliderRow(
+                    t("数值", "Value"), m.sliderMin, m.sliderMax,
+                    m.getRealValue(), m.sliderUnit != null ? m.sliderUnit : "",
+                    (val) -> {
+                        m.sliderValue = (m.sliderMin == m.sliderMax) ? 0f
+                                : (val - m.sliderMin) / (m.sliderMax - m.sliderMin);
+                    });
+            groupContainer.addView(sliderRow, configRowParams());
+        }
+
+        // --- 描述区 ---
+        LinearLayout descBox = new LinearLayout(activity);
+        descBox.setOrientation(LinearLayout.VERTICAL);
+        descBox.setPadding(0, dp(8), 0, dp(8));
+
+        TextView descLabel = new TextView(activity);
+        descLabel.setText(t("描述", "Description"));
+        descLabel.setTextColor(SOUTH_TEXT_DIM2);
+        descLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        applyRegularFont(descLabel);
+        descBox.addView(descLabel, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView descText = new TextView(activity);
+        descText.setText(m.description);
+        descText.setTextColor(SOUTH_TEXT_WHITE);
+        descText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        applyRegularFont(descText);
+        LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        descLp.topMargin = dp(6);
+        descBox.addView(descText, descLp);
+
+        groupContainer.addView(descBox, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(80)));
+
+        // --- 底部装饰条（3dp, ACCENT_1 30% alpha）---
+        View decorBar = new View(activity);
+        // 装饰条在圆角底部，用单独的 drawable 控制底部圆角
+        GradientDrawable decorBg = new GradientDrawable();
+        decorBg.setColor(Color.argb(77, 128, 128, 128)); // #808080 30%
+        decorBg.setCornerRadii(new float[]{
+                0, 0, 0, 0, dp(GROUP_CORNER), dp(GROUP_CORNER), dp(GROUP_CORNER), dp(GROUP_CORNER)});
+        decorBar.setBackground(decorBg);
+        groupContainer.addView(decorBar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(3)));
+
+        pageContainer.addView(groupContainer, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        configScrollView.addView(pageContainer);
+        contentBody.addView(configScrollView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // 配置页滑入动画
+        configScrollView.setTranslationX(dp(20));
+        configScrollView.setAlpha(0f);
+        configScrollView.animate()
+                .translationX(0)
+                .alpha(1f)
+                .setDuration(260)
+                .setInterpolator(new OvershootInterpolator(1.0f))
+                .start();
+    }
+
+    /** 配置行 LayoutParams（高度 48dp + 8dp 间距） */
+    private LinearLayout.LayoutParams configRowParams() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(CONFIG_ROW_H));
+        lp.bottomMargin = dp(CONFIG_ROW_GAP);
+        return lp;
+    }
+
+    /** 创建配置页开关行 */
+    private View createConfigSwitchRow(String label, boolean initialValue,
+                                        java.util.function.Consumer<Boolean> setter) {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(4), dp(6), dp(4), dp(6));
 
-        TextView label = new TextView(activity);
-        label.setText(name);
-        label.setTextColor(TEXT_SECONDARY);
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        row.addView(label, new LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-        ));
+        TextView labelView = new TextView(activity);
+        labelView.setText(label);
+        labelView.setTextColor(SOUTH_TEXT_WHITE);
+        labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        applyRegularFont(labelView);
+        row.addView(labelView, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         SwitchView sw = new SwitchView(activity, initialValue);
+        // 浅色主题配色
+        sw.setGradientColors(SOUTH_TOGGLE_ON, SOUTH_TOGGLE_ON);
+        sw.setOffColor(SOUTH_TOGGLE_OFF);
+        sw.setThumbColor(KNOB_COLOR);
         sw.setOnCheckedChangedListener((v, checked) -> setter.accept(checked));
-        row.addView(sw, new LinearLayout.LayoutParams(dp(40), dp(20)));
+        row.addView(sw, new LinearLayout.LayoutParams(
+                dp(SWITCH_W), dp(SWITCH_H)));
 
-        parent.addView(row);
+        return row;
     }
 
-    /** 添加滑块设置行 */
-    private void addSliderRow(LinearLayout parent, String name, float min, float max,
-                               float value, String suffix,
-                               java.util.function.Consumer<Float> setter) {
+    /** 创建配置页滑块行 */
+    private View createConfigSliderRow(String label, float min, float max,
+                                        float value, String suffix,
+                                        java.util.function.Consumer<Float> setter) {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(4), dp(6), dp(4), dp(6));
 
-        TextView label = new TextView(activity);
-        label.setText(name);
-        label.setTextColor(TEXT_SECONDARY);
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        row.addView(label, new LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-        ));
+        TextView labelView = new TextView(activity);
+        labelView.setText(label);
+        labelView.setTextColor(SOUTH_TEXT_WHITE);
+        labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        applyRegularFont(labelView);
+        row.addView(labelView, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        // 数值显示
+        TextView valueView = new TextView(activity);
+        valueView.setTextColor(SOUTH_TEXT_DIM2);
+        valueView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        valueView.setSingleLine(true);
+        applyRegularFont(valueView);
+        String valStr = formatValue(value) + (suffix != null ? suffix : "");
+        valueView.setText(valStr);
+        LinearLayout.LayoutParams valLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        valLp.setMarginEnd(dp(8));
+        row.addView(valueView, valLp);
+
+        // SliderView（轨道 55% 宽度）
         SliderView slider = new SliderView(activity, min, max, value, suffix);
-        slider.setOnProgressChangedListener((v, progress, val) -> setter.accept(val));
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(dp(120), dp(28));
-        row.addView(slider, slp);
+        slider.setGradientColors(ACCENT_1, ACCENT_2);
+        slider.setTrackColor(SOUTH_SLIDER_TRACK);
+        // thumb 颜色默认为 Color.WHITE，即 KNOB_COLOR，无需额外设置
+        slider.setOnProgressChangedListener((v, progress, val) -> {
+            setter.accept(val);
+            valueView.setText(formatValue(val) + (suffix != null ? suffix : ""));
+        });
+        row.addView(slider, new LinearLayout.LayoutParams(
+                dp(160), dp(32)));
 
-        parent.addView(row);
+        return row;
     }
 
-    /** 构建分类导航区域 */
-    private View buildCategoryNav(int panelW) {
-        LinearLayout nav = new LinearLayout(activity);
-        nav.setOrientation(LinearLayout.VERTICAL);
-        nav.setPadding(dp(8), dp(4), dp(4), dp(4));
-
-        // 标题
-        TextView title = new TextView(activity);
-        title.setText("Rlin B1");
-        title.setTextColor(ACCENT_2);
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        if (comfortaaBold != null) title.setTypeface(comfortaaBold);
-        title.setPadding(dp(4), dp(4), dp(4), dp(16));
-        nav.addView(title);
-
-        // 分类按钮
-        String[] catNames = {"Combat", "Movement", "Player", "Visual", "Misc"};
-        for (int i = 0; i < catNames.length; i++) {
-            final int idx = i;
-            TextView btn = new TextView(activity);
-            btn.setText(catNames[i]);
-            btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-            btn.setPadding(dp(12), dp(10), dp(12), dp(10));
-            btn.setGravity(Gravity.CENTER);
-
-            GradientDrawable btnBg = new GradientDrawable();
-            btnBg.setCornerRadius(dp(8));
-            if (i == currentCategoryIndex) {
-                btnBg.setColor(ACCENT_1);
-                btn.setTextColor(TEXT_PRIMARY);
-            } else {
-                btnBg.setColor(Color.parseColor("#2A292E"));
-                btn.setTextColor(TEXT_SECONDARY);
-            }
-            btn.setBackground(btnBg);
-
-            btn.setOnClickListener(v -> {
-                currentCategoryIndex = idx;
-                // 找到 moduleList 并刷新
-                View root = popup.getContentView();
-                View found = findViewWithTag(root, "moduleList");
-                if (found instanceof LinearLayout) {
-                    refreshModuleList((LinearLayout) found);
-                }
-                // 更新分类按钮颜色
-                updateCategoryColors(nav, idx);
-            });
-
-            LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            );
-            btnLp.bottomMargin = dp(6);
-            nav.addView(btn, btnLp);
-        }
-
-        return nav;
-    }
-
-    /** 更新分类按钮颜色 */
-    private void updateCategoryColors(LinearLayout nav, int selected) {
-        for (int i = 0; i < nav.getChildCount(); i++) {
-            View child = nav.getChildAt(i);
-            if (child instanceof TextView && i > 0) { // 跳过标题
-                int btnIndex = i - 1; // 第一个是标题
-                TextView btn = (TextView) child;
-                GradientDrawable bg = new GradientDrawable();
-                bg.setCornerRadius(dp(8));
-                if (btnIndex == selected) {
-                    bg.setColor(ACCENT_1);
-                    btn.setTextColor(TEXT_PRIMARY);
-                } else {
-                    bg.setColor(Color.parseColor("#2A292E"));
-                    btn.setTextColor(TEXT_SECONDARY);
-                }
-                btn.setBackground(bg);
-            }
+    /** 创建配置项行（下拉框 / 开关 / 滑块 / 按钮） */
+    private View createConfigOptionRow(ModuleItem.ConfigOption opt) {
+        switch (opt.type) {
+            case ModuleItem.ConfigOption.TYPE_DROPDOWN:
+                return createConfigDropdownRow(opt);
+            case ModuleItem.ConfigOption.TYPE_SWITCH:
+                return createConfigSwitchRow(
+                        Category.localizedName(opt.label, langZh),
+                        opt.boolValue,
+                        (checked) -> opt.boolValue = checked);
+            case ModuleItem.ConfigOption.TYPE_SLIDER:
+                return createConfigSliderRow(
+                        Category.localizedName(opt.label, langZh),
+                        opt.sliderMin, opt.sliderMax,
+                        opt.getRealSliderValue(),
+                        opt.sliderUnit != null ? opt.sliderUnit : "",
+                        (val) -> {
+                            if (opt.sliderMax > opt.sliderMin) {
+                                opt.sliderValue = (val - opt.sliderMin)
+                                        / (opt.sliderMax - opt.sliderMin);
+                            }
+                        });
+            case ModuleItem.ConfigOption.TYPE_BUTTON:
+                return createConfigButtonRow(opt);
+            default:
+                return null;
         }
     }
 
-    // ==================== 动画 ====================
+    /** 创建下拉框配置行（点击循环切换选项） */
+    private View createConfigDropdownRow(ModuleItem.ConfigOption opt) {
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
 
-    private void animateOpen(View content) {
-        // 找到面板容器
-        View panel = findPanelContainer(content);
-        if (panel == null) return;
+        TextView labelView = new TextView(activity);
+        labelView.setText(Category.localizedName(opt.label, langZh));
+        labelView.setTextColor(SOUTH_TEXT_WHITE);
+        labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        applyRegularFont(labelView);
+        row.addView(labelView, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        panel.setAlpha(0f);
-        panel.setScaleX(0.9f);
-        panel.setScaleY(0.9f);
-        panel.setPivotX(panel.getWidth() / 2f);
-        panel.setPivotY(panel.getHeight() / 2f);
+        // 当前选项显示框（可点击循环）
+        TextView choiceView = new TextView(activity);
+        choiceView.setTextColor(SOUTH_TEXT_DIM2);
+        choiceView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        choiceView.setGravity(Gravity.CENTER);
+        choiceView.setSingleLine(true);
+        choiceView.setPadding(dp(12), dp(6), dp(12), dp(6));
+        applyRegularFont(choiceView);
+        GradientDrawable choiceBg = new GradientDrawable();
+        choiceBg.setColor(SOUTH_SEARCH_BG);
+        choiceBg.setCornerRadius(dp(6));
+        choiceView.setBackground(choiceBg);
+        updateDropdownText(choiceView, opt);
 
-        panel.animate()
-            .alpha(1f)
-            .scaleX(1f)
-            .scaleY(1f)
-            .setDuration(250)
-            .setInterpolator(new android.view.animation.OvershootInterpolator(1.2f))
-            .start();
-    }
-
-    private void animateClose(View content) {
-        View panel = findPanelContainer(content);
-        if (panel == null) { popup.dismiss(); return; }
-
-        panel.animate()
-            .alpha(0f)
-            .scaleX(0.9f)
-            .scaleY(0.9f)
-            .setDuration(150)
-            .withEndAction(() -> popup.dismiss())
-            .start();
-    }
-
-    private View findPanelContainer(View root) {
-        if (root instanceof FrameLayout) {
-            FrameLayout fl = (FrameLayout) root;
-            for (int i = 0; i < fl.getChildCount(); i++) {
-                View child = fl.getChildAt(i);
-                if (child.getElevation() > 0) return child; // 面板有 elevation
+        choiceView.setOnClickListener(v -> {
+            if (opt.dropdownChoices != null && opt.dropdownChoices.length > 0) {
+                opt.dropdownIndex = (opt.dropdownIndex + 1) % opt.dropdownChoices.length;
+                updateDropdownText(choiceView, opt);
+                // 淡入动画
+                choiceView.setAlpha(0.3f);
+                choiceView.animate().alpha(1f).setDuration(200).start();
             }
-        }
-        return null;
+        });
+
+        row.addView(choiceView, new LinearLayout.LayoutParams(
+                dp(120), ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        return row;
     }
 
-    private View findViewWithTag(View root, String tag) {
-        if (tag.equals(root.getTag())) return root;
-        if (root instanceof ViewGroup) {
-            ViewGroup vg = (ViewGroup) root;
-            for (int i = 0; i < vg.getChildCount(); i++) {
-                View found = findViewWithTag(vg.getChildAt(i), tag);
-                if (found != null) return found;
-            }
+    /** 更新下拉框当前选项文字 */
+    private void updateDropdownText(TextView view, ModuleItem.ConfigOption opt) {
+        if (opt.dropdownChoices != null && opt.dropdownIndex >= 0
+                && opt.dropdownIndex < opt.dropdownChoices.length) {
+            view.setText(opt.dropdownChoices[opt.dropdownIndex] + " \u25BC");
         }
-        return null;
     }
 
-    // ==================== 工具 ====================
+    /** 创建按钮配置行（全宽按钮，如 Save Config / Load Config） */
+    private View createConfigButtonRow(ModuleItem.ConfigOption opt) {
+        TextView btn = new TextView(activity);
+        btn.setText(Category.localizedName(opt.label, langZh));
+        btn.setTextColor(SOUTH_TEXT_WHITE);
+        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        btn.setGravity(Gravity.CENTER);
+        applyRegularFont(btn);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(SOUTH_SEARCH_BG);
+        bg.setCornerRadius(dp(8));
+        btn.setBackground(bg);
+        btn.setOnClickListener(v -> {
+            // 按钮动作（暂无具体实现，仅日志）
+            Log.i(TAG, "Config button clicked: " + opt.label);
+            // 按下反馈动画
+            btn.animate().scaleX(0.96f).scaleY(0.96f).setDuration(80)
+                    .withEndAction(() -> btn.animate().scaleX(1f).scaleY(1f).setDuration(80).start())
+                    .start();
+        });
+        return btn;
+    }
 
+    // ==================== 页面切换动画 ====================
+
+    /** 切换到卡片网格（带动画） */
+    private void switchToModuleGridWithAnim() {
+        activeConfigModule = null;
+        updateHeader();
+        refreshContentTitle();
+
+        // 如果有配置页正在显示，淡出后再显示卡片网格
+        if (configScrollView != null && configScrollView.getParent() != null) {
+            configScrollView.animate()
+                    .alpha(0f)
+                    .translationX(dp(20))
+                    .setDuration(180)
+                    .withEndAction(() -> showModuleGrid())
+                    .start();
+        } else {
+            showModuleGrid();
+        }
+    }
+
+    /** 错落进场动画：每行延迟 55ms，260ms 动画，backEaseOut 风格 */
+    private void animateStaggerEntrance(ViewGroup gridContainer, int totalRows) {
+        if (gridContainer == null) return;
+        OvershootInterpolator interpolator = new OvershootInterpolator(1.2f);
+        for (int i = 0; i < gridContainer.getChildCount(); i++) {
+            View row = gridContainer.getChildAt(i);
+            row.setAlpha(0f);
+            row.setTranslationY(dp(14));
+            row.animate()
+                    .alpha(1f)
+                    .translationY(0)
+                    .setDuration(260)
+                    .setStartDelay(i * 55L)
+                    .setInterpolator(interpolator)
+                    .start();
+        }
+    }
+
+    // ==================== 入场 / 退场动画 ====================
+
+    /** 面板入场动画：缩放 0.85→1.0 + 透明度 0→1，OvershootInterpolator(1.2f)，300ms */
+    private void animateOpen() {
+        if (panelView == null) return;
+        panelView.setAlpha(0f);
+        panelView.setScaleX(0.85f);
+        panelView.setScaleY(0.85f);
+        panelView.setPivotX(panelView.getWidth() / 2f);
+        panelView.setPivotY(panelView.getHeight() / 2f);
+
+        panelView.post(() -> {
+            panelView.setPivotX(panelView.getWidth() / 2f);
+            panelView.setPivotY(panelView.getHeight() / 2f);
+            panelView.animate()
+                    .alpha(1f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(300)
+                    .setInterpolator(new OvershootInterpolator(1.2f))
+                    .start();
+        });
+    }
+
+    /** 面板退场动画 */
+    private void animateClose() {
+        if (panelView == null) {
+            if (popup != null) popup.dismiss();
+            return;
+        }
+        panelView.animate()
+                .alpha(0f)
+                .scaleX(0.85f)
+                .scaleY(0.85f)
+                .setDuration(180)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .withEndAction(() -> {
+                    if (popup != null) popup.dismiss();
+                })
+                .start();
+    }
+
+    // ==================== 工具方法 ====================
+
+    /** dp 转 px */
     private int dp(int v) {
         return (int) (v * activity.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    /** 应用 Comfortaa-Regular 字体 */
+    private void applyRegularFont(TextView tv) {
+        if (comfortaaRegular != null) {
+            tv.setTypeface(comfortaaRegular);
+        }
+    }
+
+    /** 应用 Comfortaa-Bold 字体 */
+    private void applyBoldFont(TextView tv) {
+        if (comfortaaBold != null) {
+            tv.setTypeface(comfortaaBold);
+        }
+    }
+
+    /** 中英文切换 */
+    private String t(String zh, String en) {
+        return langZh ? zh : en;
+    }
+
+    /** 创建胶囊形（全圆角）背景 */
+    private GradientDrawable pillBackground(int color) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(dp(SEARCH_H / 2));
+        return bg;
+    }
+
+    /** 数值格式化：整数显示整型，否则保留 1 位小数 */
+    private String formatValue(float v) {
+        if (Math.abs(v - Math.round(v)) < 0.001f) {
+            return String.valueOf(Math.round(v));
+        }
+        return String.format("%.1f", v);
     }
 }

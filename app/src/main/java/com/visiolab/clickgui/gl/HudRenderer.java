@@ -948,6 +948,9 @@ public class HudRenderer implements GLSurfaceView.Renderer {
     //  外部接口：模块状态同步
     // ================================================================
 
+    /** 获取分类列表（与 ClickGuiPanel 共享同一实例，实现数据双向同步） */
+    public List<Category> getCategories() { return categories; }
+
     /**
      * 外部调用：当 ClickGUI 面板切换模块时，同步状态到 HUD 并触发视觉反馈。
      * <p>
