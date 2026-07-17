@@ -158,12 +158,13 @@ public class DynamicIslandRenderer {
         timedContents.add(tc);
     }
 
-    /** 移除进度条内容 */
+    /** 移除进度条内容（触发淡出动画，不立即移除） */
     public void removeProgress(String title) {
         for (int i = timedContents.size() - 1; i >= 0; i--) {
             TimedContent tc = timedContents.get(i);
             if (tc.type == ContentType.PROGRESS && tc.title.equals(title)) {
-                timedContents.remove(i);
+                // 触发淡出动画，update 中检测到动画完成后自动移除
+                tc.animation.setDirection(Direction.BACKWARDS);
                 return;
             }
         }
@@ -249,7 +250,13 @@ public class DynamicIslandRenderer {
                     }
                     break;
                 case PROGRESS:
-                    tc.animation.setDirection(Direction.FORWARDS);
+                    // 如果正在淡出且动画完成，移除
+                    if (tc.animation.getDirection() == Direction.BACKWARDS && tc.animation.getProgress() <= 0.01f) {
+                        timedContents.remove(i);
+                        i--;
+                        continue;
+                    }
+                    // 否则保持当前方向（FORWARDS 或由 removeProgress 设为 BACKWARDS）
                     break;
             }
 
@@ -258,7 +265,7 @@ public class DynamicIslandRenderer {
             float descW = text.measure(tc.description, 12f * s);
             float textW = Math.max(titleW, descW);
             float contentW = CONTENT_WIDTH_BASE * s + textW + 8f * s;
-            float contentH = (tc.type == ContentType.PROGRESS ? 50f : CONTENT_HEIGHT) * s;
+            float contentH = (tc.type == ContentType.PROGRESS ? 56f : CONTENT_HEIGHT) * s;
             contents.add(new IslandContent(tc, contentW, contentH));
         }
         timedContents.removeAll(toRemove);
@@ -537,13 +544,13 @@ public class DynamicIslandRenderer {
                                     new float[]{1f, 1f, 1f, contentAlpha}, sw, sh);
                         }
 
-                        // 进度条：贴在内容区底部，蓝色填充
-                        float barPad = 4f * s;
+                        // 进度条：贴在内容区底部，蓝色填充（加粗加大）
+                        float barPad = 5f * s;
                         float barX = baseX + barPad;
-                        float barY = baseY + ic.height - barPad - 6f * s; // 贴底
+                        float barH = 10f * s; // 加粗到 10f
+                        float barY = baseY + ic.height - barPad - barH; // 贴底
                         float barW = ic.width - barPad * 2f;
-                        float barH = 6f * s; // 加粗
-                        float barR = 3f * s;
+                        float barR = 5f * s; // 圆角同步增大
                         // 背景轨道
                         quad.addRect(barX, barY, barW, barH, barR,
                                 new float[]{0.15f, 0.15f, 0.15f, contentAlpha * 0.8f});
@@ -733,6 +740,7 @@ public class DynamicIslandRenderer {
          * BACKWARDS: if done return 0; else (1 - equation(t)) * endPoint
          * t = elapsed / duration
          */
+        /** 获取当前动画值（0~1） */
         double getOutput() {
             if (direction.forwards()) {
                 if (isDone()) return endPoint;
@@ -744,6 +752,10 @@ public class DynamicIslandRenderer {
                 return (1.0 - easeOutExpo(t)) * endPoint;
             }
         }
+
+        Direction getDirection() { return direction; }
+
+        float getProgress() { return (float) getOutput(); }
 
         /** 原版 EaseOutExpo.getEquation(x) */
         private static double easeOutExpo(double x) {

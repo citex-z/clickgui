@@ -181,7 +181,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
 
     private void spawnToast(String text) {
         if (notificationToggle != null && !notificationToggle.enabled) return; // 总开关关掉就不生成
-        float slotY0 = screenH - 46f * uiScale; // 贴近屏幕底部
+        float slotY0 = 46f * uiScale; // 从屏幕顶部开始，往下堆叠
         toasts.add(new ToastNotice(text, slotY0, pendingToastEnabled));
         pendingToastEnabled = true; // 复位
     }
@@ -866,7 +866,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
     }
 
     private void updateToasts(float dt) {
-        float slotY0 = screenH - 46f * uiScale;
+        float slotY0 = 46f * uiScale; // 从屏幕顶部开始
         float spacingMul = notificationSpacingSlider != null ? (0.5f + notificationSpacingSlider.sliderValue * 1.0f) : 0.8f;
         float rowSpacing = notifRectH() + 8f * uiScale * spacingMul;
         float holdDuration = notificationDurationSlider != null ? (1.0f + notificationDurationSlider.sliderValue * 3.0f) : TOAST_HOLD;
@@ -874,7 +874,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         for (int i = 0; i < toasts.size(); i++) {
             ToastNotice t = toasts.get(i);
             t.age += dt;
-            t.posY.setTarget(slotY0 - i * rowSpacing);
+            t.posY.setTarget(slotY0 + i * rowSpacing);   // 往下堆叠
             t.posY.update(dt);
             if (!t.exiting && t.age > TOAST_ENTER + holdDuration) {
                 t.exiting = true;
@@ -903,7 +903,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
                 float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
                 if (rv <= 0.01f) continue;
                 float slide = (1f - smoothstep(rv)) * fOffDist;
-                float dx = fBaseX + slide, dy = t.posY.get() + slide;
+                float dx = fBaseX, dy = t.posY.get() - slide; // 从上方滑入
                 quad.addRect(dx, dy, fRectW, fRectH, 10f * uiScale, new float[]{1f, 1f, 1f, rv});
             }
             quad.flush(screenW, screenH);
@@ -916,7 +916,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
             float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
             if (rv <= 0.01f) continue;
             float slide = (1f - smoothstep(rv)) * offDist;
-            float dx = baseX + slide, dy = t.posY.get() + slide;
+            float dx = baseX, dy = t.posY.get() - slide; // 从上方滑入
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
             GLES20.glScissor((int) dx, (int) (screenH - (dy + rectH)), (int) rectW, (int) rectH);
             drawWorldScene();
@@ -933,7 +933,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
             float rv = Math.max(0f, Math.min(1f, t.reveal.get()));
             if (rv <= 0.01f) continue;
             float slide = (1f - smoothstep(rv)) * offDist;
-            float dx = baseX + slide, dy = t.posY.get() + slide;
+            float dx = baseX, dy = t.posY.get() - slide; // 从上方滑入
 
             float frac = Math.max(0f, Math.min(1f, 1f - (t.age - TOAST_ENTER) / holdDuration));
             float barH = 2.5f * uiScale;
