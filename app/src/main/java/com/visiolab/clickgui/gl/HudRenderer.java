@@ -145,7 +145,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
     private ModuleItem.ConfigOption wmShowVerOpt, wmShowFpsOpt, wmShowPingOpt, wmScaleOpt, wmBgOpt;
 
     // ---- 通知自定义配置项 ----
-    private ModuleItem notificationSizeSlider, notificationFontSizeSlider, notificationSpacingSlider, notificationDurationSlider;
+    private ModuleItem notificationSizeSlider, notificationFontSizeSlider, notificationSpacingSlider, notificationDurationSlider, notificationShadowSlider;
     // Notifications 配置项引用
     private ModuleItem.ConfigOption notifDurOpt, notifShowChatOpt, notifFontSizeOpt, notifSoundOpt;
 
@@ -307,6 +307,9 @@ public class HudRenderer implements GLSurfaceView.Renderer {
     // 中英文语言系统
     private boolean langZh = true;
 
+    /** 外部设置语言（与 ClickGuiPanel 同步） */
+    public void setLangZh(boolean zh) { this.langZh = zh; }
+
     private final Context context;
 
     public HudRenderer(Context context) {
@@ -402,6 +405,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         notificationFontSizeSlider = new ModuleItem("字号", "提示文字大小", false, true, 0.35f, 0, 1, "");
         notificationSpacingSlider = new ModuleItem("间距", "多条提示堆叠的间距", false, true, 0.3f, 0, 1, "");
         notificationDurationSlider = new ModuleItem("停留时间", "提示在滑出前停留的时长", false, true, 0.4f, 0, 1, "");
+        notificationShadowSlider = new ModuleItem("阴影浓度", "提示框背景阴影的深浅", false, true, 0.6f, 0, 1, "");
 
         // 主题色预设：默认选中 Custom（索引 0）
         selectedThemeIndex = 0;
@@ -900,7 +904,8 @@ public class HudRenderer implements GLSurfaceView.Renderer {
             }
             quad.flush(screenW, screenH);
         });
-        blur.drawGlow(new float[]{0f, 0f, 0f, 0.6f}, screenW, screenH);
+        float toastShadowAlpha = notificationShadowSlider != null ? (0.2f + notificationShadowSlider.sliderValue * 0.8f) : 0.6f;
+        blur.drawGlow(new float[]{0f, 0f, 0f, toastShadowAlpha}, screenW, screenH);
 
         // ---- 镂空玻璃本体：scissor裁剪只在提示范围内重画一遍干净背景 ----
         for (ToastNotice t : toasts) {
@@ -950,6 +955,21 @@ public class HudRenderer implements GLSurfaceView.Renderer {
 
     /** 获取分类列表（与 ClickGuiPanel 共享同一实例，实现数据双向同步） */
     public List<Category> getCategories() { return categories; }
+
+    /** 获取 ArrayList HUD 自定义配置滑块（供 ClickGuiPanel 配置页使用） */
+    public ModuleItem getArrayListShadowXSlider() { return arrayListShadowXSlider; }
+    public ModuleItem getArrayListShadowYSlider() { return arrayListShadowYSlider; }
+    public ModuleItem getArrayListShadowSizeSlider() { return arrayListShadowSizeSlider; }
+    public ModuleItem getArrayListFontSizeSlider() { return arrayListFontSizeSlider; }
+    public ModuleItem getArrayListBgOpacitySlider() { return arrayListBgOpacitySlider; }
+    public ModuleItem getArrayListFlowSpeedSlider() { return arrayListFlowSpeedSlider; }
+
+    /** 获取通知自定义配置滑块（供 ClickGuiPanel 配置页使用） */
+    public ModuleItem getNotificationShadowSlider() { return notificationShadowSlider; }
+    public ModuleItem getNotificationFontSizeSlider() { return notificationFontSizeSlider; }
+    public ModuleItem getNotificationSpacingSlider() { return notificationSpacingSlider; }
+    public ModuleItem getNotificationDurationSlider() { return notificationDurationSlider; }
+    public ModuleItem getNotificationSizeSlider() { return notificationSizeSlider; }
 
     /**
      * 外部调用：当 ClickGUI 面板切换模块时，同步状态到 HUD 并触发视觉反馈。

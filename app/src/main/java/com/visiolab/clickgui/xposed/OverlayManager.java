@@ -150,6 +150,33 @@ public class OverlayManager {
                 hudRenderer.onModuleChanged(name, enabled);
             }
         });
+        guiPanel.setOnLangChangedListener((zh) -> {
+            // 同步语言到 HUD
+            if (hudRenderer != null) {
+                hudRenderer.setLangZh(zh);
+            }
+        });
+        guiPanel.setOnAddHotkeyListener((moduleName) -> {
+            // 从 categories 中找到对应模块并添加为快捷键
+            if (hotkeyView != null) {
+                int sw = activity.getResources().getDisplayMetrics().widthPixels;
+                int sh = activity.getResources().getDisplayMetrics().heightPixels;
+                for (com.visiolab.clickgui.model.Category cat : sharedCats) {
+                    for (com.visiolab.clickgui.model.ModuleItem m : cat.modules) {
+                        if (m.name.equals(moduleName)) {
+                            if (!hotkeyView.hasHotkey(moduleName)) {
+                                hotkeyView.addHotkey(m, sw, sh);
+                                Log.i(TAG, "Added hotkey: " + moduleName);
+                            } else {
+                                hotkeyView.removeHotkey(moduleName);
+                                Log.i(TAG, "Removed hotkey: " + moduleName);
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+        });
         guiPanel.show();
     }
 

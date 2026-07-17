@@ -69,8 +69,8 @@ public class ClickGuiPanel {
     private static final int SOUTH_CARD_BORDER_SEL = Color.parseColor("#808080"); // 选中边框
     private static final int SOUTH_SEARCH_BG    = Color.parseColor("#E0E0E0"); // 搜索框背景
     private static final int SOUTH_MODULE_BG    = Color.parseColor("#E6E6E6"); // 配置行背景
-    private static final int SOUTH_TOGGLE_ON    = Color.parseColor("#808080"); // 开关开启
-    private static final int SOUTH_TOGGLE_OFF   = Color.parseColor("#CCCCCC"); // 开关关闭
+    private static final int SOUTH_TOGGLE_ON    = Color.parseColor("#4A90D9"); // 开关开启：柔和蓝色，搭配浅色面板
+    private static final int SOUTH_TOGGLE_OFF   = Color.parseColor("#D5D5D5"); // 开关关闭：浅灰
     private static final int SOUTH_SLIDER_TRACK = Color.parseColor("#D9D9D9"); // 滑块轨道
     private static final int KNOB_COLOR         = Color.parseColor("#FFFFFF"); // 旋钮/滑块圆点
     private static final int SOUTH_TEXT_WHITE   = Color.argb(222, 20, 20, 20); // #141414 87%
@@ -78,8 +78,8 @@ public class ClickGuiPanel {
     private static final int SOUTH_TEXT_DIM3    = Color.argb(97, 20, 20, 20);  // #141414 38%
     private static final int SOUTH_SECTION_LBL  = Color.parseColor("#737373"); // 分组标签
     private static final int SOUTH_DIVIDER      = Color.argb(128, 153, 153, 153); // #999999 50%
-    private static final int ACCENT_1           = Color.parseColor("#808080"); // 强调色1
-    private static final int ACCENT_2           = Color.parseColor("#666666"); // 强调色2
+    private static final int ACCENT_1       = Color.parseColor("#4A90D9"); // 强调色1：蓝色
+    private static final int ACCENT_2       = Color.parseColor("#357ABD"); // 强调色2：深蓝
 
     // ==================== 尺寸常量（dp 值，运行时转换）====================
     // 缩放系数 0.7：进一步减轻面板拥挤感
@@ -143,6 +143,8 @@ public class ClickGuiPanel {
     // 监听器
     private OnCloseListener closeListener;
     private OnModuleChangedListener moduleChangedListener;
+    private OnLangChangedListener langChangedListener;
+    private OnAddHotkeyListener addHotkeyListener;
 
     // ==================== 接口 ====================
 
@@ -152,6 +154,14 @@ public class ClickGuiPanel {
 
     public interface OnModuleChangedListener {
         void onModuleChanged(String name, boolean enabled);
+    }
+
+    public interface OnLangChangedListener {
+        void onLangChanged(boolean zh);
+    }
+
+    public interface OnAddHotkeyListener {
+        void onAddHotkey(String moduleName);
     }
 
     // ==================== 构造 ====================
@@ -181,6 +191,14 @@ public class ClickGuiPanel {
 
     public void setOnModuleChangedListener(OnModuleChangedListener listener) {
         this.moduleChangedListener = listener;
+    }
+
+    public void setOnLangChangedListener(OnLangChangedListener listener) {
+        this.langChangedListener = listener;
+    }
+
+    public void setOnAddHotkeyListener(OnAddHotkeyListener listener) {
+        this.addHotkeyListener = listener;
     }
 
     // ==================== 字体加载 ====================
@@ -411,7 +429,9 @@ public class ClickGuiPanel {
         btn.setTextColor(SOUTH_TEXT_DIM2);
         btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(13*0.7));
         btn.setGravity(Gravity.CENTER_VERTICAL);
-        btn.setPadding(dp(16), 0, dp(8), 0);
+        btn.setPadding(dp(12), 0, dp(8), 0);
+        btn.setSingleLine(true);                    // 防止文字换行被裁切
+        btn.setEllipsize(android.text.TextUtils.TruncateAt.END);
         applyRegularFont(btn);
         btn.setMinimumHeight(dp(SIDEBAR_BTN_H));
 
@@ -655,6 +675,10 @@ public class ClickGuiPanel {
                 showModuleGrid();
             } else {
                 showConfigPage();
+            }
+            // 通知外部同步语言到 HUD
+            if (langChangedListener != null) {
+                langChangedListener.onLangChanged(langZh);
             }
         });
         header.addView(langBtn, new LinearLayout.LayoutParams(
@@ -1050,6 +1074,33 @@ public class ClickGuiPanel {
 
         pageContainer.addView(groupContainer, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // --- "添加到快捷键" 按钮 ---
+        TextView hotkeyBtn = new TextView(activity);
+        hotkeyBtn.setText(t("添加到快捷键", "Add to Hotkeys"));
+        hotkeyBtn.setTextColor(SOUTH_TEXT_WHITE);
+        hotkeyBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float)(12*0.7));
+        hotkeyBtn.setGravity(Gravity.CENTER);
+        hotkeyBtn.setSingleLine(true);
+        applyRegularFont(hotkeyBtn);
+        GradientDrawable hkBg = new GradientDrawable();
+        hkBg.setColor(ACCENT_1);
+        hkBg.setCornerRadius(dp(BOTTOM_BTN_CORNER));
+        hotkeyBtn.setBackground(hkBg);
+        hotkeyBtn.setOnClickListener(v -> {
+            if (addHotkeyListener != null) {
+                addHotkeyListener.onAddHotkey(m.name);
+            }
+            // 更新按钮文字反馈
+            hotkeyBtn.setText(t("已添加/移除", "Added/Removed"));
+            hotkeyBtn.postDelayed(() -> {
+                hotkeyBtn.setText(t("添加到快捷键", "Add to Hotkeys"));
+            }, 1000);
+        });
+        LinearLayout.LayoutParams hkLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(BOTTOM_BTN_H));
+        hkLp.topMargin = dp(12);
+        pageContainer.addView(hotkeyBtn, hkLp);
 
         configScrollView.addView(pageContainer);
         contentBody.addView(configScrollView, new FrameLayout.LayoutParams(
