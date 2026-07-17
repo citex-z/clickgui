@@ -871,12 +871,10 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         float rowSpacing = notifRectH() + 8f * uiScale * spacingMul;
         float holdDuration = notificationDurationSlider != null ? (1.0f + notificationDurationSlider.sliderValue * 3.0f) : TOAST_HOLD;
         if (notifDurOpt != null) holdDuration = 1.0f + notifDurOpt.sliderValue * 4.0f;
-        int n = toasts.size();
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < toasts.size(); i++) {
             ToastNotice t = toasts.get(i);
             t.age += dt;
-            // 新提示(i大)在下方(底部)，旧提示(i小)在上方
-            t.posY.setTarget(slotY0 - (n - 1 - i) * rowSpacing);
+            t.posY.setTarget(slotY0 - i * rowSpacing);
             t.posY.update(dt);
             if (!t.exiting && t.age > TOAST_ENTER + holdDuration) {
                 t.exiting = true;
