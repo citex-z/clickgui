@@ -252,8 +252,7 @@ public class DynamicIslandRenderer {
                 case PROGRESS:
                     // 如果正在淡出且动画完成，移除
                     if (tc.animation.getDirection() == Direction.BACKWARDS && tc.animation.getProgress() <= 0.01f) {
-                        timedContents.remove(i);
-                        i--;
+                        toRemove.add(tc);
                         continue;
                     }
                     // 否则保持当前方向（FORWARDS 或由 removeProgress 设为 BACKWARDS）
