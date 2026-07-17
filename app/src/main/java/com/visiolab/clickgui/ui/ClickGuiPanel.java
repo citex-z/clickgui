@@ -118,7 +118,6 @@ public class ClickGuiPanel {
     private boolean langZh = false;
 
     // 动态更新的视图引用
-    private View panelView;                  // 面板容器（用于入场/退场动画）
     private FrameLayout contentBody;          // 内容主体（卡片网格 / 配置页切换）
     private TextView contentTitleText;        // 内容区标题 "Xxx Modules"
     private TextView contentSubtitleText;     // 内容区副标题 "N modules · M enabled"
