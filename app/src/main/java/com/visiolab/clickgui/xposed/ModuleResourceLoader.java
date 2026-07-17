@@ -18,17 +18,25 @@ import java.lang.reflect.Method;
  * 在 Xposed/LSPatch 注入环境下，宿主 Context.getAssets() 返回的是 Minecraft 的 assets，
  * 不是我们模块的。这个类通过模块自己的 APK 路径创建独立的 AssetManager。
  *
+ * 新增：将模块 APK 路径注入宿主 AssetManager（addAssetPath），
+ * 这样 SoundManager 等通过 context.getAssets() 也能访问模块资源。
+ *
+ * 参考：https://bbs.binmt.cc/thread-147411-1-1.html
+ *
  * APK 路径查找策略（按优先级）：
  * 1. ClassLoader 来源 — 从模块类的 ProtectionDomain 获取 APK 路径（最可靠）
  * 2. PackageManager 查找 — 通过模块包名查找（Local 模式下模块已安装）
  * 3. LSPatch 嵌入路径 — 从宿主 assets/lspatch/modules/ 提取（Integrated 模式）
  * 4. DexClassLoader 反射 — 从 ClassLoader 的 pathList.dexElements 获取
+ * 5. ApplicationInfo.sourceDir — 从宿主 ApplicationInfo 获取（LSPatch 模式）
  */
 public class ModuleResourceLoader {
 
     private static final String TAG = "ModuleResourceLoader";
     private static AssetManager moduleAssets = null;
     private static Resources moduleResources = null;
+    private static String moduleApkPath = null;
+    private static boolean injectedToHost = false;
     private static final String MODULE_PACKAGE = "com.visiolab.clickgui";
 
     public static synchronized void init(Context hostContext) {
@@ -64,14 +72,59 @@ public class ModuleResourceLoader {
             if (tryLoad(apkPath, hostContext)) return;
         }
 
+        // 策略5：从宿主 ApplicationInfo 获取（LSPatch 模式下宿主 APK 包含模块）
+        apkPath = getApkPathFromApplicationInfo(hostContext);
+        if (apkPath != null) {
+            Log.i(TAG, "Strategy 5 (ApplicationInfo): " + apkPath);
+            if (tryLoad(apkPath, hostContext)) return;
+        }
+
         Log.e(TAG, "All strategies failed! Falling back to host assets.");
         moduleAssets = hostContext.getAssets();
     }
 
+    /**
+     * 将模块 APK 路径注入宿主的 AssetManager。
+     * 注入后，宿主 context.getAssets() 也能访问模块的 assets（字体、音频等）。
+     *
+     * 参考：https://bbs.binmt.cc/thread-147411-1-1.html
+     */
+    public static boolean injectIntoHost(Context hostContext) {
+        if (injectedToHost) return true;
+        if (moduleApkPath == null) {
+            // 先尝试初始化
+            init(hostContext);
+            if (moduleApkPath == null) {
+                Log.w(TAG, "Cannot inject: module APK path not found");
+                return false;
+            }
+        }
+
+        try {
+            AssetManager hostAm = hostContext.getResources().getAssets();
+            Method addAssetPath = AssetManager.class.getDeclaredMethod("addAssetPath", String.class);
+            addAssetPath.setAccessible(true);
+            int cookie = (int) addAssetPath.invoke(hostAm, moduleApkPath);
+            if (cookie > 0) {
+                injectedToHost = true;
+                Log.i(TAG, "Module resources injected into host AssetManager (cookie=" + cookie + ")");
+                return true;
+            } else {
+                Log.w(TAG, "addAssetPath returned 0 for host injection");
+                return false;
+            }
+        } catch (Throwable e) {
+            Log.e(TAG, "Failed to inject into host: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** 检查是否已注入宿主 */
+    public static boolean isInjectedToHost() { return injectedToHost; }
+
     /** 策略1：从模块类的 ProtectionDomain 获取 APK 路径 */
     private static String getApkPathFromClassLoader() {
         try {
-            // 获取加载本类的 ClassLoader，找到其来源 APK
             Class<?> clazz = null;
             try {
                 clazz = Class.forName("com.visiolab.clickgui.xposed.RlinModule");
@@ -82,7 +135,6 @@ public class ModuleResourceLoader {
             if (pd != null && pd.getCodeSource() != null) {
                 String path = pd.getCodeSource().getLocation().getPath();
                 if (path != null && path.endsWith(".apk")) {
-                    // URL 编码的路径需要解码
                     path = java.net.URLDecoder.decode(path, "UTF-8");
                     if (new File(path).exists()) return path;
                 }
@@ -113,6 +165,7 @@ public class ModuleResourceLoader {
         String[] paths = {
             "lspatch/modules/" + MODULE_PACKAGE + ".apk",
             "lspatch/assets/modules/" + MODULE_PACKAGE + ".apk",
+            "assets/lspatch/modules/" + MODULE_PACKAGE + ".apk",
         };
         for (String path : paths) {
             try {
@@ -127,6 +180,7 @@ public class ModuleResourceLoader {
                 while ((len = is.read(buf)) > 0) fos.write(buf, 0, len);
                 fos.close();
                 is.close();
+                Log.i(TAG, "Extracted LSPatch module APK to: " + tmpFile.getAbsolutePath());
                 return tmpFile.getAbsolutePath();
             } catch (Exception e) {
                 // 继续尝试
@@ -159,7 +213,6 @@ public class ModuleResourceLoader {
                     if (pathObj != null) {
                         String path = pathObj.toString();
                         if (path.endsWith(".apk") && new File(path).exists()) {
-                            // 检查这个 APK 是否包含我们的类
                             if (path.contains("rlin") || path.contains("visiolab") || path.contains("clickgui")) {
                                 return path;
                             }
@@ -188,15 +241,27 @@ public class ModuleResourceLoader {
         return null;
     }
 
-    /** 尝试用指定 APK 路径创建 AssetManager */
+    /** 策略5：从宿主 ApplicationInfo 获取（LSPatch 模式下宿主 APK 包含模块） */
+    private static String getApkPathFromApplicationInfo(Context hostContext) {
+        try {
+            ApplicationInfo info = hostContext.getApplicationInfo();
+            String path = info.sourceDir;
+            if (path != null && new File(path).exists()) {
+                // 在 LSPatch 模式下，模块类被合并到宿主 APK 中
+                // 所以宿主 APK 本身就包含模块资源
+                return path;
+            }
+        } catch (Throwable e) {
+            Log.w(TAG, "ApplicationInfo strategy failed: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /** 尝试用指定 APK 路径创建 AssetManager + 注入宿主 */
     private static boolean tryLoad(String apkPath, Context hostContext) {
         try {
             AssetManager am = createAssetManager(apkPath);
             if (am == null) return false;
-
-            Resources hostRes = hostContext.getResources();
-            moduleResources = new Resources(am, hostRes.getDisplayMetrics(), hostRes.getConfiguration());
-            moduleAssets = am;
 
             // 验证：尝试打开一个已知资源
             try {
@@ -207,6 +272,16 @@ public class ModuleResourceLoader {
                 Log.w(TAG, "Resource verification failed for " + apkPath + ", trying next strategy");
                 return false;
             }
+
+            // 创建模块 Resources
+            Resources hostRes = hostContext.getResources();
+            moduleResources = new Resources(am, hostRes.getDisplayMetrics(), hostRes.getConfiguration());
+            moduleAssets = am;
+            moduleApkPath = apkPath;
+
+            // 关键：将模块 APK 路径注入宿主 AssetManager
+            // 这样 SoundManager 等通过 context.getAssets() 也能访问模块资源
+            injectIntoHost(hostContext);
 
             Log.i(TAG, "Module resources loaded successfully from: " + apkPath);
             return true;

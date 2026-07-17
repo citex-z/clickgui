@@ -16,6 +16,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.animation.OvershootInterpolator;
 import android.widget.EditText;
@@ -1353,19 +1354,24 @@ public class ClickGuiPanel {
         panelView.setAlpha(0f);
         panelView.setScaleX(0.85f);
         panelView.setScaleY(0.85f);
-        panelView.setPivotX(panelView.getWidth() / 2f);
-        panelView.setPivotY(panelView.getHeight() / 2f);
 
-        panelView.post(() -> {
-            panelView.setPivotX(panelView.getWidth() / 2f);
-            panelView.setPivotY(panelView.getHeight() / 2f);
-            panelView.animate()
-                    .alpha(1f)
-                    .scaleX(1f)
-                    .scaleY(1f)
-                    .setDuration(300)
-                    .setInterpolator(new OvershootInterpolator(1.2f))
-                    .start();
+        // 使用 OnPreDrawListener 确保布局完成后才设置 pivot 并启动动画
+        final ViewTreeObserver vto = panelView.getViewTreeObserver();
+        vto.addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                panelView.getViewTreeObserver().removeOnPreDrawListener(this);
+                panelView.setPivotX(panelView.getWidth() / 2f);
+                panelView.setPivotY(panelView.getHeight() / 2f);
+                panelView.animate()
+                        .alpha(1f)
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setDuration(300)
+                        .setInterpolator(new OvershootInterpolator(1.2f))
+                        .start();
+                return true;
+            }
         });
     }
 
