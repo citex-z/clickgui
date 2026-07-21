@@ -12,7 +12,7 @@ import java.util.List;
  * 灵动岛渲染器——仿照 Apple Dynamic Island + Jonqwq 的 MC 版本实现。
  * MIT 协议，原作者 @Jon_awa
  *
- * 核心行为（1:1 还原原版）：
+ * 核心行为（）：
  * - 默认状态：屏幕顶部居中显示一个小药丸，包含客户端名 + FPS + Ping
  * - 有内容时：平滑展开为更大的圆角矩形，显示内容
  * - 内容类型：MODULE（模块开关动画）、SUCCESS、WARNING、INFO
@@ -32,8 +32,8 @@ public class DynamicIslandRenderer {
     private float currentWidth = 0f;
     private float currentHeight = 0f;
 
-    // 原版常量
-    private static final float ISLAND_Y = 15f;       // 距顶部偏移（原版固定值）
+    
+    private static final float ISLAND_Y = 15f;       // 距顶部偏移
     private static final float CORNER_RADIUS = 12f; // 圆角（调大）
     private static final float CONTENT_WIDTH_BASE = 38f; // 图标区+padding（调大）
     private static final float CONTENT_HEIGHT = 44f;  // 单条内容高度（调大）
@@ -77,7 +77,7 @@ public class DynamicIslandRenderer {
     private long lastFpsUpdate = 0;
     private int frameCount = 0;
 
-    // 原版 deltaTime（毫秒），用于 AnimationUtil.smooth
+    
     private long animDelta = 16L;
 
     public enum ContentType {
@@ -121,17 +121,17 @@ public class DynamicIslandRenderer {
 
     /** 添加模块开关内容 */
     public void addModuleToggle(String moduleName, boolean enabled) {
-        // 原版 addContent(Module module)：如果已有同模块内容，刷新时间
+        
         for (TimedContent tc : timedContents) {
             if (tc.moduleName != null && tc.moduleName.equals(moduleName)) {
-                tc.time = tc.timer.getTime() + 2000; // 原版固定 2000ms
+                tc.time = tc.timer.getTime() + 2000; 
                 tc.enabled = enabled;
                 return;
             }
         }
         timedContents.add(new TimedContent(ContentType.MODULE, "Module Toggled",
                 moduleName + (enabled ? " has been §2Enabled!" : " has been §4Disabled!"),
-                moduleName, enabled, 2000)); // 原版固定 2000ms
+                moduleName, enabled, 2000)); 
     }
 
     /** 添加成功提示 */
@@ -252,7 +252,7 @@ public class DynamicIslandRenderer {
         float scale = scaleOpt != null ? (0.7f + scaleOpt.sliderValue * 0.8f) : 1f;
         float s = uiScale * scale;
 
-        // ---- 处理 timedContents（原版逻辑 + 退场淡出）----
+        // ---- 处理 timedContents----
         // PROGRESS 类型始终置顶：排序时 PROGRESS 排在最前面
         contents.clear();
         boolean timedEmpty = true;
@@ -313,7 +313,7 @@ public class DynamicIslandRenderer {
         }
         timedContents.removeAll(toRemove);
 
-        // ---- 计算目标尺寸（原版逻辑）----
+        // ---- 计算目标尺寸----
         float targetWidth, targetHeight;
         if (contents.isEmpty() && timedEmpty) {
             // 默认状态
@@ -350,15 +350,15 @@ public class DynamicIslandRenderer {
             targetHeight = totalH;
         }
 
-        // 平滑过渡（原版 AnimationUtil.smooth，speed=0.2f）
+        // 平滑过渡
         currentWidth = smooth(currentWidth, targetWidth, 0.2f);
         currentHeight = smooth(currentHeight, targetHeight, 0.2f);
 
-        // 位置居中（原版 AnimationUtil.smooth）+ 编辑偏移
+        // 位置居中+ 编辑偏移
         float targetX = (screenW - currentWidth) / 2f + offsetX;
         renderX = smooth(renderX, targetX, 0.2f);
 
-        // ---- 渲染（原版三层结构）----
+        // ---- 渲染----
         float islandX = renderX;
         float islandY = ISLAND_Y * s + offsetY;
         float islandW = currentWidth;
@@ -373,7 +373,7 @@ public class DynamicIslandRenderer {
                     new float[]{0.02f, 0.02f, 0.02f, 0.5f}, a, sw, sh);
         }
 
-        // 2. 边缘模糊 (bloom)：原版 addBlur + addBloom
+        // 2. 边缘模糊 (bloom)：边缘模糊
         blur.captureAndBlurTransparent(() -> {
             quad.addRect(islandX, islandY, islandW, islandH, cornerR, new float[]{0f, 0f, 0f, 1f});
             quad.flush(sw, sh);
@@ -404,7 +404,7 @@ public class DynamicIslandRenderer {
             if (showSessionOpt != null && showSessionOpt.boolValue) defText.append(" | ").append(getSessionTime());
             String def = defText.toString();
 
-            // 原版：图标在 renderX，名称在 renderX+22，默认文字在 renderX+39
+            
             float fontSize = 14f * s;
             float defSize = 12f * s;
             float nameW = text.measure(nameStr, fontSize);
@@ -436,7 +436,7 @@ public class DynamicIslandRenderer {
             }
         } else {
             // ---- 有内容状态 ----
-            // 原版：每条内容用 translate(renderX, renderY, 0) 定位，内部坐标从 (0,0) 开始
+            
             float contentY = islandY;
             for (IslandContent ic : contents) {
                 TimedContent tc = ic.timedContent;
@@ -452,12 +452,12 @@ public class DynamicIslandRenderer {
                 }
                 float contentAlpha = a * fadeAlpha;
 
-                // 内部坐标基准（相当于原版的 translate 偏移）
+                // 内部坐标基准内部坐标基准
                 float baseX = islandX;
                 float baseY = contentY;
 
-                // ---- 图标渲染（原版坐标）----
-                // 原版图标在 (7, 8) 大小 24×24
+                // ---- 图标渲染----
+                
                 float iconX = baseX + 7f * s;
                 float iconY = baseY + 8f * s;
                 float iconSize = 24f * s;
@@ -465,7 +465,7 @@ public class DynamicIslandRenderer {
 
                 switch (tc.type) {
                     case MODULE: {
-                        // 原版 MODULE 开关动画（iOS toggle switch 风格）
+                        
                         // 外圈：(6, 13, 26, 14, 6.5, DARK_GRAY)
                         float trackX = baseX + 6f * s;
                         float trackY = baseY + 13f * s;
@@ -502,7 +502,7 @@ public class DynamicIslandRenderer {
                         quad.addRect(iconX, iconY, iconSize, iconSize, iconR,
                                 new float[]{95f / 255f, 143f / 255f, 80f / 255f, (200f / 255f) * contentAlpha});
                         // 对号动画：两条线段组成 √ 形状
-                        // 原版用 stencil 裁剪，这里用渐进绘制简化
+                        
                         // 第一段（短）：从左下到中下
                         float p1 = Math.min(1f, animF * 2f); // 前半段
                         if (p1 > 0) {
@@ -655,8 +655,8 @@ public class DynamicIslandRenderer {
                 text.drawBold(tc.title, titleX, baseY + 9f * s, titleFontSize,
                         new float[]{1f, 1f, 1f, contentAlpha}, sw, sh);
 
-                // ---- 描述文字（原版 38, 24, regular 18）----
-                // 原版用 MC 颜色代码: §2=DarkGreen(0,170,0) §4=DarkRed(170,0,0)
+                // ---- 描述文字----
+                
                 if (tc.type == ContentType.MODULE) {
                     String prefix = tc.moduleName + " has been ";
                     String status = tc.enabled ? "Enabled!" : "Disabled!";
@@ -690,10 +690,10 @@ public class DynamicIslandRenderer {
         editBounds = new float[]{islandX, islandY, islandW, islandH};
     }
 
-    // ---- 原版 AnimationUtil.smooth 精确还原 ----
+    // ---- 平滑插值 ----
 
     /**
-     * 原版 AnimationUtil.smooth：
+    
      * speed = |target - current| * speed
      * smoothing = max(speed * (deltaTime / 16), 0.15)
      * if diff > speed: current = max(current - smoothing, target)
@@ -751,14 +751,14 @@ public class DynamicIslandRenderer {
             this.moduleName = moduleName;
             this.enabled = enabled;
             this.time = timeMs;
-            // 原版：MODULE 用 300ms，SUCCESS/WARNING/INFO 用 800ms
+            
             int duration = (type == ContentType.MODULE) ? 300 : 800;
             this.animation = new EaseOutExpoAnim(duration);
             this.timer = new MSTimer();
         }
     }
 
-    /** 方向枚举（原版 Direction） */
+    /** 方向枚举 */
     private enum Direction {
         FORWARDS, BACKWARDS;
 
@@ -772,9 +772,9 @@ public class DynamicIslandRenderer {
     }
 
     /**
-     * EaseOutExpo 动画实现（1:1 还原原版 Animation + EaseOutExpo）
+     * EaseOutExpo 动画实现
      *
-     * 原版关键逻辑：
+    
      * - setDirection(dir): 如果方向改变，调整 timer 使其从剩余时间开始
      *   timerUtil.setTime(now - (duration - min(duration, elapsed)))
      * - getOutput() FORWARDS: equation(t) * endPoint, t = elapsed / duration
@@ -792,13 +792,13 @@ public class DynamicIslandRenderer {
             this.lastMS = System.currentTimeMillis();
         }
 
-        /** 原版 reset() */
+        /** 重置 */
         void reset() {
             this.lastMS = System.currentTimeMillis();
         }
 
         /**
-         * 原版 setDirection(Direction):
+        
          * 如果方向改变：
          *   timerUtil.setTime(now - (duration - min(duration, getTime())))
          * 这使得反向动画从"当前进度的对称点"开始
@@ -812,18 +812,18 @@ public class DynamicIslandRenderer {
             }
         }
 
-        /** 原版 AnimTimeUtil.getTime() */
+        /** 计时器.getTime() */
         private long getTime() {
             return System.currentTimeMillis() - lastMS;
         }
 
-        /** 原版 AnimTimeUtil.hasTimeElapsed(duration) */
+        /** 计时器.hasTimeElapsed(duration) */
         private boolean isDone() {
             return getTime() > duration;
         }
 
         /**
-         * 原版 Animation.getOutput():
+        
          * FORWARDS: if done return endPoint; else equation(t) * endPoint
          * BACKWARDS: if done return 0; else (1 - equation(t)) * endPoint
          * t = elapsed / duration
@@ -845,23 +845,23 @@ public class DynamicIslandRenderer {
 
         float getProgress() { return (float) getOutput(); }
 
-        /** 原版 EaseOutExpo.getEquation(x) */
+        /** EaseOutExpo.getEquation(x) */
         private static double easeOutExpo(double x) {
             if (x >= 1.0) return 1.0;
             return 1 - Math.pow(2, -10 * x);
         }
     }
 
-    /** 毫秒计时器（原版 MSTimer） */
+    /** 毫秒计时器 */
     private static class MSTimer {
         private long lastMS = System.currentTimeMillis();
 
-        /** 原版 hasTimePassed(time) */
+        /** 是否超时 */
         boolean hasTimePassed(long time) {
             return System.currentTimeMillis() - lastMS > time;
         }
 
-        /** 原版 getPassedTime() / getTime() */
+        /** 获取已过时间 */
         long getTime() {
             return System.currentTimeMillis() - lastMS;
         }

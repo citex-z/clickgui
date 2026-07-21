@@ -35,9 +35,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ClickGUI 面板 — 原生 View 实现，1:1 还原原始 GL 面板的视觉规范。
+ * ClickGUI 面板 — 原生 View 实现，视觉规范。
  *
- * 浅色主题（白底黑字），参考南方客户端的 GL UIRenderer 配色：
+ * 浅色主题（白底黑字），配色规范：
  * - 面板背景: #F5F5F5
  * - 侧栏背景: #EBEBEB
  * - 卡片/模块行背景: #EBEBEB / #E6E6E6

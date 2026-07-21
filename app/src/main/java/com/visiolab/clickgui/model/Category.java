@@ -315,7 +315,7 @@ public class Category {
         render.add(new ModuleItem("Zoom", "Zoom view", false,
                 true, 0.3f, 1, 10, "x")
                 .addSwitch("Smooth", true));
-        // HUD 模块（参考南方客户端）
+        // HUD 模块（配色参考）
         render.add(new ModuleItem("PotionEffects", "Display active potion effects", false));
         render.add(new ModuleItem("TargetHUD", "Target info display", false));
         render.add(new ModuleItem("ArmorHUD", "Display armor durability", false)

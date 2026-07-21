@@ -1,7 +1,7 @@
 package com.visiolab.clickgui.model;
 
 /**
- * 对应原版 ModCategory 枚举：模块分类标签（ALL / COMBAT / MOVEMENT / RENDER / PLAYER / OTHER）。
+ * 模块分类标签（ALL / COMBAT / MOVEMENT / RENDER / PLAYER / OTHER）。
  * 在 ModuleCategory 内容区顶部以一排可切换的标签形式展示。
  */
 public enum ModCategory {

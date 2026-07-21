@@ -1,10 +1,10 @@
 package com.visiolab.clickgui.anim;
 
 /**
- * 对应 Rlin Client 源码里的 Animation / SimpleAnimation 工具类。
+ * 动画工具类。
  * 这里用两种：
  *  - smooth()：指数平滑，用于滚动、悬停高亮、开关滑块等常规过渡
- *  - backEase()：还原 GuiModMenu 打开时使用的 EaseBackIn 回弹效果
+ *  - backEase()：EaseBackIn 回弹效果
  */
 public class Anim {
 
@@ -45,7 +45,7 @@ public class Anim {
 
     /**
      * EaseBackIn 风格：0..1 输入 t，输出带轻微回弹的插值系数。
-     * 对应 GuiModMenu 面板弹出动画。
+     * 面板弹出动画。
      */
     public static float backEaseOut(float t) {
         float c1 = 1.70158f;

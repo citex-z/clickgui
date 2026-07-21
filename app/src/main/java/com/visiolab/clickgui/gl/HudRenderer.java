@@ -452,7 +452,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
         GLES20.glViewport(0, 0, width, height);
         blur.resize(width, height);
 
-        // uiScale 沿用 UIRenderer 的面板高度基准，保证 HUD 元素尺寸与原版一致：
+        // uiScale 沿用 UIRenderer 的面板高度基准，保证 HUD 元素尺寸一致：
         // 面板尺寸按屏幕比例自适应（南方客户端 960:600 = 1.6:1 比例）
         float pW = Math.min(width * 0.92f, height * 1.6f);
         float pH = pW * (600f / 960f);

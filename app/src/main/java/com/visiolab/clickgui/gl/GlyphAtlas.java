@@ -34,7 +34,7 @@ public class GlyphAtlas {
     private final Map<String, Glyph> glyphs = new HashMap<>();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint boldPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private Paint iconPaint; // 图标字体 Paint（Tenacity Icons）
+    private Paint iconPaint; // 图标字体 Paint
     private Typeface iconTypeface;
     private boolean iconFontLoaded = false;
     private boolean boldFontLoaded = false;
@@ -216,7 +216,7 @@ public class GlyphAtlas {
         return iconFontLoaded;
     }
 
-    /** 获取图标字符对应的码点（Tenacity Icons 映射） */
+    /** 获取图标字符对应的码点 */
     public static String categoryIcon(String categoryName) {
         switch (categoryName) {
             case "Client":      return "n"; // wrench
@@ -322,7 +322,7 @@ public class GlyphAtlas {
         return g;
     }
 
-    /** 用图标字体生成字形（Tenacity Icons） */
+    /** 用图标字体生成字形 */
     public Glyph ensureIconGlyph(char c, float sizePx) {
         if (!iconFontLoaded) return ensureGlyph(c, sizePx); // 降级
         int sizeBucket = Math.round(sizePx / 4f) * 4;

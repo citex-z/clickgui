@@ -16,7 +16,7 @@ import android.view.WindowManager;
 /**
  * 悬浮球 — WindowManager + Canvas 自绘。
  *
- * 1:1 还原原 GL 版本的三层嵌套样式：
+ * 三层嵌套样式：
  * 1. 外层：纯色大球（深色主题=白色，浅色主题=黑色）
  * 2. 中层：深灰→浅灰对角线渐变球（半径=外层×0.78）
  * 3. 内层：纯色小球（半径=外层×0.40，与外层同色）
@@ -50,11 +50,11 @@ public class FloatingBallView {
     public FloatingBallView(Activity activity) {
         this.activity = activity;
         this.wm = (WindowManager) activity.getSystemService(Context.WINDOW_SERVICE);
-        // 原版: ballRadius = 22f * uiScale, uiScale≈1 → 约22dp半径 → 直径44dp
+        // 约22dp半径，直径44dp
         this.ballRadius = dp(activity, 22);
         this.ballDiameter = ballRadius * 2;
 
-        // 初始位置: 右下角 (原版: width - ballRadius - 24, height - ballRadius - 40)
+        // 初始位置: 右下角 
         int screenW = activity.getResources().getDisplayMetrics().widthPixels;
         int screenH = activity.getResources().getDisplayMetrics().heightPixels;
         this.posX = screenW - ballRadius - dp(activity, 24);

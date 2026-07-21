@@ -16,7 +16,7 @@ import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 /**
- * 还原 Legacy-RlinClient 的 GuiModMenu 核心结构：
+ * ClickGUI 面板核心结构：
  *   左侧 Category 侧栏(帶滑动高亮条) + 右侧模块列表(Toggle / Slider) + 面板弹入动画 + 阴影。
  */
 public class UIRenderer implements GLSurfaceView.Renderer {
@@ -1136,7 +1136,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     }
 
     /** 水印："Rlin" 固定显示在左上角，跟 Home 分类里的 "Watermark" 开关联动。
-     *  只做淡入淡出，不带滑动位移——参考简约风格客户端水印那种干净利落的观感，
+     *  只做淡入淡出，不带滑动位移——干净利落的观感，
      *  文字下面配一条跟随强调色流动的细下划线做点缀。 */
     /** 每帧更新所有提示的年龄/堆叠位置/滑入滑出进度。
      *  堆叠规则：最早创建的排在最下面(index 0)，新来的堆在上面；
@@ -1677,7 +1677,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
         if (m.hasSlider) groupContentH += rowH + rowGap;
         groupContentH += descH + rowGap;
 
-        // 大圆角矩形背景（包含所有配置项，参考南方客户端的分组容器）
+        // 大圆角矩形背景（包含所有配置项，配色参考的分组容器）
         quad.addRect(trackX, startY, trackW, groupContentH, cornerR, withAlpha(SOUTH_MODULE_BG, alpha));
         // 底部装饰条（进度条样式，贴在矩形底部）
         float decorH = 3f * uiScale;

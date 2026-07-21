@@ -21,7 +21,7 @@ import java.lang.reflect.Method;
  * 新增：将模块 APK 路径注入宿主 AssetManager（addAssetPath），
  * 这样 SoundManager 等通过 context.getAssets() 也能访问模块资源。
  *
- * 参考：https://bbs.binmt.cc/thread-147411-1-1.html
+
  *
  * APK 路径查找策略（按优先级）：
  * 1. ClassLoader 来源 — 从模块类的 ProtectionDomain 获取 APK 路径（最可靠）
@@ -87,7 +87,7 @@ public class ModuleResourceLoader {
      * 将模块 APK 路径注入宿主的 AssetManager。
      * 注入后，宿主 context.getAssets() 也能访问模块的 assets（字体、音频等）。
      *
-     * 参考：https://bbs.binmt.cc/thread-147411-1-1.html
+    
      */
     public static boolean injectIntoHost(Context hostContext) {
         if (injectedToHost) return true;
