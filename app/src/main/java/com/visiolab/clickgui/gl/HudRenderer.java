@@ -258,7 +258,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
     /** 保存所有模块配置到 SharedPreferences */
     private void saveModuleConfig() {
         try {
-            android.content.SharedPreferences prefs = context.getSharedPreferences("soar_config", android.content.Context.MODE_PRIVATE);
+            android.content.SharedPreferences prefs = context.getSharedPreferences("rlin_config", android.content.Context.MODE_PRIVATE);
             android.content.SharedPreferences.Editor editor = prefs.edit();
             for (Category c : categories) {
                 for (ModuleItem m : c.modules) {
@@ -284,7 +284,7 @@ public class HudRenderer implements GLSurfaceView.Renderer {
     /** 从 SharedPreferences 加载所有模块配置 */
     private void loadModuleConfig() {
         try {
-            android.content.SharedPreferences prefs = context.getSharedPreferences("soar_config", android.content.Context.MODE_PRIVATE);
+            android.content.SharedPreferences prefs = context.getSharedPreferences("rlin_config", android.content.Context.MODE_PRIVATE);
             for (Category c : categories) {
                 for (ModuleItem m : c.modules) {
                     m.enabled = prefs.getBoolean("mod_" + m.name + "_enabled", m.enabled);

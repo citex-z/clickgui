@@ -1,7 +1,7 @@
 package com.visiolab.clickgui.anim;
 
 /**
- * 对应 Soar 源码里的 Animation / SimpleAnimation 工具类。
+ * 对应 Rlin Client 源码里的 Animation / SimpleAnimation 工具类。
  * 这里用两种：
  *  - smooth()：指数平滑，用于滚动、悬停高亮、开关滑块等常规过渡
  *  - backEase()：还原 GuiModMenu 打开时使用的 EaseBackIn 回弹效果

@@ -15,12 +15,12 @@ import org.json.JSONObject;
  * - keystrokes: 按键显示
  * - island: 灵动岛
  *
- * 使用 SharedPreferences（key: soar_hud_positions），JSON 格式存储。
+ * 使用 SharedPreferences（key: rlin_hud_positions），JSON 格式存储。
  */
 public class HudPositionManager {
 
     private static final String TAG = "HudPositionManager";
-    private static final String PREFS_KEY = "soar_hud_positions";
+    private static final String PREFS_KEY = "rlin_hud_positions";
 
     // 元素名称常量
     public static final String ELEMENT_ARRAYLIST = "arraylist";
@@ -34,7 +34,7 @@ public class HudPositionManager {
     /** 初始化（在 OverlayManager.attach 时调用） */
     public static synchronized void init(Context ctx) {
         if (prefs != null) return;
-        prefs = ctx.getApplicationContext().getSharedPreferences("soar_hud", Context.MODE_PRIVATE);
+        prefs = ctx.getApplicationContext().getSharedPreferences("rlin_hud", Context.MODE_PRIVATE);
         loadCache();
     }
 

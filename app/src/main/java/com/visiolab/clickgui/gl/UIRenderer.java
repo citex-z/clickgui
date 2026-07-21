@@ -16,7 +16,7 @@ import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 /**
- * 还原 Legacy-SoarClient 的 GuiModMenu 核心结构：
+ * 还原 Legacy-RlinClient 的 GuiModMenu 核心结构：
  *   左侧 Category 侧栏(帶滑动高亮条) + 右侧模块列表(Toggle / Slider) + 面板弹入动画 + 阴影。
  */
 public class UIRenderer implements GLSurfaceView.Renderer {
@@ -318,7 +318,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     /** 保存所有模块配置到 SharedPreferences */
     private void saveModuleConfig() {
         try {
-            android.content.SharedPreferences prefs = context.getSharedPreferences("soar_config", android.content.Context.MODE_PRIVATE);
+            android.content.SharedPreferences prefs = context.getSharedPreferences("rlin_config", android.content.Context.MODE_PRIVATE);
             android.content.SharedPreferences.Editor editor = prefs.edit();
             java.util.List<Category> cats = categories;
             for (Category c : cats) {
@@ -345,7 +345,7 @@ public class UIRenderer implements GLSurfaceView.Renderer {
     /** 从 SharedPreferences 加载所有模块配置 */
     private void loadModuleConfig() {
         try {
-            android.content.SharedPreferences prefs = context.getSharedPreferences("soar_config", android.content.Context.MODE_PRIVATE);
+            android.content.SharedPreferences prefs = context.getSharedPreferences("rlin_config", android.content.Context.MODE_PRIVATE);
             java.util.List<Category> cats = categories;
             for (Category c : cats) {
                 for (ModuleItem m : c.modules) {

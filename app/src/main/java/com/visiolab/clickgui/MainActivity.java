@@ -9,7 +9,7 @@ import android.view.WindowManager;
 import com.visiolab.clickgui.gl.UIRenderer;
 
 /**
- * Soar-Client 风格 ClickGUI 的 Android 1:1 还原демо宿主。
+ * Rlin Client ClickGUI 的 Android 1:1 还原демо宿主。
  * 只负责创建 GLSurfaceView(OpenGL ES 2.0)并把触摸事件转发给 UIRenderer。
  */
 public class MainActivity extends Activity {

@@ -1,4 +1,4 @@
-# Soar Client (Rlin Client)
+# Rlin Client
 
 一个基于 Xposed 框架的 Minecraft Bedrock Edition 客户端，提供 ClickGUI、HUD 渲染、模块管理等功能。
 

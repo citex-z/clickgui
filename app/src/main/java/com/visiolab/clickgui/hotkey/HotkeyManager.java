@@ -15,7 +15,7 @@ import java.util.List;
  */
 public class HotkeyManager {
 
-    private static final String PREFS_NAME = "soar_hotkeys";
+    private static final String PREFS_NAME = "rlin_hotkeys";
     private static final String KEY_HOTKEYS = "hotkey_list";
 
     private final List<HotkeyItem> hotkeys = new ArrayList<>();
